@@ -1,0 +1,25 @@
+# Personal working area (notes, todos, coordination files)
+workspace/
+tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environment / secrets
+.env
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Experiment outputs
+results/
+outputs/
+*.log
