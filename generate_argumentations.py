@@ -2,27 +2,56 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import urllib.error
 import urllib.request
 
 
-_TIMEOUT = 300    
-_RETRIES = 2          
+_TIMEOUT = 300
+_RETRIES = 2
+
+_API_CACHE: dict = {}
 
 
-def _ollama_chat(model, system, user, host, temperature, api_key=None, schema=None):
-    url = host.rstrip("/") + "/api/chat"
-    body = {
-        "model": model,
-        "messages": [{"role": "system", "content": system},
-                     {"role": "user", "content": user}],
-        "stream": False,
-        "options": {"temperature": float(temperature)},
-    }
-    if schema is not None:
-        body["format"] = schema        
+def _detect_api(host):
+    """Return 'ollama' or 'openai' for the server at host.
+
+    Override with LLM_API=ollama|openai; otherwise probe once per host
+    (Ollama answers /api/version; OpenAI-compatible servers like vLLM don't).
+    """
+    if host not in _API_CACHE:
+        api = os.environ.get("LLM_API", "").strip().lower()
+        if api not in ("ollama", "openai"):
+            try:
+                with urllib.request.urlopen(host.rstrip("/") + "/api/version", timeout=5):
+                    api = "ollama"
+            except Exception:
+                api = "openai"
+        _API_CACHE[host] = api
+    return _API_CACHE[host]
+
+
+def _chat(model, system, user, host, temperature, api_key=None, schema=None):
+    api = _detect_api(host)
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": user}]
+    if api == "openai":
+        url = host.rstrip("/") + "/v1/chat/completions"
+        body = {"model": model, "messages": messages, "stream": False,
+                "temperature": float(temperature)}
+        schema_key = "response_format"
+        if schema is not None:
+            body[schema_key] = {"type": "json_schema",
+                                "json_schema": {"name": "output", "schema": schema}}
+    else:
+        url = host.rstrip("/") + "/api/chat"
+        body = {"model": model, "messages": messages, "stream": False,
+                "options": {"temperature": float(temperature)}}
+        schema_key = "format"
+        if schema is not None:
+            body[schema_key] = schema
 
     last = None
     for attempt in range(_RETRIES + 1):
@@ -34,7 +63,11 @@ def _ollama_chat(model, system, user, host, temperature, api_key=None, schema=No
         try:
             with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
                 out = json.loads(resp.read().decode("utf-8"))
-            msg = (out.get("message") or {}).get("content", "")
+            if api == "openai":
+                choices = out.get("choices") or [{}]
+                msg = (choices[0].get("message") or {}).get("content") or ""
+            else:
+                msg = (out.get("message") or {}).get("content", "")
             if msg:
                 return msg
             last = RuntimeError(f"empty response: {str(out)[:200]}")
@@ -44,16 +77,19 @@ def _ollama_chat(model, system, user, host, temperature, api_key=None, schema=No
                 detail = e.read().decode("utf-8", "replace")[:300]
             except Exception:
                 pass
-            if e.code == 400 and "format" in body:
-                body.pop("format")
+            if e.code == 400 and schema_key in body:
+                body.pop(schema_key)
                 last = RuntimeError(f"HTTP 400 with schema format ({detail}); "
                                     f"retrying without structured output")
                 continue
             last = RuntimeError(f"HTTP {e.code}: {detail}")
-        except Exception as e:                   
+        except Exception as e:
             last = e
         time.sleep(1.5 * (attempt + 1))
-    raise RuntimeError(f"ollama chat failed after {_RETRIES + 1} attempts: {last}")
+    raise RuntimeError(f"{api} chat failed after {_RETRIES + 1} attempts: {last}")
+
+
+_ollama_chat = _chat
 
 def _parse_json(txt):
     if not txt:

@@ -16,7 +16,7 @@ Research collaboration repo. Current phase: turn the task generator into a fixed
 - `levels.py` — difficulty schedule (levels 1–15): per-task knobs/gates/recipes; `FEATURES` maps feature → unlock level.
 - `aspic_content.py` — natural-language ("content") rendering; tasks come in two modes: *symbolic* (DSL atoms) and *content* (plain-language statements from the KB/templates).
 - `prompting.py` — shared prompt intro (explains the formalism to the model), answer-format block, exemplars.
-- KB pipeline: `build_kb.py` + `generate_argumentations.py` build a content KB from `claims.json` via Ollama models → `kb.json`; `merge_kb.py` merges KBs from multiple models; `audit_kb.py` engine-verifies records.
+- KB pipeline: `build_kb.py` + `generate_argumentations.py` build a content KB from `claims.json` via a local LLM server → `kb.json`; `merge_kb.py` merges KBs from multiple models; `audit_kb.py` engine-verifies records. The chat client (`_chat`) speaks both Ollama and OpenAI-compatible (vLLM) APIs, auto-detected from `--host` (override with `LLM_API=ollama|openai`).
 - `app.py` — Flask playground to browse/serve tasks.
 
 ## Conventions
