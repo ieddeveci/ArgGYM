@@ -132,7 +132,18 @@ def frame_claim_identification(rng, with_content=False, level=2, ordering=None):
             in_theory.add(o.content.lstrip("-"))
         else:
             in_theory.update(a.lstrip("-") for a in o.antecedents)
-    if with_content:
+    theory_pos = set()
+    for o in ops:
+        if o.kind in ("premise", "axiom"):
+            theory_pos.add(o.content.lstrip("-"))
+        elif o.kind in ("defeasible", "strict"):
+            theory_pos.update(a.lstrip("-") for a in o.antecedents)
+            theory_pos.add(o.consequent.lstrip("-"))
+    unjust_pos = sorted(x for x in theory_pos
+                        if x not in cand and sm.get(x) != JUSTIFIED)
+    if unjust_pos:
+        fresh = rng.choice(unjust_pos)
+    elif with_content:
         fresh = next((a for a in atoms if a not in in_theory and a != "c0"), None)
     else:
         i = 0
@@ -161,7 +172,8 @@ def frame_claim_identification(rng, with_content=False, level=2, ordering=None):
         return None                           
     claims_block = "\n".join(f"  {i + 1}. {gloss_fn(c)}" for i, c in enumerate(cand))
     spec = ("In the answer, list the NUMBERS of every claim the argument establishes, separated by "
-            "commas (for example `1, 3`). Write `none` if it establishes none of them.")
+            "commas (for example `1, 3`). A claim the argument never even mentions is not "
+            "established. Write `none` if it establishes none of them.")
     order_decl = _ordering_decl(ordering or "last_link_elitist")
     prompt = (_intro(level) + "\n\n" + order_decl
               + _claim_task_block(theory_text, notation, claims_block, len(cand))
