@@ -185,25 +185,35 @@ def frame_attack(rng, with_content=False, level=2):
         atoms, ops, C, witness = built
         ordering = GYM_ORDERING; gloss = lambda l: _gloss(atoms, l)
         theory_text = _render_content_theory(atoms, ops); notation = _CONTENT_NOTATION; mode = "content"
+        _chain_ex = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
         how = ("Write your attacking argument as bracketed directives, one per line, in this syntax: "
                "[premise: a statement], [defeasible: A AND B => C], [strict: A AND B -> C], using the "
                "statements as they read in the theory. To NEGATE a statement, prefix it with the "
                "negation operator '-', for example [premise: -the sky is blue] (a natural-language "
-               "negation is also accepted). To switch off a rule (undercut), negate its label with "
-               "'-', e.g. [premise: -Rule 2] (this means Rule 2 no longer applies).")
+               "negation is also accepted). To switch off a rule (undercut), negate its label with '-', "
+               + ("deriving it through a rule, e.g. [defeasible: some statement => -Rule 2] "
+                  "(this means Rule 2 no longer applies)."
+                  if _chain_ex else
+                  "e.g. [premise: -Rule 2] (this means Rule 2 no longer applies)."))
         meta_extra = {"atoms": atoms}
     else:
         ops, C, ordering, witness = _attack_symbolic(rng, level, req)
         gloss = lambda l: l
         theory_text = _render_symbolic_theory(ops); notation = _sym_notation(level); mode = "symbolic"
+        _chain_ex = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
         how = ("Write your attacking argument as bracketed directives, one per line, in this syntax: "
                "[premise: x], [defeasible: a AND b => c], [strict: a AND b -> c]. The negation of a "
                "statement x is written -x; to rebut a conclusion or undermine a premise, derive or "
-               "assert its negation. To undercut a rule, assert the negation of its label, e.g. "
-               "[premise: -d2].")
+               "assert its negation. To undercut a rule, "
+               + ("derive the negation of its label through a rule, e.g. [premise: h] "
+                  "followed by [defeasible: h => -d2]."
+                  if _chain_ex else
+                  "assert the negation of its label, e.g. [premise: -d2]."))
         meta_extra = {}
-    kindword = {"undermine": "UNDERMINE - attack a premise the argument relies on",
-                "rebut": "REBUT - attack one of its defeasible conclusions",
+    kindword = {"undermine": ("UNDERMINE - attack an ORDINARY PREMISE the argument relies on "
+                              "(a given fact, i.e. a [premise: ...] line; attacking a derived "
+                              "statement is a rebut, not an undermine)"),
+                "rebut": "REBUT - attack one of its defeasible conclusions (a statement derived by a defeasible rule)",
                 "undercut": "UNDERCUT - switch off one of its defeasible rules",
                 "outprefer": ("OUT-PREFER - attack it (rebut a conclusion or undermine a premise) "
                               "AND add a preference directive so your attacker prevails")}[req]

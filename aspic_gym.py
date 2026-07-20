@@ -961,28 +961,51 @@ def score_answer(answer: str, entry: dict) -> float:
     if kind == "ordering_sensitivity":
         gold = {"last": md["last_status"].lower(), "weak": md["weak_status"].lower()}
         pred = {}
+        contradicted = set()
         for ln in region.splitlines():
             m = re.match(r"\s*(last[\s-]*link|weak(?:est)?[\s-]*link)\s*[:.\)]\s*([a-z]+)",
                          ln.strip(), re.I)
             if m:
                 key = "last" if m.group(1).lower().startswith("last") else "weak"
-                pred[key] = m.group(2).lower()
+                st = m.group(2).lower()
+                if key in pred and pred[key] != st:
+                    contradicted.add(key)
+                pred[key] = st
         if not pred:
             return 0.0
-        correct = sum(1 for k in ("last", "weak") if pred.get(k) == gold[k])
+        correct = sum(1 for k in ("last", "weak")
+                      if k not in contradicted and pred.get(k) == gold[k])
         return correct / 2.0
 
     if kind == "status_query":
         claims = md["queries"]; gold = md["gold_statuses"]
         res = _parse_status_block(region, claims)
-        correct = sum(1 for i, g in enumerate(gold) if res.get(i) == g)
+        seen = {}
+        contradicted = set()
+        for m in re.finditer(r"(?<![\w-])(\d{1,2})\s*[\.\)\:\-]*\s*" + _STATUS_WORDS,
+                             region, re.I):
+            i = int(m.group(1))
+            if 1 <= i <= len(claims):
+                st = m.group(2).upper()
+                if i - 1 in seen and seen[i - 1] != st:
+                    contradicted.add(i - 1)
+                seen[i - 1] = st
+        correct = sum(1 for i, g in enumerate(gold)
+                      if i not in contradicted and res.get(i) == g)
         spurious = _count_spurious_status_lines(region, len(claims))
-        return _prf1(correct, len(claims), correct + spurious)
+        return max(0.0, correct - spurious) / max(1, len(claims))
 
     if kind == "attackers_of":
         if md["mode"] == "symbolic":
-            pred = set(re.findall(r"-?[a-z]\d+", region))
-            return _jaccard(pred, set(md["gold_lits"]))
+            toks = [t for t in re.split(r"[,\s]+", region.strip()) if t]
+            if len(toks) == 1 and toks[0].lower() == "none":
+                pred, garbage = set(), 0
+            else:
+                pred = {t for t in toks if re.fullmatch(r"-?[a-z]\d+", t)}
+                garbage = sum(1 for t in toks if not re.fullmatch(r"-?[a-z]\d+", t))
+            gold = set(md["gold_lits"])
+            union = len(pred | gold) + garbage
+            return 1.0 if union == 0 else len(pred & gold) / union
         def clean(s):
             s = re.sub(r"\s+", " ", s.strip().lower())
             s = re.sub(r"^\s*[-*\u2022\d]+[.)\]]?\s*", "", s)  
@@ -1000,8 +1023,19 @@ def score_answer(answer: str, entry: dict) -> float:
         return _prf1(len(matched_gold), len(gold), n_pred)
 
     if kind == "claim_identification":
-        nums = {int(t) for t in re.findall(r"\d+", region) if 1 <= int(t) <= md["n_candidates"]}
-        return _jaccard(nums, set(md["established"]))
+        toks = [t for t in re.split(r"[,\s]+", region.strip()) if t]
+        if len(toks) == 1 and toks[0].lower() == "none":
+            nums, garbage = set(), 0
+        else:
+            nums = {int(t) for t in toks
+                    if t.isdigit() and 1 <= int(t) <= md["n_candidates"]}
+            garbage = sum(1 for t in toks
+                          if not (t.isdigit() and 1 <= int(t) <= md["n_candidates"]))
+        gold = set(md["established"])
+        union = len(nums | gold) + garbage
+        if union == 0:
+            return 1.0
+        return len(nums & gold) / union
 
     if kind == "evidence_construction":
         atoms = md["atoms"]; target = md["target"]; stance = md["stance"]
@@ -1059,8 +1093,24 @@ def score_answer(answer: str, entry: dict) -> float:
             memo[lit] = best or 0
             return memo[lit]
 
-        q = [1.0 / (1.0 + eff_depth(L)) for L in used]  
-        return max(0.0, sum(q) / len(q))
+        q = [1.0 / (1.0 + eff_depth(L)) for L in used]
+        def _works(sub):
+            if not sub:
+                return False
+            try:
+                vv = ASPICVerifier.from_operations(base_ops + sub, ordering=md["ordering"])
+            except Exception:
+                return False
+            return vv.is_consistent() and vv.status(target) == JUSTIFIED
+        kept = list(added)
+        for op in list(added):
+            if len(kept) <= 1:
+                break
+            trial = [o for o in kept if o is not op]
+            if _works(trial):
+                kept = trial
+        econ = len(kept) / len(added)
+        return max(0.0, econ * sum(q) / len(q))
 
     if kind == "enthymeme":
         base, added = _added_ops(md, region)
@@ -1120,12 +1170,71 @@ def score_answer(answer: str, entry: dict) -> float:
             return 0.0
         if not v.is_consistent():
             return 0.0
-        return 1.0 if v.status(md["target"]) == JUSTIFIED else 0.0
+        if v.status(md["target"]) != JUSTIFIED:
+            return 0.0
+        def _works(sub):
+            if not sub:
+                return False
+            vv = ASPICVerifier.from_operations(base, ordering=md["ordering"])
+            try:
+                for op in sub:
+                    vv.fw.apply(op)
+            except Exception:
+                return False
+            return vv.is_consistent() and vv.status(md["target"]) == JUSTIFIED
+        kept = list(added)
+        for op in list(added):
+            if len(kept) <= 1:
+                break
+            trial = [o for o in kept if o is not op]
+            if _works(trial):
+                kept = trial
+        return len(kept) / max(len(allops), 1)
 
     if kind == "attack":
         base, added = _added_ops(md, region)
         if not added:
             return 0.0
+        def _attack_marks(ops_added):
+            try:
+                vv = ASPICVerifier.from_operations(base, ordering=md["ordering"])
+                for op in ops_added:
+                    vv.fw.apply(op)
+                if not vv.is_consistent():
+                    return None
+            except Exception:
+                return None
+            lits = {o.content for o in ops_added if o.kind in ("premise", "axiom")} \
+                | {o.consequent for o in ops_added if o.kind in ("defeasible", "strict")}
+            op_ = {o.name for o in base if o.kind == "defeasible"}
+            oc_ = {o.consequent for o in base if o.kind == "defeasible"}
+            opm = {o.content for o in base if o.kind == "premise"}
+            r = md["req"]
+            if r == "undermine":
+                t = any(contrary(l) in opm for l in lits)
+            elif r == "rebut":
+                t = any(contrary(l) in oc_ for l in lits)
+            elif r == "outprefer":
+                t = (any(o.kind in ("prefer_rule", "prefer_premise") for o in ops_added)
+                     and any(contrary(l) in opm or contrary(l) in oc_ for l in lits))
+            else:
+                t = any(contrary(l) in op_ for l in lits)
+            goal = (vv.status(md["target"]) == OVERRULED) if r == "outprefer" \
+                else (vv.status(md["target"]) != JUSTIFIED)
+            return (t, goal)
+
+        full_marks = _attack_marks(added)
+        econ = 1.0
+        if full_marks is not None:
+            kept = list(added)
+            for op in list(added):
+                if len(kept) <= 1:
+                    break
+                trial = [o for o in kept if o is not op]
+                tm = _attack_marks(trial)
+                if tm is not None and all(a >= b for a, b in zip(tm, full_marks)):
+                    kept = trial
+            econ = len(kept) / len(added)
         v = ASPICVerifier.from_operations(base, ordering=md["ordering"])
         try:
             for op in added:
@@ -1154,7 +1263,7 @@ def score_answer(answer: str, entry: dict) -> float:
             type_ok = has_pref and has_atk
             if not type_ok:
                 return 0.0
-            return 0.3 + 0.7 * bool(v.status(md["target"]) == OVERRULED)
+            return econ * (0.3 + 0.7 * bool(v.status(md["target"]) == OVERRULED))
         else:
             type_ok = any(contrary(l) in def_rule for l in added_lits)
             attack_lits = {l for l in added_lits if contrary(l) in def_rule}
@@ -1169,7 +1278,7 @@ def score_answer(answer: str, entry: dict) -> float:
             chain_ok = True
         score += 0.2 * bool(chain_ok)
         score += 0.5 * bool(succeeded and chain_ok)
-        return score
+        return econ * score
 
     if kind == "counter_argumentation":
         base, added = _added_ops(md, region)
@@ -1188,25 +1297,53 @@ def score_answer(answer: str, entry: dict) -> float:
                 v.fw.apply(op)
         except Exception:
             return 0.0
-        return 1.0 if (v.status(neg) == JUSTIFIED and v.is_consistent()) else 0.0
+        if not (v.status(neg) == JUSTIFIED and v.is_consistent()):
+            return 0.0
+        def _works(sub):
+            if not sub:
+                return False
+            vv = ASPICVerifier.from_operations(base, ordering=md["ordering"])
+            try:
+                for op in sub:
+                    vv.fw.apply(op)
+            except Exception:
+                return False
+            return vv.is_consistent() and vv.status(neg) == JUSTIFIED
+        kept = list(added)
+        for op in list(added):
+            if len(kept) <= 1:
+                break
+            trial = [o for o in kept if o is not op]
+            if _works(trial):
+                kept = trial
+        return len(kept) / len(added)
 
     if kind == "perturbation_prediction":
         n = md["n_claims"]
         gold = {int(k): str(v).lower() for k, v in md["changed_gold"].items()}
         says_none = re.search(r"\bnone\b", region, re.I) is not None
         pred = {}
+        contradicted = set()
+        spurious = 0
         for ln in region.splitlines():
             m = re.match(r"\s*(\d+)\s*[:.\)]\s*([a-z]+)", ln.strip(), re.I)
             if m:
                 idx = int(m.group(1)) - 1
                 if 0 <= idx < n:
-                    pred[idx] = m.group(2).lower()
+                    st = m.group(2).lower()
+                    if idx in pred and pred[idx] != st:
+                        contradicted.add(idx)
+                    pred[idx] = st
+                else:
+                    spurious += 1
         if not gold:
-            return 1.0 if (not pred) else 0.0
+            return 1.0 if (not pred and spurious == 0) else 0.0
         if not pred:
             return 0.0                      
-        tp = sum(1 for i, g in gold.items() if pred.get(i) == g)
-        prec = tp / len(pred)
+        tp = sum(1 for i, g in gold.items()
+                 if i not in contradicted and pred.get(i) == g)
+        n_pred = len(pred) + spurious
+        prec = tp / n_pred
         rec = tp / len(gold)
         return 0.0 if tp == 0 else 2 * prec * rec / (prec + rec)
 
@@ -1220,8 +1357,9 @@ def score_answer(answer: str, entry: dict) -> float:
             named = [p for p in prem
                      if sanitize_statement(_gloss(atoms, p)).lower() in r]
         else:
-            toks = re.findall(r"[a-z]\d+", region)
-            named = [p for p in dict.fromkeys(toks) if p in prem]
+            toks = list(dict.fromkeys(re.findall(r"[a-z]\d+", region)))
+            named = [p for p in toks if p in prem]
+            alien = [t for t in toks if t not in prem]
 
         def achieves(rm):
             v = ASPICVerifier.from_operations(
@@ -1231,8 +1369,13 @@ def score_answer(answer: str, entry: dict) -> float:
             return just if direction == "reinstate" else not just
 
         if variant == "set":
-            return _jaccard(set(named), set(md["critical_set"]))
+            crit = set(md["critical_set"])
+            n_alien = len(alien) if md.get("mode") != "content" else 0
+            union = len(set(named) | crit) + n_alien
+            return 0.0 if union == 0 else len(set(named) & crit) / union
         want = 2 if variant == "pair" else 1
+        if md.get("mode") != "content" and alien:
+            return 0.0
         if len(named) != want:
             return 0.0
         if not achieves(named):
