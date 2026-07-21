@@ -47,7 +47,13 @@ def complete(base_url: str, model: str, prompt: str, sampling: dict,
             msg = choice.get("message") or {}
             return {
                 "content": msg.get("content") or "",
-                "reasoning_content": msg.get("reasoning_content") or "",
+                # vLLM has used both names for the reasoning-parser output:
+                # `reasoning_content` in older builds, `reasoning` in newer ones.
+                # Reading only one silently discards every chain-of-thought,
+                # which scores would not reveal because the answer lives in
+                # `content` either way.
+                "reasoning_content": (msg.get("reasoning_content")
+                                      or msg.get("reasoning") or ""),
                 "finish_reason": choice.get("finish_reason"),
                 "usage": out.get("usage") or {},
                 "latency_s": round(time.time() - t0, 3),

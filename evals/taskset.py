@@ -185,7 +185,7 @@ def load_taskset(taskset_dir: Path) -> List[dict]:
     return rows
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config")
+@hydra.main(version_base=None, config_path="conf", config_name="build")
 def main(cfg: DictConfig) -> None:
     root = Path(__file__).resolve().parent.parent
     ts = cfg.taskset

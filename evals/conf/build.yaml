@@ -1,0 +1,10 @@
+# Config for taskset building. Identical to config.yaml except that it keeps
+# Hydra's working directory out of outputs/runs/ -- building a taskset is not a
+# run, and stray directories there confuse the cross-run report.
+defaults:
+  - config
+  - _self_
+
+hydra:
+  run:
+    dir: ${outputs_root}/.builds/${now:%Y-%m-%d_%H-%M-%S}
