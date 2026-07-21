@@ -218,13 +218,13 @@ def _raw_sample(rng: random.Random, cfg: TheoryConfig) -> List[Operation]:
             winner_first = rng.random() < 0.5
             wR, wP, lR, lP = (defender_rules, defender_prems, attacker_rules, attacker_prems) \
                 if winner_first else (attacker_rules, attacker_prems, defender_rules, defender_prems)
-            for a in wR:
-                for b in lR:
+            for a in sorted(wR):
+                for b in sorted(lR):
                     if a != b and (a, b) not in emitted_r and (b, a) not in emitted_r:
                         emitted_r.add((a, b))
                         ops.append(Operation(kind="prefer_rule", stronger=a, weaker=b))
-            for a in wP:
-                for b in lP:
+            for a in sorted(wP):
+                for b in sorted(lP):
                     if a != b and (a, b) not in emitted_p and (b, a) not in emitted_p:
                         emitted_p.add((a, b))
                         ops.append(Operation(kind="prefer_premise", stronger=a, weaker=b))
