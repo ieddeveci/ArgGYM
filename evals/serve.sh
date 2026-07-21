@@ -9,7 +9,6 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python"
 CONTAINER=arggym-vllm
 PORT=8900
-GPU=2
 READY_TIMEOUT=${READY_TIMEOUT:-2400}
 
 stop_server() {
@@ -34,13 +33,13 @@ esac
 MODEL_CFG="${2:?model config name required}"
 eval "$("$PY" -m evals.serve_args "$MODEL_CFG")" || { echo "bad model config"; exit 3; }
 
-echo "=== serving $MODEL_NAME ($IMAGE) on GPU $GPU"
+echo "=== serving $MODEL_NAME ($IMAGE) on GPUs $GPUS"
 echo "    args: $VLLM_ARGS"
 stop_server
 
 # shellcheck disable=SC2086
 docker run -d --rm \
-  --runtime nvidia --gpus "device=$GPU" \
+  --runtime nvidia --gpus "\"device=$GPUS\"" \
   -v "$HOME/.cache/huggingface:/root/.cache/huggingface" \
   -p "$PORT:$PORT" \
   --ipc=host \

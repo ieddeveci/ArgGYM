@@ -17,7 +17,17 @@ endpoint:
 
 generation:
   max_tokens: 32768
-  concurrency: 32
+  # Must comfortably exceed (data_parallel_size x per-replica capacity) or the
+  # replicas sit idle waiting for work.
+  concurrency: 96
+
+serve:
+  # Every model in the roster fits on a single 80GB card, so data parallelism
+  # (a full replica per GPU, each serving different requests) gives near-linear
+  # throughput -- unlike tensor parallelism, which would split one model across
+  # cards and add communication overhead for no capacity gain.
+  gpus: "0,1,2,3"
+  data_parallel_size: 4
 
 # Set by run_all.sh so every run in one sweep can be grouped.
 sweep_id: null

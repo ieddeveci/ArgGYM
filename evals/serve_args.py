@@ -24,6 +24,7 @@ def main() -> None:
         "--served-model-name", str(m.name),
         "--gpu-memory-utilization", str(m.gpu_memory_utilization),
         "--max-model-len", "40960",
+        "--data-parallel-size", str(cfg.serve.data_parallel_size),
     ]
     if m.get("reasoning_parser"):
         args += ["--reasoning-parser", str(m.reasoning_parser)]
@@ -31,6 +32,7 @@ def main() -> None:
 
     print(f"MODEL_NAME={m.name}")
     print(f"IMAGE={m.image}")
+    print(f"GPUS={cfg.serve.gpus}")
     print(f"VLLM_ARGS='{' '.join(args)}'")
 
 
