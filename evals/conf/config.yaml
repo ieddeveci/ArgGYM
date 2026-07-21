@@ -12,7 +12,11 @@ reports_root: ${outputs_root}/reports
 # Inference endpoint served by evals/serve.sh on GPU 2.
 endpoint:
   base_url: http://localhost:8900
-  timeout_s: 1800
+  # Measured on qwen3.6-27b: p90 latency 1695s, p99 3375s, max 5413s. At the
+  # original 1800s roughly 8% of requests timed out and were retried, so the
+  # server regenerated them from scratch -- wasted GPU, not lost data (only 2
+  # of 761 failed permanently). Sized above the observed maximum instead.
+  timeout_s: 5400
   retries: 2
 
 generation:
