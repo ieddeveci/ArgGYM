@@ -5,6 +5,7 @@ byte-identical prompts even if kb.json changes between runs.
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import subprocess
@@ -176,8 +177,23 @@ def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
 
 
 def load_taskset(taskset_dir: Path) -> List[dict]:
+    """Read a taskset, plain or gzipped.
+
+    The copy committed under data/tasksets/ is gzipped (19x smaller, since every
+    prompt repeats the shared intro); working copies under outputs/ are plain.
+    """
+    d = Path(taskset_dir)
+    gz = d / "taskset.jsonl.gz"
+    plain = d / "taskset.jsonl"
+    if plain.exists():
+        opener, path = open, plain
+    elif gz.exists():
+        opener, path = lambda p: gzip.open(p, "rt"), gz
+    else:
+        raise FileNotFoundError(f"no taskset.jsonl or taskset.jsonl.gz in {d}")
+
     rows = []
-    with open(Path(taskset_dir) / "taskset.jsonl") as fh:
+    with opener(path) as fh:
         for line in fh:
             line = line.strip()
             if line:
