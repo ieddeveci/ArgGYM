@@ -1,0 +1,14 @@
+name: gemma-4-31b-it
+hf_id: google/gemma-4-31B-it
+model_path: google/gemma-4-31B-it
+image: vllm/vllm-openai:latest
+# 59G of weights on an 80GB card leaves the least KV headroom in the roster;
+# raised from the 0.85 default to buy back cache space.
+gpu_memory_utilization: 0.92
+reasoning_parser: null
+extra_args: []
+sampling:
+  temperature: 1.0
+  top_p: 0.95
+  top_k: 64
+sampling_source: own generation_config.json

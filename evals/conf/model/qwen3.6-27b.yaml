@@ -1,0 +1,15 @@
+name: qwen3.6-27b
+hf_id: Qwen/Qwen3.6-27B
+# Cached flat (config.json + 15 shards at the top of the cache dir, no
+# snapshots/ tree), so the repo id would trigger a 52G re-download.
+# Must be served by absolute path inside the container.
+model_path: /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-27B
+image: vllm/vllm-openai:latest
+reasoning_parser: qwen3
+gpu_memory_utilization: 0.85
+extra_args: []
+sampling:
+  temperature: 1.0
+  top_p: 0.95
+  top_k: 20
+sampling_source: own generation_config.json

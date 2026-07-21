@@ -18,6 +18,7 @@ Research collaboration repo. Current phase: turn the task generator into a fixed
 - `prompting.py` — shared prompt intro (explains the formalism to the model), answer-format block, exemplars.
 - KB pipeline: `build_kb.py` + `generate_argumentations.py` build a content KB from `claims.json` via a local LLM server → `kb.json`; `merge_kb.py` merges KBs from multiple models; `audit_kb.py` engine-verifies records. The chat client (`_chat`) speaks both Ollama and OpenAI-compatible (vLLM) APIs, auto-detected from `--host` (override with `LLM_API=ollama|openai`).
 - `app.py` — Flask playground to browse/serve tasks.
+- `evals/` — model evaluation harness. Four file-connected stages so re-scoring never needs a GPU: `taskset.py` freezes the task grid into `outputs/tasksets/<name>-<hash>/` (shared by every model, so prompts are byte-identical across the roster); `runner.py` does inference only against a local vLLM server; `scoring.py` replays `score_answer` over stored generations; `report.py` builds cross-model tables. `serve.sh` / `run_all.sh` serve models serially on GPU 2. Config is Hydra, with `conf/model/*.yaml` as the model registry — each file carries both the vLLM serve flags and the sampling params so the two cannot drift.
 
 ## Conventions
 

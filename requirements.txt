@@ -5,3 +5,5 @@ matplotlib
 flask                      
 
 
+hydra-core
+pytest

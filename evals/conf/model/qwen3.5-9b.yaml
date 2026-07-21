@@ -1,0 +1,13 @@
+name: qwen3.5-9b
+hf_id: Qwen/Qwen3.5-9B
+model_path: Qwen/Qwen3.5-9B
+image: vllm/vllm-openai:latest
+reasoning_parser: qwen3
+gpu_memory_utilization: 0.85
+extra_args: []
+sampling:
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+# Ships no generation_config.json; values taken from Qwen3.5-27B.
+sampling_source: inherited from Qwen3.5-27B

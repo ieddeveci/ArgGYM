@@ -1,0 +1,29 @@
+name: pilot
+
+# All 12 registered tasks except `syntax`, which the owner excluded from the
+# benchmark (it was designed as a base-model pre-training drill).
+tasks:
+  - attack
+  - attackers_of
+  - claim_identification
+  - counter_argumentation
+  - enthymeme
+  - evidence_construction
+  - formalization
+  - ordering_sensitivity
+  - perturbation_prediction
+  - preference_construction
+  - robustness
+  - status_query
+
+modes: [symbolic, content]
+
+# 1/3/5 walk the feature ladder (levels.py:11-20 unlocks every qualitative
+# feature by 5); 10/15 isolate pure scale at a saturated feature set.
+levels: [1, 3, 5, 10, 15]
+
+n: 10
+base_seed: 20260721
+
+# Abort the build if any item's own gold answer fails to score 1.0.
+validate_gold: true

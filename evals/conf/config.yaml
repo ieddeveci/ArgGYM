@@ -1,0 +1,34 @@
+defaults:
+  - taskset: pilot
+  - model: qwen3.6-27b
+  - _self_
+
+# Where artifacts land (relative to the repo root).
+outputs_root: outputs
+taskset_root: ${outputs_root}/tasksets
+runs_root: ${outputs_root}/runs
+reports_root: ${outputs_root}/reports
+
+# Inference endpoint served by evals/serve.sh on GPU 2.
+endpoint:
+  base_url: http://localhost:8900
+  timeout_s: 1800
+  retries: 2
+
+generation:
+  max_tokens: 32768
+  concurrency: 32
+
+# Set by run_all.sh so every run in one sweep can be grouped.
+sweep_id: null
+
+# Directory name under taskset_root. Left null, the runner resolves it by
+# globbing `<taskset.name>-*` and refuses to guess if several match -- comparing
+# models across different question sets would invalidate the whole sweep.
+taskset_id: null
+
+hydra:
+  run:
+    dir: ${runs_root}/${now:%Y-%m-%d_%H-%M-%S}__${model.name}__${taskset.name}
+  job:
+    chdir: false

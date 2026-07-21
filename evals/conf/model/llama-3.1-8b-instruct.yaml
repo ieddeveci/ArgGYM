@@ -1,0 +1,12 @@
+name: llama-3.1-8b-instruct
+hf_id: meta-llama/Llama-3.1-8B-Instruct
+model_path: meta-llama/Llama-3.1-8B-Instruct
+image: vllm/vllm-openai:latest
+reasoning_parser: null
+gpu_memory_utilization: 0.85
+extra_args: []
+sampling:
+  temperature: 0.6
+  top_p: 0.9
+  top_k: null
+sampling_source: own generation_config.json
