@@ -1,0 +1,11 @@
+# Ask for explicit step-by-step reasoning before the answer.
+#
+# Use for non-thinking models, or to measure what CoT prompting is worth. For a
+# model with native thinking this is usually redundant: it already reasons, and
+# instructing it to open a reasoning section tends to push the answer region into
+# `reasoning_content`, which the extractor then has to recover.
+name: cot
+system: null
+prefix: null
+suffix: |
+  Reason step by step first, then give your final answer between [answer] and [/answer], and stop.

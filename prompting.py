@@ -60,20 +60,19 @@ def _ordering_decl(ordering: str) -> str:
 
 
 def _format_block(answer_spec: str) -> str:
+    """The task ask plus the submission contract -- nothing about how to think.
+
+    How an answer is elicited (step-by-step instructions, a system prompt,
+    few-shot, a scaffold) is the evaluator's choice, not the benchmark's, and is
+    applied by the harness at run time. See evals/elicitation.py.
+    """
     return ("Task instructions: " + answer_spec + "\n\n"
-            "Answer format: reason step by step first, close the reasoning with [/reasoning], "
-            "then give only the final answer between [answer] and [/answer], then stop.\n\n"
-            "Solution:\n[reasoning]\n")
+            "Answer format: give your final answer between [answer] and [/answer].\n")
 
 _EXEMPLARS = {
     "status_query": (
         "Example (a different, unrelated problem, showing the required format):\n"
         "Problem: [premise: p] [defeasible d1: p => q]. What is the status of claim 1. q?\n"
-        "Solution:\n"
-        "[reasoning]\n"
-        "p is a premise, so there is an argument for p. Rule d1 fires on p and concludes q. "
-        "Nothing in the theory attacks p, d1, or q, so the argument for q survives every attack.\n"
-        "[/reasoning]\n"
         "[answer]\n"
         "1: justified\n"
         "[/answer]\n\n"

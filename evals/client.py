@@ -15,10 +15,15 @@ from typing import Callable, Iterable, List, Optional
 
 
 def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int,
-                  enable_thinking: Optional[bool] = None) -> dict:
+                  enable_thinking: Optional[bool] = None,
+                  system: Optional[str] = None) -> dict:
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
     body = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": False,
         "max_tokens": int(max_tokens),
     }
@@ -36,10 +41,12 @@ def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int,
 
 def complete(base_url: str, model: str, prompt: str, sampling: dict,
              max_tokens: int, timeout_s: int = 1800, retries: int = 2,
-             enable_thinking: Optional[bool] = None) -> dict:
+             enable_thinking: Optional[bool] = None,
+             system: Optional[str] = None) -> dict:
     """One chat completion. Never raises -- failures come back as `error`."""
     url = base_url.rstrip("/") + "/v1/chat/completions"
-    body = build_payload(model, prompt, sampling, max_tokens, enable_thinking)
+    body = build_payload(model, prompt, sampling, max_tokens, enable_thinking,
+                         system)
     data = json.dumps(body).encode("utf-8")
 
     last_err = None

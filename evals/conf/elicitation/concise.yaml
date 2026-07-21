@@ -1,0 +1,7 @@
+# Answer with no visible working. Useful as a control against `cot`: the score
+# difference is what the reasoning trace is worth on this taskset.
+name: concise
+system: null
+prefix: null
+suffix: |
+  Give only the final answer block. Do not explain your reasoning.

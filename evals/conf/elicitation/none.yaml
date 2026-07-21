@@ -1,0 +1,9 @@
+# Default: the model sees the taskset bytes unchanged.
+#
+# The benchmark's contract is the task plus "[answer] ... [/answer]". Anything
+# else -- CoT instructions, a system prompt, few-shot -- is the method under
+# evaluation, so it is opt-in rather than baked into every item.
+name: none
+system: null
+prefix: null
+suffix: null

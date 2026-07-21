@@ -14,7 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from evals import artifacts, client  # noqa: E402
+from evals import artifacts, client, elicitation  # noqa: E402
 from evals.taskset import git_sha, load_taskset  # noqa: E402
 
 
@@ -51,6 +51,7 @@ def main(cfg: DictConfig) -> None:
     manifest = artifacts.read_json(ts_dir / "manifest.json") or {}
 
     sampling = OmegaConf.to_container(cfg.model.sampling, resolve=True)
+    elicit = OmegaConf.to_container(cfg.get("elicitation") or {}, resolve=True)
     done = artifacts.completed_sample_ids(run_dir)
     todo = [r for r in rows if r["sample_id"] not in done]
 
@@ -63,6 +64,11 @@ def main(cfg: DictConfig) -> None:
         "sampling": sampling,
         "generation": OmegaConf.to_container(cfg.generation, resolve=True),
         "endpoint": OmegaConf.to_container(cfg.endpoint, resolve=True),
+        # Which prompting method produced these generations. The taskset carries
+        # only the task and the [answer] contract, so without this a run is not
+        # traceable to how it was elicited.
+        "elicitation": elicit,
+        "elicitation_summary": elicitation.describe(elicit),
         "taskset_id": ts_dir.name,
         "taskset_hash": manifest.get("taskset_hash"),
         "kb_sha256": manifest.get("kb_sha256"),
@@ -78,6 +84,7 @@ def main(cfg: DictConfig) -> None:
     })
 
     print(f"model={cfg.model.name}  taskset={ts_dir.name}  "
+          f"elicitation={elicit.get('name', 'none')}  "
           f"todo={len(todo)}/{len(rows)} (resumed {len(done)})", flush=True)
 
     for r in rows:
@@ -88,10 +95,11 @@ def main(cfg: DictConfig) -> None:
     enable_thinking = cfg.model.get("enable_thinking")
 
     def work(row: dict) -> dict:
+        prompt, system = elicitation.apply(row["prompt"], elicit)
         gen = client.complete(
-            cfg.endpoint.base_url, cfg.model.name, row["prompt"], sampling,
+            cfg.endpoint.base_url, cfg.model.name, prompt, sampling,
             int(cfg.generation.max_tokens), int(cfg.endpoint.timeout_s),
-            int(cfg.endpoint.retries), enable_thinking)
+            int(cfg.endpoint.retries), enable_thinking, system)
         gen["sample_id"] = row["sample_id"]
         return gen
 
