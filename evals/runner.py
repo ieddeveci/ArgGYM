@@ -85,11 +85,13 @@ def main(cfg: DictConfig) -> None:
 
     state = {"n": 0, "errors": 0, "t": time.time()}
 
+    enable_thinking = cfg.model.get("enable_thinking")
+
     def work(row: dict) -> dict:
         gen = client.complete(
             cfg.endpoint.base_url, cfg.model.name, row["prompt"], sampling,
             int(cfg.generation.max_tokens), int(cfg.endpoint.timeout_s),
-            int(cfg.endpoint.retries))
+            int(cfg.endpoint.retries), enable_thinking)
         gen["sample_id"] = row["sample_id"]
         return gen
 

@@ -5,7 +5,11 @@ image: vllm/vllm-openai:latest
 # 59G of weights on an 80GB card leaves the least KV headroom in the roster;
 # raised from the 0.85 default to buy back cache space.
 gpu_memory_utilization: 0.92
-reasoning_parser: null
+# Gemma-4's template only injects a thinking turn when enable_thinking is
+# explicitly true, so without this the model would be evaluated with thinking
+# OFF while every Qwen in the roster had it ON.
+reasoning_parser: gemma4
+enable_thinking: true
 extra_args: []
 sampling:
   temperature: 1.0

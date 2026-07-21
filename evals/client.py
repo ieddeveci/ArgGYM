@@ -14,7 +14,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Iterable, List, Optional
 
 
-def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int) -> dict:
+def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int,
+                  enable_thinking: Optional[bool] = None) -> dict:
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -25,14 +26,20 @@ def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int) -> d
         val = sampling.get(key)
         if val is not None:
             body[key] = val
+    if enable_thinking is not None:
+        # Chat templates disagree on the default: Qwen3.x thinks unless told
+        # otherwise, Gemma-4 stays silent unless told to think. Sending the flag
+        # explicitly makes the roster comparable instead of template-dependent.
+        body["chat_template_kwargs"] = {"enable_thinking": bool(enable_thinking)}
     return body
 
 
 def complete(base_url: str, model: str, prompt: str, sampling: dict,
-             max_tokens: int, timeout_s: int = 1800, retries: int = 2) -> dict:
+             max_tokens: int, timeout_s: int = 1800, retries: int = 2,
+             enable_thinking: Optional[bool] = None) -> dict:
     """One chat completion. Never raises -- failures come back as `error`."""
     url = base_url.rstrip("/") + "/v1/chat/completions"
-    body = build_payload(model, prompt, sampling, max_tokens)
+    body = build_payload(model, prompt, sampling, max_tokens, enable_thinking)
     data = json.dumps(body).encode("utf-8")
 
     last_err = None

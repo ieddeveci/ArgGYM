@@ -84,3 +84,17 @@ def test_run_batch_survives_a_crashing_worker():
     out = run_batch([{"sample_id": i} for i in range(4)], boom, 2)
     errs = [r for r in out if r.get("error")]
     assert len(out) == 4 and len(errs) == 1
+
+
+def test_enable_thinking_sent_only_when_declared():
+    """Templates disagree on the default -- Qwen3.x thinks unless disabled,
+    Gemma-4 stays silent unless enabled -- so the flag must be explicit."""
+    on = build_payload("m", "p", {}, 16, enable_thinking=True)
+    assert on["chat_template_kwargs"] == {"enable_thinking": True}
+
+    off = build_payload("m", "p", {}, 16, enable_thinking=False)
+    assert off["chat_template_kwargs"] == {"enable_thinking": False}
+
+    # Non-thinking models (Llama-3.1) must not receive the kwarg at all.
+    unset = build_payload("m", "p", {}, 16, enable_thinking=None)
+    assert "chat_template_kwargs" not in unset

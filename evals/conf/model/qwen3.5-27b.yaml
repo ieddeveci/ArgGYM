@@ -3,6 +3,8 @@ hf_id: Qwen/Qwen3.5-27B
 model_path: Qwen/Qwen3.5-27B
 image: vllm/vllm-openai:latest
 reasoning_parser: qwen3
+# Qwen3.x templates think unless explicitly disabled; sent explicitly anyway.
+enable_thinking: true
 gpu_memory_utilization: 0.85
 extra_args: []
 sampling:
