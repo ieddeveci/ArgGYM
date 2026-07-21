@@ -27,7 +27,7 @@ def _critical_singles(ops, ordering, target, direction):
     return [p for p in prem if _achieves(ops, ordering, target, {p}, direction)]
 
 
-def _build_ops(rng, level):
+def _build_ops(rng, level, direction="defeat"):
     i, ri = [0], [0]
     def fr():
         i[0] += 1
@@ -79,7 +79,14 @@ def _build_ops(rng, level):
     d_att = D([vsrc], "-" + c0)
     ops.append(d_att)
     sup_rule = next(o for o in ops if o.kind == "defeasible" and o.consequent == c0)
-    ops.append(Operation(kind="prefer_rule", stronger=sup_rule.name, weaker=d_att.name))
+    # Which rule wins decides which question the item can pose. Preferring the
+    # support leaves the target justified, so the task is "retract something to
+    # defeat it". Preferring the attacker leaves it overruled, so retracting the
+    # attacker's premise restores it -- the reinstatement case, which is
+    # otherwise unreachable above level 4 and so went untested entirely.
+    strong, weak = ((d_att.name, sup_rule.name) if direction == "reinstate"
+                    else (sup_rule.name, d_att.name))
+    ops.append(Operation(kind="prefer_rule", stronger=strong, weaker=weak))
     ops += [P(fr())]
     return ops, c0
 
@@ -125,7 +132,7 @@ _SPEC = {
 def frame_robustness(rng, with_content=False, level=1):
     variant, direction = _variant_at(level)
     for _ in range(40):
-        ops, target = _build_ops(rng, level)
+        ops, target = _build_ops(rng, level, direction)
         zi = 100
         for _pad in range(min(max(0, level - 2), 12)):
             zi += 1

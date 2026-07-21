@@ -61,14 +61,20 @@ def _eq1() -> Gate:
 
 class Recipe:
 
-    def __init__(self, table: dict):
+    def __init__(self, table: dict, beyond=None):
         self._table = dict(table)
         self._max = max(self._table)
+        # Values cycled for levels past the last anchor. Without it every level
+        # >= max collapses to a single entry, so a variant anchored at exactly
+        # one level disappears from any grid that happens to skip that level.
+        self._beyond = list(beyond) if beyond else None
 
     def at(self, level: int):
         if level < 1:
             raise ValueError(f"level must be >= 1, got {level}")
-        return self._table[min(level, self._max)]
+        if level <= self._max or not self._beyond:
+            return self._table[min(level, self._max)]
+        return self._beyond[(level - self._max - 1) % len(self._beyond)]
 
 _THEORY_ANCHORS: Dict[int, dict] = {
     1: dict(n_atoms=3, n_premises=2, n_axioms=0, n_rules=1, n_strict=0, n_pref=0,
@@ -255,10 +261,18 @@ TASK_RECIPES: Dict[str, Recipe] = {
         5: ["retract_premise", "add_premise", "add_rule", "remove_rule", "add_pref",
             "undercut", "downgrade_axiom"],
     }),
+    # Reinstatement -- C attacks A, so B is restored -- is the behaviour most
+    # specific to non-monotonic reasoning, and it was reachable at level 4 only.
+    # Any grid skipping that one level tested it zero times, which is what the
+    # {1,3,5,10,15} pilot did. Alternating past the last anchor means every grid
+    # sampling two levels above 5 exercises both directions.
     "robustness_variant": Recipe({
         1: ("single", "defeat"), 2: ("single", "defeat"), 3: ("set", "defeat"),
         4: ("single", "reinstate"), 5: ("pair", "defeat"),
-    }),
+    # `single` rather than `pair` for the reinstate half: the template gives the
+    # target one attacker, so exactly one premise is critical and the pair/set
+    # variants have no witness to find.
+    }, beyond=[("single", "reinstate"), ("pair", "defeat")]),
     "preference_templates": Recipe({
         1: ["direct", "intermediate_target"],
         2: ["direct", "intermediate_target", "upstream"],

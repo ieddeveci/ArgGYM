@@ -65,6 +65,28 @@ def test_preferences_never_assert_both_directions():
                 f"{task} item {i} asserts both directions: {reversed_pairs}")
 
 
+def test_robustness_grid_exercises_both_directions():
+    """Reinstatement was reachable at level 4 only, so the {1,3,5,10,15} grid
+    tested it zero times. The recipe must not hide a variant behind one level."""
+    import levels
+
+    grid = [1, 3, 5, 10, 15]
+    directions = {levels.recipe("robustness_variant", lv)[1] for lv in grid}
+    assert directions == {"defeat", "reinstate"}, (
+        f"pilot grid covers only {directions}")
+
+
+def test_reinstate_items_are_generable_above_level_four():
+    """The level-5+ template preferred the supporting rule, leaving the target
+    justified, so no retraction could reinstate it and generation always failed."""
+    ds = create_dataset("robustness", size=1, level=10, seed=6, with_content=False)
+    entry = ds[0]
+    assert entry["metadata"]["direction"] == "reinstate"
+    ok, reasons = validate_entry(entry)
+    assert ok, reasons
+    assert score_answer(entry["answer"], entry) >= 0.999
+
+
 def test_gold_still_self_scores_after_the_fixes():
     """Guard against a well-formedness fix quietly breaking gold."""
     for task in ("claim_identification", "formalization", "status_query"):
