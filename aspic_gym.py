@@ -272,10 +272,12 @@ def sample_theory(rng: random.Random, level_or_cfg=2) -> Theory:
         if cfg.require_conflict and not ag["defeats"]:
             continue
         return th
-    ops = [Operation(kind="premise", content="a0"), Operation(kind="premise", content="a1"),
-           Operation(kind="defeasible", name="d1", antecedents=("a0",), consequent="a2"),
-           Operation(kind="defeasible", name="d2", antecedents=("a1",), consequent="-a2")]
-    return Theory(ops, cfg.ordering)
+    # Previously this returned a hard-coded 4-op theory, which silently handed a
+    # level-15 cell a level-1 item -- gold stayed correct, only the difficulty
+    # label lied. Raising lets ASPICDataset.__getitem__ resample, and a genuine
+    # exhaustion surfaces as a countable generator skip instead of bad data.
+    raise RuntimeError(
+        f"sample_theory exhausted {cfg.max_tries} attempts for {cfg}")
 
 
 CONTENT_KINDS = {"claim_identification", "formalization", "status_query",

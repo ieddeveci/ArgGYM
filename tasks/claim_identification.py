@@ -1,6 +1,6 @@
 
 from aspic_gym import (
-    GYM_ORDERING, Operation, ASPICVerifier, JUSTIFIED, _kb_status_theory, _gloss, _entry, _render_symbolic_theory, _render_content_theory,
+    GYM_ORDERING, Operation, ASPICVerifier, JUSTIFIED, _kb_status_theory, _gloss, _entry, _render_symbolic_theory, _render_content_theory, _RULE_NAME,
 )
 from prompting import _format_block, _intro, _sym_notation, _CONTENT_NOTATION, _ordering_decl
 import levels as difficulty
@@ -119,7 +119,11 @@ def frame_claim_identification(rng, with_content=False, level=2, ordering=None):
     contra = lambda l: l[1:] if l.startswith("-") else "-" + l
     derived = []
     for o in ops:
-        if o.kind in ("defeasible", "strict") and o.consequent not in derived:
+        # An undercutter concludes a rule name (-d3), which is not a claim the
+        # question can ask about: content mode displays rules as "Rule k", so a
+        # candidate like "-d3" would name something the prompt never defines.
+        if (o.kind in ("defeasible", "strict") and o.consequent not in derived
+                and not _RULE_NAME.match(o.consequent)):
             derived.append(o.consequent)
     cand = []
     for d in derived:
@@ -139,6 +143,11 @@ def frame_claim_identification(rng, with_content=False, level=2, ordering=None):
         elif o.kind in ("defeasible", "strict"):
             theory_pos.update(a.lstrip("-") for a in o.antecedents)
             theory_pos.add(o.consequent.lstrip("-"))
+    # The distractor is drawn from theory_pos, so rule names have to be excluded
+    # here too -- an undercutter's consequent would otherwise reach the claim
+    # list by this route even though `derived` already filters them.
+    theory_pos = {x for x in theory_pos if not _RULE_NAME.match(x)}
+    in_theory = {x for x in in_theory if not _RULE_NAME.match(x)}
     unjust_pos = sorted(x for x in theory_pos
                         if x not in cand and sm.get(x) != JUSTIFIED)
     if unjust_pos:

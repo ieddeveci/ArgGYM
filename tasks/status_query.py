@@ -181,15 +181,25 @@ def _status_kb_theory(rng, level, ordering=None, force_prefs=False):
             dis_prems = [p for p in dict.fromkeys(pp for dp, _ in dis_chains for pp in dp)
                          if p in ordinary]
             eff_npr = max(npr, 1) if force_prefs else npr
+            # The coin flip is re-rolled per disclaim-final, so two passes with
+            # opposite outcomes would otherwise emit both p > q and q > p over
+            # the same pair. That is legal (the ordering is a preorder, so it
+            # reads as a tie) but it is undeclared, ungated, and unmentioned in
+            # the prompt -- an accident rather than a designed feature.
+            seen_r, seen_p = set(), set()
             for df in dis_finals[:eff_npr]:
                 sup_wins = rng.random() < 0.5
                 a, b = (sup_final, df) if sup_wins else (df, sup_final)
-                pls.append(f"[prefer_rule: {a} > {b}]")
+                if (a, b) not in seen_r and (b, a) not in seen_r:
+                    seen_r.add((a, b))
+                    pls.append(f"[prefer_rule: {a} > {b}]")
                 if weak:
                     win_p, lose_p = (sup_prems, dis_prems) if sup_wins else (dis_prems, sup_prems)
                     for wp in win_p:
                         for lp in lose_p:
-                            if wp != lp:
+                            if (wp != lp and (wp, lp) not in seen_p
+                                    and (lp, wp) not in seen_p):
+                                seen_p.add((wp, lp))
                                 pls.append(f"[prefer_premise: {wp} > {lp}]")
             if pls:
                 ops += list(parse_dsl("\n".join(pls)).operations)

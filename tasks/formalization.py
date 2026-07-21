@@ -52,8 +52,8 @@ def FORM_COMPOSITION_AT(level):
                 neg=difficulty.gate('formalization', 'neg', level), arity=k('arity'))
 
 
-def _formalization_glosses(rng, n, content):
-    syms = [f"a{i}" for i in range(n)]
+def _formalization_glosses(rng, n, content, start=0):
+    syms = [f"a{start + i}" for i in range(n)]
     if content:
         kb = load_kb()
         rec = rng.choice(kb) if kb else None
@@ -106,7 +106,10 @@ def _formalization_theory(rng, level, content):
             a, b = rng.sample(drules, 2)
             ops.append(Operation(kind="prefer_rule", stronger=a, weaker=b))
         if len(oprems) < 2:
-            extra = _formalization_glosses(rng, 1, content)
+            # Start past the symbols already in gl. Without this the top-up
+            # always returned "a0", which at level 3 is the axiom -- emitting the
+            # same literal as both [axiom: a0] and [premise: a0].
+            extra = _formalization_glosses(rng, 1, content, start=len(gl))
             eid = list(extra)[0]
             gl[eid] = extra[eid]
             ops.append(Operation(kind="premise", content=eid))
