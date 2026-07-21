@@ -49,6 +49,11 @@ print(pathlib.Path("outputs/runs") / f"{ts}__{m}__pilot")
 EOF
 )
 
+  # Always capture the server log, so a runtime crash after health-ready (which
+  # serve.sh no longer watches) is diagnosable despite the container's --rm.
+  docker logs -f "$CONTAINER" >"$STATE/$m.server.log" 2>&1 &
+  LOGPID=$!
+
   echo "--- eval -> $run_dir"
   if "$PY" -m evals.runner \
         model="$m" \
@@ -58,11 +63,21 @@ EOF
     echo "--- score"
     "$PY" -m evals.scoring "$run_dir" \
         --taskset-dir "outputs/tasksets/$TASKSET_ID" 2>&1 | tee -a "$STATE/$m.log"
-    echo "$run_dir" > "$STATE/$m.done"
+    # A run dominated by API errors means the server died mid-run, not that the
+    # model is bad. The runner exits 0 either way (one bad sample must not kill a
+    # run), so exit code cannot tell them apart -- gate on the error rate.
+    err=$("$PY" -c "import json;print(json.load(open('$run_dir/metrics.json'))['overall'].get('api_error_rate',1))" 2>/dev/null || echo 1)
+    if "$PY" -c "import sys;sys.exit(0 if $err<=0.20 else 1)" 2>/dev/null; then
+      echo "$run_dir" > "$STATE/$m.done"
+    else
+      echo "$run_dir api_error_rate=$err" | tee "$STATE/$m.crashed"
+      echo "REJECTED $m: api_error_rate=$err -- server died mid-run, not marked done"
+    fi
   else
     echo "EVAL FAILED for $m" | tee "$STATE/$m.failed"
   fi
 
+  kill "$LOGPID" 2>/dev/null
   bash "$REPO/evals/serve.sh" stop
 done
 

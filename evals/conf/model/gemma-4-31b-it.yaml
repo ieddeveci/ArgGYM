@@ -2,19 +2,21 @@ name: gemma-4-31b-it
 hf_id: google/gemma-4-31B-it
 model_path: google/gemma-4-31B-it
 image: vllm/vllm-openai:latest
-# 59G of weights on an 80GB card leaves the least KV headroom in the roster;
-# raised from the 0.85 default to buy back cache space.
-gpu_memory_utilization: 0.92
+# 59G of weights on an 80GB card leaves the least KV headroom in the roster.
+# 0.92 gave no margin for activation spikes under 96-way concurrency and the
+# first run's server OOM'd mid-eval; 0.90 leaves ~1.6GB/card of headroom.
+gpu_memory_utilization: 0.90
 # Gemma-4's template only injects a thinking turn when enable_thinking is
 # explicitly true, so without this the model would be evaluated with thinking
 # OFF while every Qwen in the roster had it ON.
 reasoning_parser: gemma4
 enable_thinking: true
 # Gemma-4 is multimodal: vLLM reserves a per-image token budget (2496) that
-# exceeds the default max_num_batched_tokens (2048) and refuses to start. This
-# benchmark is text-only, but the reservation is unconditional, so raise the
-# batch budget above it.
-extra_args: ["--max-num-batched-tokens", "8192"]
+# exceeds the default max_num_batched_tokens (2048) and refuses to start. Raise
+# it just past the floor (4096, not 8192) -- the first attempt's server died
+# mid-run, and the larger prefill batch inflating activation memory on the
+# tightest-fitting model in the roster is the leading suspect.
+extra_args: ["--max-num-batched-tokens", "4096"]
 sampling:
   temperature: 1.0
   top_p: 0.95
