@@ -10,7 +10,11 @@ gpu_memory_utilization: 0.92
 # OFF while every Qwen in the roster had it ON.
 reasoning_parser: gemma4
 enable_thinking: true
-extra_args: []
+# Gemma-4 is multimodal: vLLM reserves a per-image token budget (2496) that
+# exceeds the default max_num_batched_tokens (2048) and refuses to start. This
+# benchmark is text-only, but the reservation is unconditional, so raise the
+# batch budget above it.
+extra_args: ["--max-num-batched-tokens", "8192"]
 sampling:
   temperature: 1.0
   top_p: 0.95
