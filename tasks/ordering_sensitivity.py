@@ -26,7 +26,7 @@ def _divergent_claim(ops):
     vW = ASPICVerifier.from_operations(ops, ordering=_WEAK)
     mL, mW = vL.status_map(), vW.status_map()
     cands = []
-    for k in set(mL) | set(mW):
+    for k in sorted(set(mL) | set(mW)):
         if k.startswith("-") or k.lstrip("-").startswith("d") or k.lstrip("-").startswith("s"):
             continue
         sl, sw = _status_name(vL, k), _status_name(vW, k)
