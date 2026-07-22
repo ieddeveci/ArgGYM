@@ -9,6 +9,7 @@ import gzip
 import hashlib
 import json
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
 
@@ -48,6 +49,22 @@ def git_sha() -> Optional[str]:
         return subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parent.parent,
             text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+
+
+def git_dirty() -> Optional[bool]:
+    """True if tracked files had uncommitted changes when the taskset was built.
+
+    Recorded so `git_sha` is not read as a complete description of the code that
+    produced the taskset -- a dirty tree means HEAD alone does not reproduce it.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=Path(__file__).resolve().parent.parent, text=True,
+            stderr=subprocess.DEVNULL)
+        return bool(out.strip())
     except Exception:
         return None
 
@@ -144,7 +161,13 @@ def taskset_hash(rows: List[dict], kb_sha: Optional[str]) -> str:
 def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
                   kb_sha: Optional[str], stats: Optional[dict] = None) -> Path:
     full = taskset_hash(rows, kb_sha)
-    out = Path(root) / f"{name}-{full[:8]}"
+    built = datetime.now(timezone.utc)
+    # Time-ordered directory name: the UTC build stamp sorts chronologically, so
+    # `ls` and globbing put the newest build last. The content hash is retained
+    # after it as a stable identity -- same code+config+kb reproduce the same
+    # hash, which is how two builds are told apart from mere re-runs.
+    stamp = built.strftime("%Y%m%dT%H%M%SZ")
+    out = Path(root) / f"{name}-{stamp}-{full[:8]}"
     out.mkdir(parents=True, exist_ok=True)
 
     with open(out / "taskset.jsonl", "w") as fh:
@@ -162,11 +185,13 @@ def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
         "name": name,
         "taskset_hash": full,
         "taskset_id": out.name,
+        "built_at": built.isoformat().replace("+00:00", "Z"),
+        "git_sha": git_sha(),
+        "git_dirty": git_dirty(),
         "n_samples": len(rows),
         "n_cells": len(cells),
         "cells": cells,
         "kb_sha256": kb_sha,
-        "git_sha": git_sha(),
         "gold_self_check": "passed (every item's own gold answer scores 1.0)",
         "generator_skips": (stats or {}).get("skipped_indices", {}),
         "total_generator_skips": (stats or {}).get("total_skipped", 0),
