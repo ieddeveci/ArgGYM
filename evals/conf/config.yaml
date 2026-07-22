@@ -23,7 +23,7 @@ endpoint:
   retries: 2
 
 generation:
-  max_tokens: 32768
+  max_tokens: 61440
   # Must comfortably exceed (data_parallel_size x per-replica capacity) or the
   # replicas sit idle waiting for work.
   concurrency: 96

@@ -26,7 +26,7 @@ def main() -> None:
         # Per-model override: a model whose KV footprint per token is large (e.g.
         # gemma-4) can only hold a workable number of concurrent requests if its
         # max sequence length is capped nearer to what it actually generates.
-        "--max-model-len", str(m.get("max_model_len") or 40960),
+        "--max-model-len", str(m.get("max_model_len") or 65536),
         "--data-parallel-size", str(cfg.serve.data_parallel_size),
     ]
     if m.get("reasoning_parser"):
