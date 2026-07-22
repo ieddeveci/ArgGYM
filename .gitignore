@@ -1,7 +1,3 @@
-# Personal working area (notes, todos, coordination files)
-workspace/
-tmp/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -23,3 +19,7 @@ venv/
 results/
 outputs/
 *.log
+
+# Personal working area (notes, todos, coordination files)
+workspace/
+tmp/
