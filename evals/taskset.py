@@ -8,6 +8,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,64 +70,102 @@ def git_dirty() -> Optional[bool]:
         return None
 
 
-def build_rows(tasks: Iterable[str], modes: Iterable[str], levels: Iterable[int],
-               n: int, base_seed: int, validate_gold: bool = True,
-               progress=None, stats: Optional[dict] = None) -> List[dict]:
-    """Generate every (task, mode, level) cell.
-
-    Because ASPICDataset derives its RNG from idx alone, raising `n` later
-    extends each cell instead of reshuffling it: the first `n` items stay
-    byte-identical.
-    """
+def _build_cell(spec: tuple) -> dict:
+    """Generate one (task, mode, level) cell. Independent and self-seeded, so it
+    is safe to run in a worker process; results are reordered by the caller."""
+    task, mode, level, n, base_seed, validate_gold = spec
+    with_content = (mode == "content")
+    seed = cell_seed(base_seed, task, mode, level)
+    # Some (task, level) combinations occasionally fail to produce a valid theory
+    # at a given index even after the generator's own 60 retries. Draw from an
+    # oversized dataset and skip those indices deterministically rather than
+    # shrinking the cell: the skip is a function of (seed, idx) alone, so the
+    # taskset stays reproducible and raising n later still extends the prefix.
+    budget = max(n * 10, n + 50)
+    ds = create_dataset(task, seed=seed, size=budget, level=level,
+                        with_content=with_content)
     rows: List[dict] = []
     gold_failures: List[tuple] = []
+    got, idx, skipped = 0, 0, 0
+    while got < n and idx < budget:
+        try:
+            entry = ds[idx]
+        except RuntimeError:
+            skipped += 1
+            idx += 1
+            continue
+        if validate_gold:
+            s = score_answer(entry["answer"], entry)
+            if s < 1.0:
+                gold_failures.append((task, mode, level, idx, s))
+        rows.append({
+            "sample_id": sample_id(task, mode, level, idx),
+            "task": task, "mode": mode, "level": level, "idx": idx,
+            "cell_seed": seed, "prompt": entry["question"], "entry": entry,
+        })
+        got += 1
+        idx += 1
+    if got < n:
+        raise RuntimeError(
+            f"cell {task}/{mode}/L{level} produced only {got}/{n} valid "
+            f"items within {budget} attempts")
+    return {"key": f"{task}|{mode}|L{level:02d}", "rows": rows,
+            "skipped": skipped, "gold_failures": gold_failures}
+
+
+def build_rows(tasks: Iterable[str], modes: Iterable[str], levels: Iterable[int],
+               n: int, base_seed: int, validate_gold: bool = True,
+               progress=None, stats: Optional[dict] = None,
+               workers: Optional[int] = None) -> List[dict]:
+    """Generate every (task, mode, level) cell.
+
+    Cells are independent and each derives its RNG from (base_seed, task, mode,
+    level) alone, so they run in parallel worker processes with no effect on the
+    result -- generation is also PYTHONHASHSEED-independent. Rows are reassembled
+    in the original task x mode x level order, so the taskset hash is stable
+    whatever the worker count. Because ASPICDataset derives its per-item RNG from
+    idx alone, raising `n` later extends each cell instead of reshuffling it.
+    """
+    specs = [(task, mode, level, n, base_seed, validate_gold)
+             for task in tasks for mode in modes for level in levels]
+    if workers is None:
+        # Independent cells, so scale to cores; cap so a huge-core box does not
+        # fork a hundred KB-carrying processes for a marginal tail-latency gain.
+        workers = min(len(specs), (os.cpu_count() or 4), 32)
+    workers = max(1, min(workers, len(specs)))
+
+    results: dict = {}
+    done_rows = 0
+    if workers == 1:
+        for spec in specs:
+            r = _build_cell(spec)
+            results[(spec[0], spec[1], spec[2])] = r
+            done_rows += len(r["rows"])
+            if progress:
+                progress(spec[0], spec[1], spec[2], done_rows)
+    else:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            futs = {ex.submit(_build_cell, s): (s[0], s[1], s[2]) for s in specs}
+            for fut in as_completed(futs):
+                key = futs[fut]
+                r = fut.result()
+                results[key] = r
+                done_rows += len(r["rows"])
+                if progress:
+                    progress(key[0], key[1], key[2], done_rows)
+
+    rows: List[dict] = []
     skips: dict = {}
+    gold_failures: List[tuple] = []
     for task in tasks:
         for mode in modes:
-            with_content = (mode == "content")
             for level in levels:
-                seed = cell_seed(base_seed, task, mode, level)
-                # Some (task, level) combinations occasionally fail to produce a
-                # valid theory at a given index even after the generator's own 60
-                # retries. Draw from an oversized dataset and skip those indices
-                # deterministically rather than shrinking the cell: the skip is a
-                # function of (seed, idx) alone, so the taskset stays reproducible
-                # and raising n later still extends the existing prefix.
-                budget = max(n * 10, n + 50)
-                ds = create_dataset(task, seed=seed, size=budget, level=level,
-                                    with_content=with_content)
-                got, idx, skipped = 0, 0, 0
-                while got < n and idx < budget:
-                    try:
-                        entry = ds[idx]
-                    except RuntimeError:
-                        skipped += 1
-                        idx += 1
-                        continue
-                    if validate_gold:
-                        s = score_answer(entry["answer"], entry)
-                        if s < 1.0:
-                            gold_failures.append((task, mode, level, idx, s))
-                    rows.append({
-                        "sample_id": sample_id(task, mode, level, idx),
-                        "task": task,
-                        "mode": mode,
-                        "level": level,
-                        "idx": idx,
-                        "cell_seed": seed,
-                        "prompt": entry["question"],
-                        "entry": entry,
-                    })
-                    got += 1
-                    idx += 1
-                if got < n:
-                    raise RuntimeError(
-                        f"cell {task}/{mode}/L{level} produced only {got}/{n} valid "
-                        f"items within {budget} attempts")
-                if skipped:
-                    skips[f"{task}|{mode}|L{level:02d}"] = skipped
-                if progress:
-                    progress(task, mode, level, len(rows))
+                r = results[(task, mode, level)]
+                rows.extend(r["rows"])
+                if r["skipped"]:
+                    skips[r["key"]] = r["skipped"]
+                gold_failures.extend(r["gold_failures"])
 
     if stats is not None:
         # Cells needing many skips mean the generator is straining at that
@@ -244,9 +283,10 @@ def main(cfg: DictConfig) -> None:
     print(f"building taskset '{ts.name}': {len(ts.tasks)} tasks x {len(ts.modes)} "
           f"modes x {len(ts.levels)} levels x n={ts.n}", flush=True)
     stats: dict = {}
+    workers = cfg.get("build_workers")
     rows = build_rows(list(ts.tasks), list(ts.modes), list(ts.levels), int(ts.n),
                       int(ts.base_seed), bool(ts.validate_gold), progress=progress,
-                      stats=stats)
+                      stats=stats, workers=int(workers) if workers else None)
 
     out = write_taskset(root / cfg.taskset_root, ts.name, rows, ts, kb_sha, stats)
     print(f"\nwrote {len(rows)} samples to {out}")
