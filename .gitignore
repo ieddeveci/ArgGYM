@@ -20,6 +20,10 @@ results/
 outputs/
 *.log
 
+# Taskset working copies are plain and regenerable; only the gzipped
+# snapshot (taskset.jsonl.gz) is committed under data/tasksets/.
+data/tasksets/**/*.jsonl
+
 # Personal working area (notes, todos, coordination files)
 workspace/
 tmp/

@@ -5,7 +5,7 @@ hash. Catches silent drift: a change to the generator, the difficulty schedule,
 or kb.json will alter prompts, and a benchmark whose questions moved is not the
 same benchmark.
 
-    python -m evals.verify_taskset data/tasksets/pilot-24c45581
+    python -m evals.verify_taskset data/tasksets/pilot-650388ac
 """
 from __future__ import annotations
 

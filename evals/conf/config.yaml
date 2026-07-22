@@ -8,7 +8,7 @@ defaults:
 
 # Where artifacts land (relative to the repo root).
 outputs_root: outputs
-taskset_root: ${outputs_root}/tasksets
+taskset_root: data/tasksets
 runs_root: ${outputs_root}/runs
 reports_root: ${outputs_root}/reports
 

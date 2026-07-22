@@ -179,8 +179,10 @@ def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
 def load_taskset(taskset_dir: Path) -> List[dict]:
     """Read a taskset, plain or gzipped.
 
-    The copy committed under data/tasksets/ is gzipped (19x smaller, since every
-    prompt repeats the shared intro); working copies under outputs/ are plain.
+    The committed snapshot under data/tasksets/ is gzipped (19x smaller, since
+    every prompt repeats the shared intro). A local rebuild writes a plain
+    taskset.jsonl alongside it (gitignored); when present it is preferred, so a
+    fresh build overrides the shipped snapshot.
     """
     d = Path(taskset_dir)
     gz = d / "taskset.jsonl.gz"

@@ -7,7 +7,7 @@ models requires pinning a fixed sample and shipping it, which is what lives here
 ## What is in a taskset
 
 ```
-pilot-24c45581/
+pilot-650388ac/
   taskset.jsonl.gz   # the items, one JSON object per line
   config.yaml        # the grid it was generated from
   manifest.json      # provenance: hashes, per-cell counts, checks
@@ -34,7 +34,7 @@ this one.
 from evals.taskset import load_taskset
 from aspic_gym import score_answer
 
-rows = load_taskset("data/tasksets/pilot-24c45581")   # handles .jsonl and .jsonl.gz
+rows = load_taskset("data/tasksets/pilot-650388ac")   # handles .jsonl and .jsonl.gz
 
 for row in rows:
     answer = my_model(row["prompt"])                  # prompt needs no further assembly
@@ -104,7 +104,7 @@ The generator walks every (task, mode, level) cell and pulls `n` items:
 Generation is deterministic given the same seed, generator code, and `kb.json`:
 
 ```bash
-python -m evals.verify_taskset data/tasksets/pilot-24c45581
+python -m evals.verify_taskset data/tasksets/pilot-650388ac
 ```
 
 This regenerates the grid from the taskset's own `config.yaml` and compares the

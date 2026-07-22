@@ -128,7 +128,7 @@ def score_run(run_dir: Path, taskset_dir: Optional[Path] = None) -> dict:
     root = Path(__file__).resolve().parent.parent
     run = artifacts.read_json(run_dir / "run.json") or {}
     if taskset_dir is None:
-        taskset_dir = root / "outputs" / "tasksets" / run["taskset_id"]
+        taskset_dir = root / "data" / "tasksets" / run["taskset_id"]
     rows = {r["sample_id"]: r for r in load_taskset(Path(taskset_dir))}
 
     scored = []
