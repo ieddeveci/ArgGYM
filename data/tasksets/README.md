@@ -7,7 +7,7 @@ models requires pinning a fixed sample and shipping it, which is what lives here
 ## What is in a taskset
 
 ```
-pilot-20260722T114138Z-247eca21/
+pilot-20260722T195912Z-c1fb2c46/
   taskset.jsonl.gz   # the items, one JSON object per line (gzipped, ~19x smaller)
   config.yaml        # the grid it was generated from
   manifest.json      # provenance: build time, commit, hashes, per-cell counts, checks
@@ -24,7 +24,7 @@ Each row:
 | `entry` | the ArgGYM entry: `question`, `answer` (gold), and `metadata` (ops, ordering, kind, task-specific fields) |
 
 The directory name is `<name>-<UTC-stamp>-<hash8>`, e.g.
-`pilot-20260722T114138Z-247eca21`. The stamp sorts builds chronologically (newest
+`pilot-20260722T195912Z-c1fb2c46`. The stamp sorts builds chronologically (newest
 last), so `ls` shows the build order; the trailing hash covers **every prompt plus
 the `kb.json` they were drawn from**, giving a stable content identity — the same
 code, config, and KB reproduce the same hash, and a taskset built against a
@@ -47,7 +47,7 @@ this one.
 from evals.taskset import load_taskset
 from aspic_gym import score_answer
 
-rows = load_taskset("data/tasksets/pilot-20260722T114138Z-247eca21")  # reads .jsonl or .jsonl.gz
+rows = load_taskset("data/tasksets/pilot-20260722T195912Z-c1fb2c46")  # reads .jsonl or .jsonl.gz
 
 for row in rows:
     answer = my_model(row["prompt"])                  # prompt needs no further assembly
@@ -124,7 +124,7 @@ mode, level) cell and pulls `n` items:
 Generation is deterministic given the same seed, generator code, and `kb.json`:
 
 ```bash
-python -m evals.verify_taskset data/tasksets/pilot-20260722T114138Z-247eca21
+python -m evals.verify_taskset data/tasksets/pilot-20260722T195912Z-c1fb2c46
 ```
 
 This regenerates the grid from the taskset's own `config.yaml` and compares the
@@ -137,20 +137,20 @@ them**. That is intended: a new KB produces a new taskset id, old results stay
 attributable to the KB that produced them, and results from the two are never
 pooled by accident.
 
-## Known issues (scorer-side; re-scorable without regenerating)
+## Notation conventions
 
-Some cells under-score for **notation** reasons rather than reasoning. These live
-in `score_answer`, not in the taskset, so they can be corrected by fixing the
-scorer and replaying over stored generations — no new taskset or model run.
+The two answer modes use different, self-consistent conventions. Each is stated
+in the prompt and matched by the gold, so the answer a model is asked for is the
+one that scores:
 
-- **Construct tasks, content mode** (`attack`, `counter_argumentation`,
-  `evidence_construction`, `preference_construction`): a newly added rule has no
-  disclosed label, yet the gold refers to it by an auto-assigned ordinal
-  (`Rule 5`), and an explicit label makes the whole answer fail parsing.
-- **`formalization`, symbolic mode**: the prompt presents source rules as
-  `Rule 1`, `Rule 2`, … while the gold names them `d1`, `d2`, …, with the mapping
-  undisclosed. A model that echoes the prompt's own
-  `[prefer_rule: Rule 3 > Rule 2]` scores ~0.22 instead of 1.0.
+- **Content mode** presents statements in plain language (unquoted) and rules as
+  `Rule 1`, `Rule 2`, … A preference or undercut names a rule by that number, and
+  a rule the model adds is the next number after those shown (`Rule N+1`), written
+  unlabelled as `[defeasible: A => B]`.
+- **Symbolic mode** uses the DSL labels shown in the theory — `d1`/`s1` for rules
+  — and preferences name them directly, e.g. `[prefer_rule: d1 > d2]`.
 
-Tasks that only name existing elements (`attackers_of`, `claim_identification`)
-are unaffected.
+`score_answer` also tolerates reasonable stylistic variants, so a correct answer
+is never lost to punctuation: statements wrapped in quotes, an explicit label on
+an added rule, and `Rule k` written in place of `dk`. What is scored is the
+reasoning, not the notation.
