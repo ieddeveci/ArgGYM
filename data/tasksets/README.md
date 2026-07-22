@@ -7,10 +7,10 @@ models requires pinning a fixed sample and shipping it, which is what lives here
 ## What is in a taskset
 
 ```
-pilot-650388ac/
-  taskset.jsonl.gz   # the items, one JSON object per line
+pilot-20260722T114138Z-247eca21/
+  taskset.jsonl.gz   # the items, one JSON object per line (gzipped, ~19x smaller)
   config.yaml        # the grid it was generated from
-  manifest.json      # provenance: hashes, per-cell counts, checks
+  manifest.json      # provenance: build time, commit, hashes, per-cell counts, checks
 ```
 
 Each row:
@@ -23,10 +23,23 @@ Each row:
 | `prompt` | the complete prompt to send a model — already includes the formalism intro, the theory, and the answer-format block |
 | `entry` | the ArgGYM entry: `question`, `answer` (gold), and `metadata` (ops, ordering, kind, task-specific fields) |
 
-The directory name is `<name>-<hash8>`, where the hash covers **every prompt plus
-the `kb.json` they were drawn from**. A taskset built against a different KB
-therefore lands in a different directory and cannot be silently confused with
+The directory name is `<name>-<UTC-stamp>-<hash8>`, e.g.
+`pilot-20260722T114138Z-247eca21`. The stamp sorts builds chronologically (newest
+last), so `ls` shows the build order; the trailing hash covers **every prompt plus
+the `kb.json` they were drawn from**, giving a stable content identity — the same
+code, config, and KB reproduce the same hash, and a taskset built against a
+different KB lands in a different directory and cannot be silently confused with
 this one.
+
+`manifest.json` records when and from what the taskset was built:
+
+| Field | Meaning |
+|---|---|
+| `built_at` | UTC timestamp of the build |
+| `git_sha` | repository HEAD at build time |
+| `git_dirty` | whether tracked files had uncommitted changes — if `true`, `git_sha` alone does not fully reproduce the build |
+| `taskset_hash`, `kb_sha256` | content hash of the prompts, and of the KB they were drawn from |
+| `gold_self_check`, `generator_skips` | build-integrity results (see below) |
 
 ## Using it
 
@@ -34,7 +47,7 @@ this one.
 from evals.taskset import load_taskset
 from aspic_gym import score_answer
 
-rows = load_taskset("data/tasksets/pilot-650388ac")   # handles .jsonl and .jsonl.gz
+rows = load_taskset("data/tasksets/pilot-20260722T114138Z-247eca21")  # reads .jsonl or .jsonl.gz
 
 for row in rows:
     answer = my_model(row["prompt"])                  # prompt needs no further assembly
@@ -74,13 +87,20 @@ saturated feature set.
 ```bash
 python -m evals.taskset                              # uses evals/conf/taskset/pilot.yaml
 python -m evals.taskset taskset.n=20 taskset.name=big # override any field
+python -m evals.taskset build_workers=8              # cap parallelism (default: min(cells, cores, 32))
 ```
 
-Output goes to `outputs/tasksets/<name>-<hash8>/` (gitignored). To publish one,
-gzip `taskset.jsonl` into `data/tasksets/<id>/` alongside its `manifest.json`
-and `config.yaml`.
+Output goes to `data/tasksets/<name>-<UTC-stamp>-<hash8>/`. The build writes a
+plain `taskset.jsonl` there, which is gitignored (regenerable, ~19x larger); to
+publish, gzip it to `taskset.jsonl.gz` and commit that alongside `manifest.json`
+and `config.yaml`. A local rebuild's plain file, when present, is preferred over
+the committed snapshot, so regenerating overrides what shipped.
 
-The generator walks every (task, mode, level) cell and pulls `n` items:
+Cells are independent and each seeds its RNG from `(base_seed, task, mode,
+level)` alone, so they build in parallel across processes; rows are reassembled
+in grid order, and generation is `PYTHONHASHSEED`-independent, so the content
+hash is identical whatever the worker count. The generator walks every (task,
+mode, level) cell and pulls `n` items:
 
 1. **Seeding.** Each cell gets `cell_seed = blake2b(base_seed, task, mode, level)`.
    A hash rather than a running counter, so adding or removing a task from the
@@ -104,7 +124,7 @@ The generator walks every (task, mode, level) cell and pulls `n` items:
 Generation is deterministic given the same seed, generator code, and `kb.json`:
 
 ```bash
-python -m evals.verify_taskset data/tasksets/pilot-650388ac
+python -m evals.verify_taskset data/tasksets/pilot-20260722T114138Z-247eca21
 ```
 
 This regenerates the grid from the taskset's own `config.yaml` and compares the
@@ -117,14 +137,20 @@ them**. That is intended: a new KB produces a new taskset id, old results stay
 attributable to the KB that produced them, and results from the two are never
 pooled by accident.
 
-## Known issue
+## Known issues (scorer-side; re-scorable without regenerating)
 
-Content-mode tasks that ask the model to *construct* directives — `attack`,
-`counter_argumentation`, `evidence_construction`, `preference_construction` —
-currently under-score. The prompt gives no syntax for labelling a newly added
-rule, yet the gold answer requires referring to it by an auto-assigned ordinal
-(`Rule 5`), and any explicit label causes the whole answer to fail parsing.
-Scores on those cells reflect notation rather than reasoning. See
-`workspace/model-eval-2026-07-21/findings.md` (F1). Tasks that only name
-existing elements, such as `attackers_of` and `claim_identification`, are
-unaffected.
+Some cells under-score for **notation** reasons rather than reasoning. These live
+in `score_answer`, not in the taskset, so they can be corrected by fixing the
+scorer and replaying over stored generations — no new taskset or model run.
+
+- **Construct tasks, content mode** (`attack`, `counter_argumentation`,
+  `evidence_construction`, `preference_construction`): a newly added rule has no
+  disclosed label, yet the gold refers to it by an auto-assigned ordinal
+  (`Rule 5`), and an explicit label makes the whole answer fail parsing.
+- **`formalization`, symbolic mode**: the prompt presents source rules as
+  `Rule 1`, `Rule 2`, … while the gold names them `d1`, `d2`, …, with the mapping
+  undisclosed. A model that echoes the prompt's own
+  `[prefer_rule: Rule 3 > Rule 2]` scores ~0.22 instead of 1.0.
+
+Tasks that only name existing elements (`attackers_of`, `claim_identification`)
+are unaffected.

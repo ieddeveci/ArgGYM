@@ -1,7 +1,10 @@
 {
   "name": "pilot",
-  "taskset_hash": "650388ac43aebe35067905f29666a1e21bebe6ee359a87392ef82b3a4719bceb",
-  "taskset_id": "pilot-650388ac",
+  "taskset_hash": "247eca21a2f306d397292c812dc375f39e53fb43ff4bfbe96a8a16ce18773e40",
+  "taskset_id": "pilot-20260722T114138Z-247eca21",
+  "built_at": "2026-07-22T11:41:38.752463Z",
+  "git_sha": "5bf05f0ae28eff756125a4616c6cbc563e011c76",
+  "git_dirty": true,
   "n_samples": 1200,
   "n_cells": 120,
   "cells": {
@@ -127,7 +130,6 @@
     "status_query|content|L15": 10
   },
   "kb_sha256": "0994f44e4af18507ac313befb950d9ffdc35da87bd26e6fe0c23de777af505ef",
-  "git_sha": "344319407df14e18f2fc945083bf7d7e9f6b610a",
   "gold_self_check": "passed (every item's own gold answer scores 1.0)",
   "generator_skips": {
     "counter_argumentation|symbolic|L15": 2
