@@ -2,10 +2,18 @@ name: gemma-4-31b-it
 hf_id: google/gemma-4-31B-it
 model_path: google/gemma-4-31B-it
 image: vllm/vllm-openai:latest
-# 59G of weights on an 80GB card leaves the least KV headroom in the roster.
-# 0.92 gave no margin for activation spikes under 96-way concurrency and the
-# first run's server OOM'd mid-eval; 0.90 leaves ~1.6GB/card of headroom.
-gpu_memory_utilization: 0.90
+# 59G of weights on an 80GB card leaves the least KV headroom in the roster:
+# only ~60k KV tokens, so at the roster's 40960 max_model_len each replica holds
+# just 1.47 concurrent requests. Firing 96 concurrent oversubscribed it ~16x and
+# thrashed the KV cache until a replica OOM'd. The fix is below (max_model_len +
+# matched concurrency); util stays at 0.92 -- lowering it to 0.90 only shrank KV
+# further and made the crash happen sooner.
+gpu_memory_utilization: 0.92
+# gemma reasons concisely: across 190 real samples, completion tokens were
+# mean 3843, p99 7459, max 8029. Capping the sequence at 20480 (~19k output
+# after the ~1k prompt) is more than 2x its observed max -- no truncation -- and
+# nearly triples KV concurrency (1.47x -> 2.9x per replica).
+max_model_len: 20480
 # Gemma-4's template only injects a thinking turn when enable_thinking is
 # explicitly true, so without this the model would be evaluated with thinking
 # OFF while every Qwen in the roster had it ON.
@@ -16,7 +24,13 @@ enable_thinking: true
 # it just past the floor (4096, not 8192) -- the first attempt's server died
 # mid-run, and the larger prefill batch inflating activation memory on the
 # tightest-fitting model in the roster is the leading suspect.
-extra_args: ["--max-num-batched-tokens", "4096"]
+# --max-num-seqs 5 is the real fix for the repeated crashes: gemma's KV pool
+# holds ~44k tokens/replica, and at gemma's 8k max output that is only ~5.5
+# sequences. Without this cap the scheduler admitted as many running sequences
+# as the client sent (concurrency 24), they grew past the pool, and vLLM raised
+# a fatal "Cannot get free blocks from the pool" instead of preempting. Capping
+# admitted running sequences at 5/replica keeps the pool from ever exhausting.
+extra_args: ["--max-num-batched-tokens", "4096", "--max-num-seqs", "5"]
 sampling:
   temperature: 1.0
   top_p: 0.95

@@ -23,7 +23,10 @@ def main() -> None:
         "--model", str(m.model_path),
         "--served-model-name", str(m.name),
         "--gpu-memory-utilization", str(m.gpu_memory_utilization),
-        "--max-model-len", "40960",
+        # Per-model override: a model whose KV footprint per token is large (e.g.
+        # gemma-4) can only hold a workable number of concurrent requests if its
+        # max sequence length is capped nearer to what it actually generates.
+        "--max-model-len", str(m.get("max_model_len") or 40960),
         "--data-parallel-size", str(cfg.serve.data_parallel_size),
     ]
     if m.get("reasoning_parser"):
