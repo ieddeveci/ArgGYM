@@ -14,6 +14,9 @@ gpu_memory_utilization: 0.92
 # after the ~1k prompt) is more than 2x its observed max -- no truncation -- and
 # nearly triples KV concurrency (1.47x -> 2.9x per replica).
 max_model_len: 20480
+# Output cap must fit max_model_len (above). gemma's max observed output is 8029
+# tokens over 339 samples, so 16384 truncates nothing while leaving prompt room.
+max_tokens: 16384
 # Gemma-4's template only injects a thinking turn when enable_thinking is
 # explicitly true, so without this the model would be evaluated with thinking
 # OFF while every Qwen in the roster had it ON.

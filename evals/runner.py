@@ -98,11 +98,17 @@ def main(cfg: DictConfig) -> None:
 
     enable_thinking = cfg.model.get("enable_thinking")
 
+    # max_tokens must fit the model's context. A model with a per-model
+    # max_model_len (gemma-4 caps at 20480 for KV headroom) needs a smaller
+    # max_tokens than the roster default, or every request is rejected with
+    # "max_tokens cannot be greater than max_model_len".
+    max_tokens = int(cfg.model.get("max_tokens") or cfg.generation.max_tokens)
+
     def work(row: dict) -> dict:
         prompt, system = elicitation.apply(row["prompt"], elicit)
         gen = client.complete(
             cfg.endpoint.base_url, cfg.model.name, prompt, sampling,
-            int(cfg.generation.max_tokens), int(cfg.endpoint.timeout_s),
+            max_tokens, int(cfg.endpoint.timeout_s),
             int(cfg.endpoint.retries), enable_thinking, system)
         gen["sample_id"] = row["sample_id"]
         return gen
