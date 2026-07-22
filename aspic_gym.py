@@ -825,7 +825,12 @@ def _jaccard(pred: set, gold: set) -> float:
 
 
 def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
-    norm = lambda s: re.sub(r"\s+", " ", s.strip().lower()).rstrip(".")
+    # Drop double quotes before matching: the content prompt *displays* statements
+    # in quotes ("Logic is independent of human opinion"), so models echo them
+    # back as [premise: "..."]. Gold statements are unquoted, so this only ever
+    # helps -- norm(gold) is unchanged.
+    norm = lambda s: re.sub(r"\s+", " ",
+                            re.sub(r'[“”‘’"]', "", s).strip().lower()).rstrip(".")
     posmap = {norm(info["pos"]): a for a, info in atoms.items()}
     negmap = {norm(info["neg"]): "-" + a for a, info in atoms.items()}
     rules = [o for o in base if o.kind in ("defeasible", "strict")]
@@ -859,7 +864,12 @@ def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
     dn = sum(1 for o in base if o.kind == "defeasible")
     sn = sum(1 for o in base if o.kind == "strict")
     base_rule_count = len(rules)
-    added_rule_by_idx = {}         
+    added_rule_by_idx = {}
+    # Maps a label the model wrote on its own added rule ("rule4", "d5", ...) to
+    # the rule's canonical name, so a preference or undercut that names that label
+    # resolves. Models echo the prompt's "Rule k" style; the gym directive syntax
+    # shows dK/sK. The gold leaves added rules unlabelled and names them by ordinal.
+    added_rule_by_label = {}
     ops = []
     for kind, body in hits:
         kind = kind.lower()
@@ -869,6 +879,14 @@ def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
                 return None
             ops.append(Operation(kind=kind, content=L))
         else:
+            # Strip an optional label the model added: "[defeasible Rule 4: A => B]"
+            # or "[defeasible d5: A => B]" -- the label sits before the first ':',
+            # ahead of the rule arrow.
+            label = None
+            mlab = re.match(r"\s*(rule\s*\d+|[dsr]\d+)\s*:\s*", body, re.I)
+            if mlab and ("=>" in body[mlab.end():] or "->" in body[mlab.end():]):
+                label = re.sub(r"\s+", "", mlab.group(1)).lower()
+                body = body[mlab.end():]
             sep = "=>" if "=>" in body else ("->" if "->" in body else None)
             if sep is None:
                 return None
@@ -883,9 +901,17 @@ def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
                 sn += 1; nm = f"s{sn}"
             base_rule_count += 1
             added_rule_by_idx[base_rule_count] = nm
+            if label:
+                added_rule_by_label[label] = nm
             ops.append(Operation(kind=kind, name=nm, antecedents=tuple(ants), consequent=con))
 
     def rule_name(txt):
+        # A label the model gave its own added rule takes priority over ordinal
+        # resolution, so "prefer_rule: Rule 4 > Rule 2" points at the rule the
+        # model wrote "[defeasible Rule 4: ...]" for, even if its ordinal differs.
+        key = re.sub(r"\s+", "", txt.strip()).lower()
+        if key in added_rule_by_label:
+            return added_rule_by_label[key]
         m = re.search(r"rule\s*(\d+)", txt.lower())
         if m:
             k = int(m.group(1))
