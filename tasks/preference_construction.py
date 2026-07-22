@@ -128,8 +128,8 @@ def _augment_premise_prefs(ops, wpairs):
     for k, s, w in wpairs:
         if k != "rule":
             continue
-        for sp in prems_of_rule(s):
-            for wp in prems_of_rule(w):
+        for sp in sorted(prems_of_rule(s)):
+            for wp in sorted(prems_of_rule(w)):
                 if sp != wp and (sp, wp) not in seen_pairs and (wp, sp) not in seen_pairs:
                     seen_pairs.add((sp, wp))
                     out.append((sp, wp))

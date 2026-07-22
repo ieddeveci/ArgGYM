@@ -72,7 +72,53 @@ def test_preference_sets_are_invariant_under_hash_seed():
     )
 
 
+# --- Full-pipeline determinism -------------------------------------------------
+# The two tests above exercise only _raw_sample. Several framers emit preferences
+# from their own set iteration (claim_identification, preference_construction),
+# which _raw_sample coverage misses -- and which produced two byte-different
+# tasksets from one seed. This builds real cells end to end and hashes the
+# prompt + gold that actually ship.
+
+# Preference-emitting tasks at a level where undercuts/preferences are active.
+_PIPELINE_SNIPPET = """
+import hashlib, json, sys
+sys.path.insert(0, {repo!r})
+from evals.taskset import build_rows
+
+TASKS = ["claim_identification", "preference_construction", "status_query",
+         "ordering_sensitivity", "attack"]
+rows = []
+for t in TASKS:
+    for mode in ("symbolic", "content"):
+        rows += build_rows([t], [mode], [5], 3, 20260721, True)
+blob = "\\n".join(r["prompt"] + "\\x00" + r["entry"]["answer"]
+                  for r in sorted(rows, key=lambda r: r["sample_id"]))
+print(hashlib.sha256(blob.encode()).hexdigest())
+"""
+
+
+def _pipeline_digest(hash_seed: str) -> str:
+    env = dict(os.environ, PYTHONHASHSEED=hash_seed)
+    return subprocess.run(
+        [sys.executable, "-c", _PIPELINE_SNIPPET.format(repo=str(REPO))],
+        capture_output=True, text=True, env=env, check=True,
+    ).stdout.strip()
+
+
+def test_full_pipeline_is_invariant_under_hash_seed():
+    """Prompt + gold of real generated cells must not depend on PYTHONHASHSEED.
+
+    Covers the framer-level preference emission that the _raw_sample tests do
+    not reach.
+    """
+    digests = {h: _pipeline_digest(h) for h in ("0", "1")}
+    assert len(set(digests.values())) == 1, (
+        "generated cells depend on PYTHONHASHSEED; digests: " + repr(digests)
+    )
+
+
 if __name__ == "__main__":
     test_generation_is_invariant_under_hash_seed()
     test_preference_sets_are_invariant_under_hash_seed()
+    test_full_pipeline_is_invariant_under_hash_seed()
     print("ok: generation is invariant under PYTHONHASHSEED")

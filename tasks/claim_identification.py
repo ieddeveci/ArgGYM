@@ -81,11 +81,11 @@ def _claim_id_symbolic(rng, level, ordering=None):
                         tgt_rules.add(sub.name)
                     stack.extend(sub.antecedents or ())
             if weak:
-                for tr in tgt_rules:
+                for tr in sorted(tgt_rules):
                     ops.append(Operation(kind="prefer_rule", stronger=dn, weaker=tr))
             else:
                 ops.append(Operation(kind="prefer_rule", stronger=dn, weaker=target))
-            for a in tgt_prems:
+            for a in sorted(tgt_prems):
                 if a != leaf2:
                     ops.append(Operation(kind="prefer_premise", stronger=leaf2, weaker=a))
     return ops, ordering
