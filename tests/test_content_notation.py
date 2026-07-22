@@ -48,3 +48,15 @@ def test_labeled_added_rule_resolves():
     assert unlab is not None and lab is not None
     assert unlab[0].antecedents == lab[0].antecedents
     assert unlab[0].consequent == lab[0].consequent
+
+
+def test_formalization_symbolic_rule_numbering():
+    """Symbolic formalization: a model may name rules 'Rule k' (the prompt's
+    numbering) instead of dk/sk. That must score the same as the dk form."""
+    import re
+    e = _find("formalization", "symbolic", 3, needle_in_gold="prefer_rule: d")
+    gold = e["answer"]
+    # rewrite dK -> Rule K only inside preference directives (rule references)
+    rulek = re.sub(r"\b d(\d+) ".replace(" ", ""), lambda m: "Rule " + m.group(1), gold)
+    assert "Rule " in rulek and rulek != gold
+    assert score_answer(rulek, e) == score_answer(gold, e) == 1.0

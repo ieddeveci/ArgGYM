@@ -975,6 +975,32 @@ def _semantic_equiv_score(model_ops, gold_ops, ordering) -> float:
     return matched / len(probes)
 
 
+def _relabel_rule_refs(text: str) -> str:
+    """Rewrite "Rule N" rule references to the DSL name of the N-th rule.
+
+    In symbolic formalization the prompt numbers rules "Rule 1, Rule 2, ..." over
+    all rules in order, while the DSL (and the gold) name them d1/s1/d2/... So a
+    model that writes "[prefer_rule: Rule 2 > Rule 1]" means the 1st and 2nd
+    rules -- it just echoed the prompt's numbering instead of the dK labels. Map
+    each "Rule N" to the name the N-th rule directive receives, tracking
+    defeasible/strict counters exactly as parse_dsl does so the mapping is
+    correct even when strict rules (which shift dK numbering) are present.
+    """
+    pos_to_name = {}
+    d = s = pos = 0
+    for m in re.finditer(r"\[\s*(defeasible|strict)\b[^\]]*\]", text, re.I):
+        pos += 1
+        if m.group(1).lower() == "defeasible":
+            d += 1; pos_to_name[pos] = f"d{d}"
+        else:
+            s += 1; pos_to_name[pos] = f"s{s}"
+
+    def repl(mm):
+        return pos_to_name.get(int(mm.group(1)), mm.group(0))
+
+    return re.sub(r"\brule\s*(\d+)", repl, text, flags=re.I)
+
+
 def score_answer(answer: str, entry: dict) -> float:
     md = entry["metadata"]
     kind = md["kind"]
@@ -1423,8 +1449,9 @@ def score_answer(answer: str, entry: dict) -> float:
             pred_ops = _content_to_ops(region, atoms, [], accept_neg_gloss=False)
         else:
             hits = re.findall(r"\[[^\[\]]*\]", region)
+            text = _relabel_rule_refs(" ".join(hits))
             try:
-                pred_ops = list(parse_dsl(" ".join(hits)).operations)
+                pred_ops = list(parse_dsl(text).operations)
             except Exception:
                 pred_ops = None
         if not pred_ops:
