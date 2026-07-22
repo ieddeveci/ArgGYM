@@ -89,9 +89,9 @@ def frame_evidence_construction(rng, with_content=False, level=2):
         target_nl = atoms["c0"]["pos"] if stance == "support" else atoms["c0"]["neg"]
         if with_content:
             gl = {a: {"pos": atoms[a]["pos"], "neg": atoms[a]["neg"]} for a in atoms}
-            pool_lines = "\n".join(f'  - "{atoms[i]["pos"]}"' for i in pool_ids)
+            pool_lines = "\n".join(f'  - {atoms[i]["pos"]}' for i in pool_ids)
             how = ('Build your argument from the statements above (use a statement as itself, or '
-                   'negated by writing -"the statement" or "not the statement"). Write premises as '
+                   "negated by prefixing '-', e.g. -the statement). Write premises as "
                    '[premise: <statement>] and rules as [defeasible: <statement> AND ... => '
                    f'<statement>], finishing at the conclusion "{target_nl}". Every premise you '
                    'assert must be one of the listed statements (or its negation); an argument '

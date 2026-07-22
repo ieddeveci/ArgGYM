@@ -375,7 +375,14 @@ def _gloss_lit(gl, lit):
     return g["neg"] if lit.startswith("-") else g["pos"]
 
 
-def _sentence_dsl(ops, gl, neg_as_minus=False):
+def _sentence_dsl(ops, gl, neg_as_minus=False, ridx=None):
+    # ridx (name -> 1-based display position) makes prefer_rule render as content's
+    # "Rule N" instead of the DSL name dN, matching how the theory is displayed to
+    # the reader. Pass the index of the *displayed* theory, which may be a superset
+    # of `ops`. Without it, rule names are emitted verbatim (symbolic style).
+    def rule_ref(name):
+        return f"Rule {ridx[name]}" if ridx and name in ridx else name
+
     def g(lit):
         if neg_as_minus and lit.startswith("-"):
             a = lit[1:]
@@ -390,7 +397,7 @@ def _sentence_dsl(ops, gl, neg_as_minus=False):
             ants = " AND ".join(g(a) for a in o.antecedents)
             lines.append(f"[{o.kind}: {ants} {arrow} {g(o.consequent)}]")
         elif o.kind == "prefer_rule":
-            lines.append(f"[prefer_rule: {o.stronger} > {o.weaker}]")
+            lines.append(f"[prefer_rule: {rule_ref(o.stronger)} > {rule_ref(o.weaker)}]")
         elif o.kind == "prefer_premise":
             lines.append(f"[prefer_premise: {g(o.stronger)} > {g(o.weaker)}]")
     return "\n".join(lines)

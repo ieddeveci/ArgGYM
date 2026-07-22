@@ -1,5 +1,5 @@
 from aspic_gym import (
-    GYM_ORDERING, Operation, parse_dsl, render_dsl, load_kb, _ev_base, _kb_gloss_pool, _components, _sentence_dsl, _entry, _render_content_theory, _content as _content_mod,
+    GYM_ORDERING, Operation, parse_dsl, render_dsl, load_kb, _ev_base, _kb_gloss_pool, _components, _sentence_dsl, _entry, _render_content_theory, _rule_index, _relabel_rule_refs, _content as _content_mod,
 )
 from prompting import _format_block
 import levels as difficulty
@@ -185,12 +185,16 @@ def frame_formalization(rng, with_content=False, level=2):
         gl = {a: {"pos": atoms[a]["pos"], "neg": atoms[a]["neg"]} for a in atoms}
         body = _render_content_theory(gl, ops)
         spec = ("Give the full formalization as bracketed directives, one per line. Write each "
-                "statement EXACTLY as it appears in the argument - do not abbreviate or use symbols.")
+                "statement EXACTLY as it appears in the argument - do not abbreviate or use symbols. "
+                "Reference a rule by the number it is shown with, e.g. [prefer_rule: Rule 1 > Rule 2].")
         prompt = ("Translate the natural-language argument below into the formal notation.\n\n"
                   + _FORMALIZATION_KEY + "\n\nArgument:\n" + body + _negation_note(gl, ops)
                   + "\n\n" + _format_block(spec))
-        gold_dsl = _sentence_dsl(ops, gl, neg_as_minus=True)
-        gold_components = sorted(_components(parse_dsl(gold_dsl).operations))
+        # Content displays rules as "Rule N"; render the gold's rule preferences the
+        # same way (index over the full displayed theory). The gold-components
+        # re-parse needs DSL rule names, so relabel "Rule N" -> dN first.
+        gold_dsl = _sentence_dsl(ops, gl, neg_as_minus=True, ridx=_rule_index(ops))
+        gold_components = sorted(_components(parse_dsl(_relabel_rule_refs(gold_dsl)).operations))
         ref = "[answer]\n" + gold_dsl + "\n[/answer]"
         return _entry("formalization", prompt, ref, ops, GYM_ORDERING, n_elements=len(ops),
                       mode="content", gold_components=gold_components, atoms=gl)

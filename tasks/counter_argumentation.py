@@ -198,7 +198,11 @@ def frame_counter_argumentation(rng, with_content=False, level=2):
         how = (" Write your directives one per line: [premise: a statement], "
                "[defeasible: A AND B => C], [strict: A AND B -> C]. Negate a statement by prefixing "
                "'-', e.g. [premise: -the sky is blue]. To switch off a rule (undercut), negate its "
-               "label, e.g. [defeasible: some statement => -Rule 2] or [premise: -Rule 2].")
+               "label, e.g. [defeasible: some statement => -Rule 2] or [premise: -Rule 2]. To "
+               "out-prefer a line instead, add your own rule for the opposite conclusion with no "
+               "label, e.g. [defeasible: A => B]; it becomes the next rule after those shown (so if "
+               "Rules 1-N are listed, it is Rule N+1), which you name in [prefer_rule: Rule N+1 > "
+               "Rule k].")
     else:
         how = (" Write your directives one per line: [premise: x], [defeasible: a AND b => c], "
                "[strict: a AND b -> c]. To rebut, derive the negation -c of a conclusion; to "

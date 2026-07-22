@@ -219,8 +219,17 @@ def frame_attack(rng, with_content=False, level=2):
                               "AND add a preference directive so your attacker prevails")}[req]
     goal_txt = ("becomes OVERRULED (decisively defeated; a mere deadlock where both sides are "
                 "undecided is NOT enough)" if req == "outprefer" else "is no longer justified")
-    pref_hint = (" Preference directives: [prefer_rule: X > Y] (X, Y rule labels) and "
-                 "[prefer_premise: x > y]." if req == "outprefer" else "")
+    if req != "outprefer":
+        pref_hint = ""
+    elif mode == "content":
+        pref_hint = (" Preference directives: [prefer_rule: Rule i > Rule j] (rules by their "
+                     "number) and [prefer_premise: x > y]. A rule you add is written with no label, "
+                     "e.g. [defeasible: A => B], and becomes the next rule after those shown "
+                     "(Rule N+1) - name it by that number in the preference.")
+    else:
+        pref_hint = (" Preference directives: [prefer_rule: dI > dJ] (rules by their label) and "
+                     "[prefer_premise: x > y]. A rule you add becomes the next label after those "
+                     "shown, e.g. dN+1.")
     chain = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
     chain_hint = (" Do not simply assert the contrary as a premise; derive your attacking conclusion "
                   "through at least one rule (a chain)." if chain else "")
