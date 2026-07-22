@@ -54,11 +54,17 @@ EOF
   docker logs -f "$CONTAINER" >"$STATE/$m.server.log" 2>&1 &
   LOGPID=$!
 
+  # Optional: evaluate only a slice of the canonical taskset (e.g.
+  # EVAL_LEVELS='[1,3,5]' for low difficulty) instead of building a derived one.
+  FILTER_ARG=()
+  [ -n "${EVAL_LEVELS:-}" ] && FILTER_ARG+=("eval_filter.levels=$EVAL_LEVELS")
+
   echo "--- eval -> $run_dir"
   if "$PY" -m evals.runner \
         model="$m" \
         taskset_id="$TASKSET_ID" \
         sweep_id="$SWEEP_ID" \
+        "${FILTER_ARG[@]}" \
         hydra.run.dir="$run_dir" 2>&1 | tee "$STATE/$m.log"; then
     echo "--- score"
     "$PY" -m evals.scoring "$run_dir" \

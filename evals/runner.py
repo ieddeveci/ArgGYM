@@ -54,6 +54,19 @@ def main(cfg: DictConfig) -> None:
     rows = load_taskset(ts_dir)
     manifest = artifacts.read_json(ts_dir / "manifest.json") or {}
 
+    # Evaluate a slice of the canonical taskset (e.g. only low difficulty) instead
+    # of building a derived taskset. Recorded in run.json so a run is traceable to
+    # exactly the subset it covered.
+    eval_filter = OmegaConf.to_container(cfg.get("eval_filter") or {}, resolve=True)
+    n_total = len(rows)
+    for field, key in (("levels", "level"), ("tasks", "task"), ("modes", "mode")):
+        allowed = eval_filter.get(field)
+        if allowed:
+            allowed = set(allowed)
+            rows = [r for r in rows if r[key] in allowed]
+    if not rows:
+        raise RuntimeError(f"eval_filter {eval_filter} left 0 of {n_total} rows")
+
     sampling = OmegaConf.to_container(cfg.model.sampling, resolve=True)
     elicit = OmegaConf.to_container(cfg.get("elicitation") or {}, resolve=True)
     done = artifacts.completed_sample_ids(run_dir)
@@ -76,6 +89,8 @@ def main(cfg: DictConfig) -> None:
         "taskset_id": ts_dir.name,
         "taskset_hash": manifest.get("taskset_hash"),
         "kb_sha256": manifest.get("kb_sha256"),
+        "eval_filter": eval_filter,
+        "n_taskset_total": n_total,
         "n_samples": len(rows),
         "n_resumed": len(done),
         "sweep_id": cfg.get("sweep_id"),

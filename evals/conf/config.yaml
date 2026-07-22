@@ -44,6 +44,17 @@ sweep_id: null
 # models across different question sets would invalidate the whole sweep.
 taskset_id: null
 
+# Evaluate a slice of the canonical taskset rather than building a derived one.
+# A derived taskset is redundant (it is a subset of the full one) and, for
+# content-mode items, not even byte-reproducible across builds. Filtering the one
+# frozen taskset keeps a single source of truth; the filter is recorded in
+# run.json. null on a field means "no restriction".
+#   e.g. eval_filter.levels=[1,3,5] to run only low difficulty.
+eval_filter:
+  levels: null
+  tasks: null
+  modes: null
+
 hydra:
   run:
     dir: ${runs_root}/${now:%Y-%m-%d_%H-%M-%S}__${model.name}__${taskset.name}
