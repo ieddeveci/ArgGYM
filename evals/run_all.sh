@@ -18,14 +18,20 @@ SWEEP_ID="${SWEEP_ID:-$(date +%Y%m%d-%H%M%S)}"
 STATE="$REPO/outputs/sweeps/$SWEEP_ID"
 mkdir -p "$STATE"
 
-MODELS=(
-  qwen3.6-27b
-  qwen3.5-27b
-  gemma-4-31b-it
-  qwen3.5-9b
-  qwen3.5-4b
-  llama-3.1-8b-instruct
-)
+# The roster, overridable for a targeted run: MODELS="qwen3.6-27b" selects a
+# single model (or a space-separated subset) without editing this file.
+if [ -n "${MODELS:-}" ]; then
+  read -ra MODELS <<< "$MODELS"
+else
+  MODELS=(
+    qwen3.6-27b
+    qwen3.5-27b
+    gemma-4-31b-it
+    qwen3.5-9b
+    qwen3.5-4b
+    llama-3.1-8b-instruct
+  )
+fi
 
 echo "sweep $SWEEP_ID | taskset $TASKSET_ID | ${#MODELS[@]} models"
 echo "$TASKSET_ID" > "$STATE/taskset_id"
