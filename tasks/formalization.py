@@ -120,21 +120,40 @@ def _formalization_theory(rng, level, content):
     return ops, gl
 
 
-_FORMALIZATION_KEY = (
+# The negation convention differs by mode. Content mode statements are full
+# natural-language sentences, so a model that reasons correctly can still fail by
+# writing the *negative* sentence ("X does not hold") instead of -X; quoting the
+# affirmative and showing the exact token to copy makes it mechanical (the content
+# scorer strips quotes). Symbolic mode writes glossary labels, where the plain -X
+# form already works and quotes are NOT stripped -- so it keeps the original text.
+_KEY_HEAD = (
     "Use these conventions, one directive per line:\n"
     "- an ordinary fact: [premise: X]\n"
     "- a fact given as certain (shown with '(certain)'): [axiom: X]\n"
     "- a rule with no modal marker is defeasible (it holds by default and can be defeated): [defeasible: A AND B => C]\n"
     "- a rule marked 'necessarily' is strict: [strict: A AND B -> C]\n"
     "- a stated preference between rules: [prefer_rule: label1 > label2]\n"
-    "- a stated preference between premises: [prefer_premise: X > Y]\n"
+    "- a stated preference between premises: [prefer_premise: X > Y]\n")
+
+_NEG_BULLET_CONTENT = (
+    "- the negation of a statement: -\"X\"  (a statement listed under 'Negated statements' is the "
+    "denial of an affirmative statement X; write it as -\"X\", copying the affirmative X exactly, "
+    "NOT the negative sentence -- the 'Negated statements' block below gives the exact form to copy)\n")
+
+_NEG_BULLET_SYMBOLIC = (
     "- the negation of a statement: -X  (a statement listed under 'Negated statements' is the "
     "denial of an affirmative statement X and MUST be written as -X, copying X exactly; do not "
-    "copy the negative sentence itself)\n"
-    "Join multiple conditions with AND.")
+    "copy the negative sentence itself)\n")
+
+_KEY_TAIL = "Join multiple conditions with AND."
 
 
-def _negation_note(gl, ops):
+def _formalization_key(with_content):
+    neg = _NEG_BULLET_CONTENT if with_content else _NEG_BULLET_SYMBOLIC
+    return _KEY_HEAD + neg + _KEY_TAIL
+
+
+def _negation_note(gl, ops, with_content=False):
     lits = set()
     for o in ops:
         if o.kind in ("premise", "axiom") and o.content.startswith("-"):
@@ -147,10 +166,18 @@ def _negation_note(gl, ops):
                 lits.add(o.consequent)
     if not lits:
         return ""
-    lines = ["Negated statements (each MUST be formalized as -X using its affirmative form X):"]
-    for l in sorted(lits):
-        a = l[1:]
-        lines.append(f'  - "{gl[a]["neg"]}" is the denial of "{gl[a]["pos"]}"')
+    if with_content:
+        lines = ['Negated statements. Each is the denial of an affirmative statement; formalize it as',
+                 'the affirmative in quotes with a leading minus, and do NOT write the negative sentence.',
+                 'Copy the exact form shown after "write exactly":']
+        for l in sorted(lits):
+            a = l[1:]
+            lines.append(f'  - to state "{gl[a]["neg"]}", write exactly:  -"{gl[a]["pos"]}"')
+    else:
+        lines = ["Negated statements (each MUST be formalized as -X using its affirmative form X):"]
+        for l in sorted(lits):
+            a = l[1:]
+            lines.append(f'  - "{gl[a]["neg"]}" is the denial of "{gl[a]["pos"]}"')
     return "\n\n" + "\n".join(lines)
 
 
@@ -188,7 +215,8 @@ def frame_formalization(rng, with_content=False, level=2):
                 "statement EXACTLY as it appears in the argument - do not abbreviate or use symbols. "
                 "Reference a rule by the number it is shown with, e.g. [prefer_rule: Rule 1 > Rule 2].")
         prompt = ("Translate the natural-language argument below into the formal notation.\n\n"
-                  + _FORMALIZATION_KEY + "\n\nArgument:\n" + body + _negation_note(gl, ops)
+                  + _formalization_key(True) + "\n\nArgument:\n" + body
+                  + _negation_note(gl, ops, with_content=True)
                   + "\n\n" + _format_block(spec))
         # Content displays rules as "Rule N"; render the gold's rule preferences the
         # same way (index over the full displayed theory). The gold-components
@@ -205,8 +233,8 @@ def frame_formalization(rng, with_content=False, level=2):
     spec = ("Give the full formalization as bracketed directives, one per line, using the "
             "glossary label for every statement.")
     prompt = ("Translate the natural-language argument below into the formal notation.\n\n"
-              + _FORMALIZATION_KEY + "\n\nGlossary:\n" + glossary + "\n\nArgument:\n" + body
-              + _negation_note(gl, ops) + "\n\n" + _format_block(spec))
+              + _formalization_key(False) + "\n\nGlossary:\n" + glossary + "\n\nArgument:\n" + body
+              + _negation_note(gl, ops, with_content=False) + "\n\n" + _format_block(spec))
     ref = render_dsl(ops)
     return _entry("formalization", prompt, ref, ops, GYM_ORDERING,
                   n_elements=len(ops), mode="symbolic", gold_components=sorted(_components(ops)))

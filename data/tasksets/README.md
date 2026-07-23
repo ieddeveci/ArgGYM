@@ -7,7 +7,7 @@ models requires pinning a fixed sample and shipping it, which is what lives here
 ## What is in a taskset
 
 ```
-pilot-20260723T080147Z-f29c10d9/
+pilot-20260723T131917Z-b19e635a/
   taskset.jsonl.gz   # the items, one JSON object per line (gzipped, ~19x smaller)
   config.yaml        # the grid it was generated from
   manifest.json      # provenance: build time, commit, hashes, per-cell counts, checks
@@ -24,7 +24,7 @@ Each row:
 | `entry` | the ArgGYM entry: `question`, `answer` (gold, stored as **raw** answer content — no `[answer]` wrapper), and `metadata` (ops, ordering, kind, task-specific fields) |
 
 The directory name is `<name>-<UTC-stamp>-<hash8>`, e.g.
-`pilot-20260723T080147Z-f29c10d9`. The stamp sorts builds chronologically (newest
+`pilot-20260723T131917Z-b19e635a`. The stamp sorts builds chronologically (newest
 last), so `ls` shows the build order; the trailing hash covers **every prompt plus
 the `kb.json` they were drawn from**, giving a stable content identity — the same
 code, config, and KB reproduce the same hash, and a taskset built against a
@@ -48,7 +48,7 @@ from evals.taskset import load_taskset
 from evals import template
 from aspic_gym import score_answer
 
-rows = load_taskset("data/tasksets/pilot-20260723T080147Z-f29c10d9")  # reads .jsonl or .jsonl.gz
+rows = load_taskset("data/tasksets/pilot-20260723T131917Z-b19e635a")  # reads .jsonl or .jsonl.gz
 
 for row in rows:
     prompt = template.apply(row["prompt"])            # add the submission contract ([answer] tags)
@@ -137,7 +137,7 @@ mode, level) cell and pulls `n` items:
 Generation is deterministic given the same seed, generator code, and `kb.json`:
 
 ```bash
-python -m evals.verify_taskset data/tasksets/pilot-20260723T080147Z-f29c10d9
+python -m evals.verify_taskset data/tasksets/pilot-20260723T131917Z-b19e635a
 ```
 
 This regenerates the grid from the taskset's own `config.yaml` and compares the
@@ -156,14 +156,26 @@ The two answer modes use different, self-consistent conventions. Each is stated
 in the prompt and matched by the gold, so the answer a model is asked for is the
 one that scores:
 
-- **Content mode** presents statements in plain language (unquoted) and rules as
+- **Content mode** presents statements in plain language and rules as
   `Rule 1`, `Rule 2`, … A preference or undercut names a rule by that number, and
   a rule the model adds is the next number after those shown (`Rule N+1`), written
-  unlabelled as `[defeasible: A => B]`.
+  unlabelled as `[defeasible: A => B]`. A negated statement is written as the
+  affirmative with a leading minus — `formalization` hands the model the exact
+  token to copy (`-"the affirmative statement"`) so a correct answer is not lost
+  to a model writing the negative sentence prose instead.
 - **Symbolic mode** uses the DSL labels shown in the theory — `d1`/`s1` for rules
-  — and preferences name them directly, e.g. `[prefer_rule: d1 > d2]`.
+  — and preferences name them directly, e.g. `[prefer_rule: d1 > d2]`; a negation
+  is the plain `-X` of a glossary label (no quotes).
+
+**Construction tasks are closed-world.** `counter_argumentation` and
+`evidence_construction` restrict a model to the statements the item lists (or
+their negations); a model may add *rules* linking those statements but not
+introduce statements of its own. This is by design — the tasks probe reasoning
+with the given arguments, apart from the model's world knowledge — and the
+prompts state it.
 
 `score_answer` also tolerates reasonable stylistic variants, so a correct answer
 is never lost to punctuation: statements wrapped in quotes, an explicit label on
-an added rule, and `Rule k` written in place of `dk`. What is scored is the
-reasoning, not the notation.
+an added rule, and `Rule k` written in place of `dk`. Only the uppercase `AND`
+joins conditions — a lowercase "and" inside a statement is part of that
+statement. What is scored is the reasoning, not the notation.

@@ -898,7 +898,12 @@ def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
             if sep is None:
                 return None
             lhs, rhs = body.split(sep, 1)
-            ants = [lit(x) for x in re.split(r"\bAND\b", lhs, flags=re.I)]
+            # Split only on the uppercase 'AND' joiner (per the prompt: "Join
+            # multiple conditions with AND"). NOT case-insensitive: a lowercase
+            # 'and' inside a single natural-language statement ("buyers and
+            # sellers") is part of that statement, not a condition separator, and
+            # splitting on it fragments a valid answer into unresolvable pieces.
+            ants = [lit(x) for x in re.split(r"\bAND\b", lhs)]
             con = lit(rhs)
             if con is None or any(a is None for a in ants):
                 return None

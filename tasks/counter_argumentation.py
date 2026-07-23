@@ -196,7 +196,10 @@ def frame_counter_argumentation(rng, with_content=False, level=2):
             "counter-ARGUMENT and scores nothing.")
     if mode == "content":
         how = (" Write your directives one per line: [premise: a statement], "
-               "[defeasible: A AND B => C], [strict: A AND B -> C]. Negate a statement by prefixing "
+               "[defeasible: A AND B => C], [strict: A AND B -> C]. Every statement you use, whether "
+               "a premise or part of a rule, must be one that already appears in the theory above "
+               "(or its negation); you may add new rules linking those statements, but do not "
+               "introduce statements of your own. Negate a statement by prefixing "
                "'-', e.g. [premise: -the sky is blue]. To switch off a rule (undercut), negate its "
                "label, e.g. [defeasible: some statement => -Rule 2] or [premise: -Rule 2]. To "
                "out-prefer a line instead, add your own rule for the opposite conclusion with no "

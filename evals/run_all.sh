@@ -7,6 +7,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python"
 cd "$REPO" || exit 1
 
+# The container name serve.sh uses. Defined here too so the `docker logs -f`
+# server-log capture below resolves it -- serve.sh runs in a separate shell, so
+# its CONTAINER does not carry over, and under `set -u` an unbound reference
+# would abort the capture and silently drop every model's server.log.
+CONTAINER=arggym-vllm
+
 TASKSET_ID="${TASKSET_ID:?TASKSET_ID required (directory name under data/tasksets)}"
 SWEEP_ID="${SWEEP_ID:-$(date +%Y%m%d-%H%M%S)}"
 STATE="$REPO/outputs/sweeps/$SWEEP_ID"

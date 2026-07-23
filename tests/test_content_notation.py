@@ -50,6 +50,58 @@ def test_labeled_added_rule_resolves():
     assert unlab[0].consequent == lab[0].consequent
 
 
+def test_lowercase_and_in_statement_not_split():
+    """A single antecedent statement containing the word 'and' must parse as one
+    condition. Only the uppercase 'AND' joiner separates conditions; splitting on
+    lowercase 'and' fragments a valid statement into unresolvable pieces -> 0."""
+    from aspic_gym import _content_to_ops
+    atoms = {"a1": {"pos": "information asymmetry exists between buyers and sellers",
+                    "neg": "no information asymmetry exists between buyers and sellers"},
+             "a2": {"pos": "the market clears efficiently",
+                    "neg": "the market does not clear efficiently"}}
+    ops = _content_to_ops(
+        "[defeasible: information asymmetry exists between buyers and sellers "
+        "=> the market clears efficiently]", atoms, [])
+    assert ops is not None                       # was None: split at ' and '
+    assert ops[0].antecedents == ("a1",)         # one condition, not fragmented
+    assert ops[0].consequent == "a2"
+
+
+def test_uppercase_AND_still_joins_conditions():
+    """The uppercase joiner must still split two conditions -- even when one of
+    them itself contains a lowercase 'and'."""
+    from aspic_gym import _content_to_ops
+    atoms = {"a1": {"pos": "it rains", "neg": "it does not rain"},
+             "a2": {"pos": "the ground is wet and slippery",
+                    "neg": "the ground is not wet and slippery"},
+             "a3": {"pos": "the road floods", "neg": "the road does not flood"}}
+    ops = _content_to_ops(
+        "[defeasible: it rains AND the ground is wet and slippery => the road floods]",
+        atoms, [])
+    assert ops is not None
+    assert set(ops[0].antecedents) == {"a1", "a2"}   # split on AND, not on inner 'and'
+    assert ops[0].consequent == "a3"
+
+
+def test_formalization_negation_quoted_affirmative():
+    """The formalization prompt now instructs models to write a negated statement
+    as -"<affirmative>". That quoted form must score the same as the unquoted gold
+    -<affirmative> (scorer strips quotes; the leading '-' resolves the contrary)."""
+    import re
+    e = None
+    for lvl in (5, 3):
+        try:
+            e = _find("formalization", "content", lvl, needle_in_gold="=> -")
+            break
+        except AssertionError:
+            continue
+    assert e is not None, "no formalization/content item with a negated consequent found"
+    gold = e["answer"]
+    quoted = re.sub(r'(=>\s*)-([^\]\n]+)', r'\1-"\2"', gold)   # '=> -X' -> '=> -"X"'
+    assert quoted != gold
+    assert score_content(quoted, e) == score_content(gold, e) == 1.0
+
+
 def test_formalization_symbolic_rule_numbering():
     """Symbolic formalization: a model may name rules 'Rule k' (the prompt's
     numbering) instead of dk/sk. That must score the same as the dk form."""
