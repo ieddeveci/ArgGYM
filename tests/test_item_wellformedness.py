@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from aspic_gym import create_dataset, score_answer, validate_entry  # noqa: E402
+from aspic_gym import create_dataset, score_content, validate_entry  # noqa: E402
 
 _RULE_LITERAL_CLAIM = re.compile(r"^\s*\d+\.\s*-?[ds]\d+\s*$", re.M)
 
@@ -84,7 +84,7 @@ def test_reinstate_items_are_generable_above_level_four():
     assert entry["metadata"]["direction"] == "reinstate"
     ok, reasons = validate_entry(entry)
     assert ok, reasons
-    assert score_answer(entry["answer"], entry) >= 0.999
+    assert score_content(entry["answer"], entry) >= 0.999
 
 
 def test_gold_still_self_scores_after_the_fixes():
@@ -97,4 +97,4 @@ def test_gold_still_self_scores_after_the_fixes():
                 entry = ds[i]
                 ok, reasons = validate_entry(entry)
                 assert ok, f"{task} item {i} failed validation: {reasons}"
-                assert score_answer(entry["answer"], entry) >= 0.999
+                assert score_content(entry["answer"], entry) >= 0.999

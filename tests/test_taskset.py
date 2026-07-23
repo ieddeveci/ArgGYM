@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from aspic_gym import score_answer
+from aspic_gym import score_content
 from evals.taskset import build_rows, cell_seed, sample_id, taskset_hash
 
 TASKS = ["status_query", "attack"]
@@ -45,7 +45,7 @@ def test_gold_answers_score_one():
     """Every item's own gold answer must score 1.0, else the parser is broken
     and no model score from this taskset would mean anything."""
     for r in build_rows(TASKS, MODES, LEVELS, 2, SEED, validate_gold=False):
-        assert score_answer(r["entry"]["answer"], r["entry"]) == 1.0, r["sample_id"]
+        assert score_content(r["entry"]["answer"], r["entry"]) == 1.0, r["sample_id"]
 
 
 def test_taskset_hash_tracks_prompts_and_kb():

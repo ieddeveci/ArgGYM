@@ -227,9 +227,9 @@ def frame_perturbation_prediction(rng, with_content=False, level=1, ordering=Non
                   + _pred_task_block(theory_text, notation, pre_lines, pert_lines, "", n)
                   + "\n\n" + _format_block(spec))
         if changed_idx:
-            ref = "[answer]\n" + "\n".join(f"{i + 1}: {g}" for i, g in changed_idx) + "\n[/answer]"
+            ref = "\n".join(f"{i + 1}: {g}" for i, g in changed_idx)
         else:
-            ref = "[answer]\nnone\n[/answer]"
+            ref = "none"
         meta = dict(queries=picked,
                     pre_statuses=[pre[l] for l in picked],
                     post_statuses=[post[l] for l in picked],

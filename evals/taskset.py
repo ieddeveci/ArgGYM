@@ -20,7 +20,7 @@ from omegaconf import DictConfig, OmegaConf
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from aspic_gym import create_dataset, score_answer  # noqa: E402
+from aspic_gym import create_dataset, score_content  # noqa: E402
 
 
 def sample_id(task: str, mode: str, level: int, idx: int) -> str:
@@ -95,7 +95,9 @@ def _build_cell(spec: tuple) -> dict:
             idx += 1
             continue
         if validate_gold:
-            s = score_answer(entry["answer"], entry)
+            # Gold is stored as raw answer content (no submission delimiters), so
+            # score it directly rather than through the [answer]-region extractor.
+            s = score_content(entry["answer"], entry)
             if s < 1.0:
                 gold_failures.append((task, mode, level, idx, s))
         rows.append({

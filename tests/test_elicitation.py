@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from evals import elicitation  # noqa: E402
+from evals import elicitation, template  # noqa: E402
 from evals.client import build_payload  # noqa: E402
 from prompting import _format_block  # noqa: E402
 
@@ -49,17 +49,21 @@ def test_no_system_message_when_none():
 
 
 def test_item_prompts_carry_no_reasoning_scaffold():
-    """The benchmark states the submission contract, not how to think.
+    """The taskset states WHAT to answer -- not how to think, nor how to submit.
 
     `[reasoning]` / `[/reasoning]` were never parsed by anything -- see
     _answer_region, which matches only [answer] -- while instructing a thinking
     model to open a reasoning section pushed its answer into `reasoning_content`.
+    The submission contract ([answer] tags) is likewise a runtime template, not
+    baked into the item prompt.
     """
     block = _format_block("name the attackers")
-    assert "[answer]" in block and "[/answer]" in block
-    assert "[reasoning]" not in block
-    assert "[/reasoning]" not in block
+    assert "[reasoning]" not in block and "[/reasoning]" not in block
     assert "step by step" not in block.lower()
+    # neither the reasoning scaffold nor the submission contract is in the taskset
+    assert "[answer]" not in block and "[/answer]" not in block
+    # the submission contract is supplied at run time by the template
+    assert "[answer]" in template.apply(block) and "[/answer]" in template.apply(block)
 
 
 def test_describe_records_what_was_applied():

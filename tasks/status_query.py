@@ -317,7 +317,7 @@ def frame_status_query(rng, with_content=False, level=2, ordering=None):
         "`1: justified`). Use only the words justified, overruled, undecided, or unsatisfiable.")
     order_decl = _ordering_decl(ordering)
     prompt = _intro(level) + "\n\n" + order_decl + task_block + "\n\n" + fmt
-    reference = "[answer]\n" + "\n".join(f"{i + 1}: {s.lower()}" for i, s in enumerate(gstat)) + "\n[/answer]"
+    reference = "\n".join(f"{i + 1}: {s.lower()}" for i, s in enumerate(gstat))
     return _entry("status_query", prompt, reference, ops, ordering,
                   queries=claims, gold_statuses=gstat, n_claims=n,
                   mode=("content" if with_content else "symbolic"),

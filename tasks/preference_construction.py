@@ -380,7 +380,7 @@ def frame_preference_construction(rng, with_content=False, level=2, ordering=Non
     spec = ("Work out which rule must win in the reasoning block. The answer block must contain only "
             "your preference directives, one per line.")
     prompt = _intro(level) + "\n\n" + order_decl + task + "\n\n" + _format_block(spec)
-    ref = "[answer]\n" + witness + "\n[/answer]"
+    ref = witness
     meta = {"target": T, "mode": mode, "n_prefs": witness.count("prefer_"), "template": template}
     if with_content:
         meta["atoms"] = atoms

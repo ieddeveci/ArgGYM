@@ -7,7 +7,7 @@ models requires pinning a fixed sample and shipping it, which is what lives here
 ## What is in a taskset
 
 ```
-pilot-20260722T195912Z-c1fb2c46/
+pilot-20260723T080147Z-f29c10d9/
   taskset.jsonl.gz   # the items, one JSON object per line (gzipped, ~19x smaller)
   config.yaml        # the grid it was generated from
   manifest.json      # provenance: build time, commit, hashes, per-cell counts, checks
@@ -20,11 +20,11 @@ Each row:
 | `sample_id` | `<task>__<mode>__L<level>__<idx>`, e.g. `attack__content__L05__003` |
 | `task`, `mode`, `level`, `idx` | grid coordinates (`mode` is `symbolic` or `content`) |
 | `cell_seed` | RNG seed for this (task, mode, level) cell |
-| `prompt` | the complete prompt to send a model — already includes the formalism intro, the theory, and the answer-format block |
-| `entry` | the ArgGYM entry: `question`, `answer` (gold), and `metadata` (ops, ordering, kind, task-specific fields) |
+| `prompt` | the item prompt — formalism intro, theory, and task instructions — but **not** the answer submission contract, which a run supplies from a template (see *Using it*) |
+| `entry` | the ArgGYM entry: `question`, `answer` (gold, stored as **raw** answer content — no `[answer]` wrapper), and `metadata` (ops, ordering, kind, task-specific fields) |
 
 The directory name is `<name>-<UTC-stamp>-<hash8>`, e.g.
-`pilot-20260722T195912Z-c1fb2c46`. The stamp sorts builds chronologically (newest
+`pilot-20260723T080147Z-f29c10d9`. The stamp sorts builds chronologically (newest
 last), so `ls` shows the build order; the trailing hash covers **every prompt plus
 the `kb.json` they were drawn from**, giving a stable content identity — the same
 code, config, and KB reproduce the same hash, and a taskset built against a
@@ -45,18 +45,31 @@ this one.
 
 ```python
 from evals.taskset import load_taskset
+from evals import template
 from aspic_gym import score_answer
 
-rows = load_taskset("data/tasksets/pilot-20260722T195912Z-c1fb2c46")  # reads .jsonl or .jsonl.gz
+rows = load_taskset("data/tasksets/pilot-20260723T080147Z-f29c10d9")  # reads .jsonl or .jsonl.gz
 
 for row in rows:
-    answer = my_model(row["prompt"])                  # prompt needs no further assembly
+    prompt = template.apply(row["prompt"])            # add the submission contract ([answer] tags)
+    answer = my_model(prompt)
     score  = score_answer(answer, row["entry"])       # float in [0, 1]
 ```
 
+**Why the template step.** The taskset states the task and *what* the answer must
+contain, not *how* it is submitted. The `[answer]…[/answer]` contract is an
+evaluator's choice — like the reasoning method — so it is applied at run time from
+a template rather than frozen into the taskset, and can change without
+regenerating it. `evals.template.apply` adds the default contract (the one the
+harness uses); `template.wrap(content)` renders a raw answer the way a compliant
+model would submit it.
+
 Gold answers are computed symbolically by PyArg under grounded semantics — no
-LLM judges anything. `score_answer` is the only scorer; partial credit is
-task-specific (per-claim accuracy, F1 over sets, and so on).
+LLM judges anything. Two entry points: `score_answer(text, entry)` extracts the
+`[answer]` region from a full submission and scores it; `score_content(content,
+entry)` scores raw answer content directly — that is what the gold is, and what
+the self-check uses. Partial credit is task-specific (per-claim accuracy, F1 over
+sets, and so on).
 
 **Scoring caveat.** `aspic_gym._answer_region` matches the **first**
 `[answer]` tag in the text. Reasoning models routinely draft an answer
@@ -114,17 +127,17 @@ mode, level) cell and pulls `n` items:
    retries. Those indices are skipped deterministically and counted in
    `manifest.json` under `generator_skips`, rather than shrinking the cell. In
    `pilot`, 2 indices were skipped, both in `counter_argumentation/symbolic/L15`.
-4. **Gold self-check.** Every item's own gold answer is scored against itself and
-   must return exactly 1.0. A single failure aborts the build. If the parsers
-   cannot read their own gold, no model score from that taskset would mean
-   anything. All 1200 items in `pilot` pass.
+4. **Gold self-check.** Every item's own gold answer (raw content) is scored with
+   `score_content` and must return exactly 1.0. A single failure aborts the build.
+   If the parsers cannot read their own gold, no model score from that taskset
+   would mean anything. All 1200 items in `pilot` pass.
 
 ## Reproducing and verifying
 
 Generation is deterministic given the same seed, generator code, and `kb.json`:
 
 ```bash
-python -m evals.verify_taskset data/tasksets/pilot-20260722T195912Z-c1fb2c46
+python -m evals.verify_taskset data/tasksets/pilot-20260723T080147Z-f29c10d9
 ```
 
 This regenerates the grid from the taskset's own `config.yaml` and compares the

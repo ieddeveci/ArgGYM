@@ -120,7 +120,7 @@ def frame_evidence_construction(rng, with_content=False, level=2):
         spec = ("Lay out your reasoning in the reasoning block. The answer block must contain only "
                 "your argument's directives, one per line.")
         prompt = _intro(level) + "\n\n" + task + "\n\n" + _format_block(spec)
-        ref = "[answer]\n" + ref_sol + "\n[/answer]"
+        ref = ref_sol
         return _entry("evidence_construction", prompt, ref, [], GYM_ORDERING,
                       claim=rec["claim"], stance=stance, target=target, atoms=atoms, mode=mode,
                       min_premises=cfg["min_prem"],

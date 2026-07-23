@@ -209,6 +209,6 @@ def frame_enthymeme(rng, with_content=False, level=2):
                 f"used in the completed argument, and must build on the given theory rather than "
                 f"assert a separate argument for the target.")
     prompt = _intro(level) + "\n\n" + _ordering_decl(GYM_ORDERING) + task + "\n\n" + _format_block(spec)
-    ref = "[answer]\n" + gold + "\n[/answer]"
+    ref = gold
     return _entry("enthymeme", prompt, ref, kept, GYM_ORDERING, target=T, mode=mode,
                   n_missing=k, gold_components=sorted(enth_components(removed)), **meta_extra)

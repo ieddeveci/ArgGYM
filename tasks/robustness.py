@@ -195,7 +195,7 @@ def frame_robustness(rng, with_content=False, level=1):
                   + "\n\nTheory:\n" + theory_text + "\n\n" + q + "\n\n"
                   + _format_block(_SPEC[variant]))
         ref_txt = ", ".join(gloss(g) for g in gold)
-        ref = "[answer]\n" + ref_txt + "\n[/answer]"
+        ref = ref_txt
         meta = dict(target=target, variant=variant, direction=direction,
                     critical_set=sorted(singles), gold_names=gold,
                     mode="content" if with_content else "symbolic")

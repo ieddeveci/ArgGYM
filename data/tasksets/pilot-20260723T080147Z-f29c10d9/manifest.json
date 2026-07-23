@@ -1,10 +1,10 @@
 {
   "name": "pilot",
-  "taskset_hash": "c1fb2c46e6d714e637517f8949aaff253e3bcfc3ac9875a10238057271634a26",
-  "taskset_id": "pilot-20260722T195912Z-c1fb2c46",
-  "built_at": "2026-07-22T19:59:12.862215Z",
-  "git_sha": "8b42bbc2b8bd187a071b9957043bd5491757eca2",
-  "git_dirty": false,
+  "taskset_hash": "f29c10d959d37bcd4bfae437c591d89d9af68c923046135d6120c568496c7ee8",
+  "taskset_id": "pilot-20260723T080147Z-f29c10d9",
+  "built_at": "2026-07-23T08:01:47.565201Z",
+  "git_sha": "b858a7dc56f6968d4e35e5c136d1a9e769887f8b",
+  "git_dirty": true,
   "n_samples": 1200,
   "n_cells": 120,
   "cells": {

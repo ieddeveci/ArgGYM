@@ -3,6 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from evals import template
 from evals.scoring import _agg, aggregate, score_sample
 from evals.taskset import build_rows
 
@@ -20,7 +21,8 @@ def _gen(**kw):
 
 def test_perfect_answer_scores_one():
     row = _row()
-    s = score_sample(row, _gen(content=row["entry"]["answer"]))
+    # Gold is stored raw; a compliant model submits it inside the answer template.
+    s = score_sample(row, _gen(content=template.wrap(row["entry"]["answer"])))
     assert s["score"] == 1.0
     assert not s["no_answer_region"] and not s["zero_score_with_valid_region"]
 

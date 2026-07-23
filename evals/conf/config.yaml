@@ -1,9 +1,12 @@
 defaults:
   - taskset: pilot
   - model: qwen3.6-27b
-  # How answers are elicited. The taskset carries the task and the [answer]
-  # contract; prompting method is chosen here, per run, and recorded in run.json.
+  # How answers are elicited (reasoning method / system prompt) and how they are
+  # submitted (the answer-delimiter template). The taskset carries only the task
+  # and its answer spec; both of these are chosen here per run and recorded in
+  # run.json, so neither is pinned into the frozen taskset.
   - elicitation: none
+  - template: answer_tags
   - _self_
 
 # Where artifacts land (relative to the repo root).

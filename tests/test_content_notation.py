@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from aspic_gym import create_dataset, score_answer
+from aspic_gym import create_dataset, score_content
 
 
 def _find(task, mode, level, needle_in_gold=None):
@@ -29,7 +29,7 @@ def test_quoted_statements_match():
     import re
     quoted = re.sub(r"(\[(?:premise|axiom): )([^\]]+)\]", r'\1"\2"]', gold)
     assert quoted != gold  # sanity: we actually changed something
-    assert score_answer(quoted, e) == score_answer(gold, e) == 1.0
+    assert score_content(quoted, e) == score_content(gold, e) == 1.0
 
 
 def test_labeled_added_rule_resolves():
@@ -59,4 +59,4 @@ def test_formalization_symbolic_rule_numbering():
     # rewrite dK -> Rule K only inside preference directives (rule references)
     rulek = re.sub(r"\b d(\d+) ".replace(" ", ""), lambda m: "Rule " + m.group(1), gold)
     assert "Rule " in rulek and rulek != gold
-    assert score_answer(rulek, e) == score_answer(gold, e) == 1.0
+    assert score_content(rulek, e) == score_content(gold, e) == 1.0

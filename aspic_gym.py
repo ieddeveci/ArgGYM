@@ -1009,12 +1009,29 @@ def _relabel_rule_refs(text: str) -> str:
 
 
 def score_answer(answer: str, entry: dict) -> float:
-    md = entry["metadata"]
-    kind = md["kind"]
+    """Score a full model submission.
 
+    Extracts the answer region ([answer]...[/answer], the contract the runtime
+    template asks the model to use) and scores its content. Scoring the raw
+    content is score_content's job -- so a submission that omits the region
+    scores 0, while the gold (stored as raw content) is scored via score_content.
+    """
     region = _answer_region(answer)
     if region is None:
         return 0.0
+    return score_content(region, entry)
+
+
+def score_content(content: str, entry: dict) -> float:
+    """Score already-extracted answer content -- no submission delimiters.
+
+    `content` is the raw directives/statuses, exactly what a task stores as its
+    gold. This is the template-agnostic scorer: the benchmark defines the answer,
+    not how it is delimited. score_answer wraps this with region extraction.
+    """
+    md = entry["metadata"]
+    kind = md["kind"]
+    region = content
 
     if kind == "syntax":
         return 1.0 if _norm_syntax(region) == md["target_norm"] else 0.0
@@ -1481,7 +1498,9 @@ def validate_entry(entry: dict) -> Tuple[bool, List[str]]:
         reasons.append("invariants_failed")
 
     try:
-        if score_answer(entry["answer"], entry) < 0.999:
+        # The gold is stored as raw answer content (no submission delimiters), so
+        # score it directly rather than through the [answer]-region extractor.
+        if score_content(entry["answer"], entry) < 0.999:
             reasons.append("reference_not_perfect")
     except Exception as e:
         reasons.append(f"reference_raised:{e!r}")

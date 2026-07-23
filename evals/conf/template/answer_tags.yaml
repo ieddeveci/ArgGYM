@@ -1,0 +1,8 @@
+# The answer submission contract, applied to every item prompt at run time.
+# The frozen taskset carries only the task and its answer spec; this template
+# supplies the delimiters the model wraps its answer in, so it can change without
+# regenerating the taskset. Must stay in lockstep with aspic_gym._answer_region.
+name: answer_tags
+instruction: "\n\nAnswer format: give your final answer between [answer] and [/answer].\n"
+open: "[answer]"
+close: "[/answer]"

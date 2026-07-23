@@ -197,7 +197,7 @@ def frame_attackers_of(rng, with_content=False, level=2):
         spec = ("In the answer, write the CONCLUSION of every attacker - the exact literal it "
                 "derives. For an attack that switches off a rule (an undercut), write the negated "
                 "rule label, e.g. -d2. Separate them with commas; write `none` if nothing attacks it.")
-        ref = "[answer]\n" + ", ".join(gold_lits) + "\n[/answer]"
+        ref = ", ".join(gold_lits)
         prompt = _intro(level) + "\n\n" + _ordering_decl(ordering) + task + "\n\n" + _format_block(spec)
         return _entry("attackers_of", prompt, ref, ops, ordering, mode=mode, target=T,
                       gold_lits=gold_lits)
@@ -208,7 +208,7 @@ def frame_attackers_of(rng, with_content=False, level=2):
             "that contradicts the argument or one of its premises), one per line. For an attacker "
             "that switches off a rule (an undercut), write the negated rule label, e.g. -Rule 2. "
             "Write `none` if nothing attacks it.")
-    ref = "[answer]\n" + "\n".join(gold_sents) + "\n[/answer]"
+    ref = "\n".join(gold_sents)
     prompt = _intro(level) + "\n\n" + _ordering_decl(ordering) + task + "\n\n" + _format_block(spec)
     return _entry("attackers_of", prompt, ref, ops, ordering, mode=mode, target=T,
                   gold_lits=gold_lits, gold_sents=gold_sents, distractor_sents=distractor_sents)

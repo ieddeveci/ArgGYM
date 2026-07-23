@@ -178,7 +178,7 @@ def frame_counter_argumentation(rng, with_content=False, level=2):
         theory_text = _render_content_theory(atoms, ops); notation = _CONTENT_NOTATION; mode = "content"
         tgt, ntgt = _gloss(atoms, T), _gloss(atoms, neg)
         meta_extra = {"atoms": atoms, "n_supports": sum(1 for o in ops if o.kind == "defeasible" and o.consequent == T)}
-        ref = "[answer]\n" + witness + "\n[/answer]"
+        ref = witness
     else:
         k = max(1, task_elements("enthymeme", level))
         ops, T, supports, witness = _build_ksupport(rng, k, level)
@@ -186,7 +186,7 @@ def frame_counter_argumentation(rng, with_content=False, level=2):
         theory_text = _render_symbolic_theory(ops); notation = _sym_notation(level); mode = "symbolic"
         tgt, ntgt = T, neg
         meta_extra = {"n_supports": k, "supports": supports}
-        ref = "[answer]\n" + witness.replace("][", "]\n[") + "\n[/answer]"
+        ref = witness.replace("][", "]\n[")
     task = (notation + "\n\nTheory:\n" + theory_text + f"\n\nThe claim \"{tgt}\" is justified, backed by "
             f"independent line(s) of argument. Construct a counter-case that makes {ntgt} justified "
             f"under grounded semantics. A bare contradiction of \"{tgt}\" only deadlocks with it; to make "

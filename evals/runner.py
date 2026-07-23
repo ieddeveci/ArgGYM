@@ -14,7 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from evals import artifacts, client, elicitation  # noqa: E402
+from evals import artifacts, client, elicitation, template  # noqa: E402
 from evals.taskset import git_sha, load_taskset  # noqa: E402
 
 
@@ -69,6 +69,7 @@ def main(cfg: DictConfig) -> None:
 
     sampling = OmegaConf.to_container(cfg.model.sampling, resolve=True)
     elicit = OmegaConf.to_container(cfg.get("elicitation") or {}, resolve=True)
+    tmpl = OmegaConf.to_container(cfg.get("template") or {}, resolve=True)
     done = artifacts.completed_sample_ids(run_dir)
     todo = [r for r in rows if r["sample_id"] not in done]
 
@@ -81,11 +82,13 @@ def main(cfg: DictConfig) -> None:
         "sampling": sampling,
         "generation": OmegaConf.to_container(cfg.generation, resolve=True),
         "endpoint": OmegaConf.to_container(cfg.endpoint, resolve=True),
-        # Which prompting method produced these generations. The taskset carries
-        # only the task and the [answer] contract, so without this a run is not
-        # traceable to how it was elicited.
+        # How these generations were produced. The taskset carries only the task
+        # and its answer spec, so without these a run is not traceable to how the
+        # answer was elicited (reasoning method) or submitted (answer template).
         "elicitation": elicit,
         "elicitation_summary": elicitation.describe(elicit),
+        "template": tmpl,
+        "template_summary": template.describe(tmpl),
         "taskset_id": ts_dir.name,
         "taskset_hash": manifest.get("taskset_hash"),
         "kb_sha256": manifest.get("kb_sha256"),
@@ -120,7 +123,10 @@ def main(cfg: DictConfig) -> None:
     max_tokens = int(cfg.model.get("max_tokens") or cfg.generation.max_tokens)
 
     def work(row: dict) -> dict:
-        prompt, system = elicitation.apply(row["prompt"], elicit)
+        # Supply the submission contract (answer delimiters) the taskset no longer
+        # carries, then apply the reasoning-method elicitation on top.
+        prompt = template.apply(row["prompt"], tmpl)
+        prompt, system = elicitation.apply(prompt, elicit)
         gen = client.complete(
             cfg.endpoint.base_url, cfg.model.name, prompt, sampling,
             max_tokens, int(cfg.endpoint.timeout_s),

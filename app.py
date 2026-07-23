@@ -8,6 +8,7 @@ from aspic_api import ASPICVerifier
 from aspic_engine import contrary
 from aspic_gym import (create_dataset, score_answer, ALL_TASKS, CONTENT_KINDS,
                        MAX_LEVEL, ATTACK_CHAIN_LEVEL, TASK_MIN_LEVEL)
+from evals import template
 
 app = Flask(__name__)
 
@@ -224,7 +225,10 @@ def api_generate():
                             f"{level}: {ex}"}), 422
         task_id = uuid.uuid4().hex
         TASKS[task_id] = entry
-        return jsonify({"task_id": task_id, "kind": kind, "prompt": entry["question"],
+        # The taskset prompt no longer pins a submission template; show the default
+        # answer contract so a human solver sees the same prompt a run would send.
+        return jsonify({"task_id": task_id, "kind": kind,
+                        "prompt": template.apply(entry["question"]),
                         "level": level, "with_content": with_content, "seed": seed,
                         "answer_hint": ANSWER_HINT.get(kind, ""),
                         "grading_mode": GRADING_MODE.get(kind, ""),

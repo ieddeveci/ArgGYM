@@ -60,14 +60,15 @@ def _ordering_decl(ordering: str) -> str:
 
 
 def _format_block(answer_spec: str) -> str:
-    """The task ask plus the submission contract -- nothing about how to think.
+    """The task's answer spec -- WHAT the answer must contain, nothing more.
 
-    How an answer is elicited (step-by-step instructions, a system prompt,
-    few-shot, a scaffold) is the evaluator's choice, not the benchmark's, and is
-    applied by the harness at run time. See evals/elicitation.py.
+    The submission contract (HOW the answer is delimited, e.g. [answer] tags) and
+    how it is elicited (reasoning method, system prompt, few-shot) are the
+    evaluator's choice, not the benchmark's, and are applied by the harness at run
+    time -- so the frozen taskset never pins a template. See evals/template.py and
+    evals/elicitation.py.
     """
-    return ("Task instructions: " + answer_spec + "\n\n"
-            "Answer format: give your final answer between [answer] and [/answer].\n")
+    return "Task instructions: " + answer_spec
 
 _EXEMPLARS = {
     "status_query": (

@@ -310,7 +310,7 @@ def frame_ordering_sensitivity(rng, with_content=False, level=2):
         f"For the claim \"{gloss(claim)}\" determine its grounded status under last-link "
         "ordering and, separately, under weakest-link ordering.")
     prompt = _intro(level) + "\n\n" + task_block + "\n\n" + _format_block(spec)
-    ref = ("[answer]\n" + f"last-link: {last_s}\n" + f"weakest-link: {weak_s}\n" + "[/answer]")
+    ref = (f"last-link: {last_s}\n" + f"weakest-link: {weak_s}\n")
     meta = dict(claim=claim, last_status=last_s, weak_status=weak_s, mode=mode)
     if with_content:
         meta["atoms"] = atoms

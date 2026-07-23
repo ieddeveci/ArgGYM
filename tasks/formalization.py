@@ -195,7 +195,7 @@ def frame_formalization(rng, with_content=False, level=2):
         # re-parse needs DSL rule names, so relabel "Rule N" -> dN first.
         gold_dsl = _sentence_dsl(ops, gl, neg_as_minus=True, ridx=_rule_index(ops))
         gold_components = sorted(_components(parse_dsl(_relabel_rule_refs(gold_dsl)).operations))
-        ref = "[answer]\n" + gold_dsl + "\n[/answer]"
+        ref = gold_dsl
         return _entry("formalization", prompt, ref, ops, GYM_ORDERING, n_elements=len(ops),
                       mode="content", gold_components=gold_components, atoms=gl)
     ops, gl = _formalization_theory(rng, level, False)
@@ -207,6 +207,6 @@ def frame_formalization(rng, with_content=False, level=2):
     prompt = ("Translate the natural-language argument below into the formal notation.\n\n"
               + _FORMALIZATION_KEY + "\n\nGlossary:\n" + glossary + "\n\nArgument:\n" + body
               + _negation_note(gl, ops) + "\n\n" + _format_block(spec))
-    ref = "[answer]\n" + render_dsl(ops) + "\n[/answer]"
+    ref = render_dsl(ops)
     return _entry("formalization", prompt, ref, ops, GYM_ORDERING,
                   n_elements=len(ops), mode="symbolic", gold_components=sorted(_components(ops)))

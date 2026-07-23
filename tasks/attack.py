@@ -241,6 +241,6 @@ def frame_attack(rng, with_content=False, level=2):
             "block must contain the directives of your attacking argument, one per line, with no "
             "prose. Keep the combined theory consistent.")
     prompt = _intro(level) + "\n\n" + _ordering_decl(ordering) + task + "\n\n" + _format_block(spec)
-    ref = "[answer]\n" + witness + "\n[/answer]"
+    ref = witness
     return _entry("attack", prompt, ref, ops, ordering, target=C, req=req, mode=mode,
                   level=level, **meta_extra)

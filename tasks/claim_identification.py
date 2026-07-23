@@ -187,6 +187,6 @@ def frame_claim_identification(rng, with_content=False, level=2, ordering=None):
     prompt = (_intro(level) + "\n\n" + order_decl
               + _claim_task_block(theory_text, notation, claims_block, len(cand))
               + "\n\n" + _format_block(spec))
-    ref = "[answer]\n" + (", ".join(map(str, established)) if established else "none") + "\n[/answer]"
+    ref = (", ".join(map(str, established)) if established else "none")
     return _entry("claim_identification", prompt, ref, ops, ordering, established=established,
                   universe=cand, n_candidates=len(cand), mode=mode)
