@@ -1,0 +1,29 @@
+name: gemma-4-E4B-it
+hf_id: google/gemma-4-E4B-it
+model_path: google/gemma-4-E4B-it
+image: vllm/vllm-openai:latest
+# E4B is the small (~4B-effective) sibling of gemma-4-31b-it: same gemma4 arch
+# (Gemma4ForConditionalGeneration, 42 layers, hidden 2560), added so the Gemma
+# family has a second size for the scaling matrix. Weights are ~8-12GB (vs 31B's
+# 59G), leaving most of the card for KV, so the aggressive --max-num-seqs 5 the
+# 31B needed to avoid KV pool exhaustion is unnecessary here.
+gpu_memory_utilization: 0.85
+# Mirror the 31B's sequence budget so outputs are not truncated differently
+# across the two sizes (fair comparison). Gemma reasons concisely; 20480 leaves
+# ~19k output after the ~1k prompt, well above the family's observed max.
+max_model_len: 20480
+max_tokens: 16384
+reasoning_parser: gemma4
+# Gemma-4 templates only think when enable_thinking is explicitly true (matches
+# the 31B and every Qwen in the roster, all run with thinking ON).
+enable_thinking: true
+# --max-num-batched-tokens 4096: gemma-4 is multimodal and reserves a per-image
+# token budget (2496) above the 2048 default, refusing to start otherwise (same
+# as the 31B). --max-num-seqs 16: E4B's large KV pool comfortably holds this many
+# 20k-token sequences, so a higher cap than the 31B's 5 is safe and ~3x faster.
+extra_args: ["--max-num-batched-tokens", "4096", "--max-num-seqs", "16"]
+sampling:
+  temperature: 1.0
+  top_p: 0.95
+  top_k: 64
+sampling_source: own generation_config.json
