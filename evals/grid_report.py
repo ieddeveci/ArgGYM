@@ -38,6 +38,21 @@ ROSTER = ["qwen3.6-27b", "qwen3.5-27b", "gemma-4-31b-it",
 COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
 MARKERS = ["o", "s", "^", "D", "v", "P"]
 
+# Model -> (scaling family, size in billions). A scaling matrix is drawn per
+# family that has >= 2 sizes present, so size effect can be read at fixed
+# difficulty. qwen3.5 gives the clean 4/9/27 ladder; qwen3.6 and gemma-4 have a
+# single size in the roster (gemma-4-E4B-it would add a second Gemma point).
+FAMILY_SIZE = {
+    "qwen3.6-27b": ("qwen3.6", 27), "qwen3.5-27b": ("qwen3.5", 27),
+    "qwen3.5-9b": ("qwen3.5", 9), "qwen3.5-4b": ("qwen3.5", 4),
+    "gemma-4-31b-it": ("gemma-4", 31), "gemma-4-E4B-it": ("gemma-4", 4),
+    "llama-3.1-8b-instruct": ("llama-3.1", 8),
+}
+
+
+def _fam_size(model):
+    return FAMILY_SIZE.get(model, (model, 0))
+
 
 def style(model: str):
     i = ROSTER.index(model) if model in ROSTER else (hash(model) % len(COLORS))
@@ -167,6 +182,50 @@ def fig_task_heatmap(data, levels, out: Path):
     fig.tight_layout(); fig.savefig(out, bbox_inches="tight"); plt.close(fig)
 
 
+def fig_scaling(data, levels, out_dir) -> List[str]:
+    """One scaling matrix per family with >=2 sizes: rows = model (size asc),
+    cols = level, cell = overall mean. Reading a column top-to-bottom shows the
+    size effect at that difficulty. Returns the paths written."""
+    import numpy as np
+    fam: Dict[str, list] = {}
+    for model in data:
+        f, sz = _fam_size(model)
+        fam.setdefault(f, []).append((sz, model))
+    written = []
+    for f, members in fam.items():
+        if len(members) < 2:
+            continue
+        members.sort()  # by size ascending
+        models = [m[1] for m in members]
+        labels = [f"{m[0]}B  ({m[1]})" for m in members]
+        grid = np.full((len(models), len(levels)), np.nan)
+        for i, model in enumerate(models):
+            for j, lv in enumerate(levels):
+                met = data[model].get(lv)
+                if met:
+                    grid[i, j] = met["overall"].get("mean_score", np.nan)
+        fig, ax = plt.subplots(figsize=(1.6 + 1.0 * len(levels), 1.2 + 0.7 * len(models)),
+                               dpi=150)
+        im = ax.imshow(grid, cmap="viridis", vmin=0, vmax=1, aspect="auto")
+        ax.set_xticks(range(len(levels))); ax.set_xticklabels([f"L{l}" for l in levels])
+        ax.set_yticks(range(len(models))); ax.set_yticklabels(labels, fontsize=9)
+        ax.set_xlabel("difficulty level")
+        ax.set_ylabel("model size (ascending)")
+        for i in range(len(models)):
+            for j in range(len(levels)):
+                v = grid[i, j]
+                if v == v:
+                    ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=8.5,
+                            color="white" if v < 0.6 else "black")
+        ax.set_title(f"Scaling: {f} — overall score by size x difficulty",
+                     loc="left", fontweight="bold")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="mean score")
+        p = out_dir / f"scaling_{f}.png"
+        fig.tight_layout(); fig.savefig(p, bbox_inches="tight"); plt.close(fig)
+        written.append(str(p))
+    return written
+
+
 # ---- markdown tables -----------------------------------------------------
 
 def _tbl(headers, rows):
@@ -224,6 +283,26 @@ def build_md(data, levels, figs: List[str]) -> str:
             r.append(f"{tr:.3f}" if isinstance(tr, (int, float)) else "-")
         rows.append(r)
     L.append(_tbl(["model"] + [f"L{l}" for l in levels], rows))
+
+    # Scaling: per family with >=2 sizes, size x level (rows = size ascending).
+    fam: Dict[str, list] = {}
+    for m in models:
+        f, sz = _fam_size(m)
+        fam.setdefault(f, []).append((sz, m))
+    scaling = {f: sorted(v) for f, v in fam.items() if len(v) >= 2}
+    if scaling:
+        L.append("\n\n## Scaling — size x difficulty (overall), per family\n")
+        L.append("Reading a column top-to-bottom shows the effect of model size at "
+                 "that difficulty. Only families with >=2 sizes in the roster appear.\n")
+        for f, members in scaling.items():
+            L.append(f"\n**{f}**\n")
+            rows = []
+            for sz, m in members:
+                r = [f"{sz}B ({m})"]
+                for lv in levels:
+                    r.append(_cell(data[m].get(lv), ["overall"]))
+                rows.append(r)
+            L.append(_tbl(["size"] + [f"L{l}" for l in levels], rows))
     return "\n".join(L)
 
 
@@ -252,6 +331,11 @@ def main():
                 figs.append(str(p))
         except Exception as e:
             print(f"  figure {name} skipped: {type(e).__name__}: {e}")
+    # Scaling matrices (one per family with >=2 sizes present).
+    try:
+        figs += fig_scaling(data, levels, out)
+    except Exception as e:
+        print(f"  scaling figures skipped: {type(e).__name__}: {e}")
 
     (out / "grid-results.md").write_text(build_md(data, levels, figs))
     print(f"models: {_models_sorted(data)}")
