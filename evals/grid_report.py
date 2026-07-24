@@ -447,11 +447,12 @@ def main():
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
 
     figs = []
+    # Cross-family averaging (mixing generations/sizes) is not apples-to-apples, so
+    # no task heatmap averaged over models. Per-mode, per-model tracks + gap only.
     for name, fn in (("difficulty_by_mode.png", fig_by_mode),
                      ("modality_gap_vs_difficulty.png", fig_gap),
                      ("modality_gap_matrix.png", fig_gap_matrix),
-                     ("truncation_vs_difficulty.png", fig_truncation),
-                     ("task_difficulty_heatmap_by_mode.png", fig_task_heatmap)):
+                     ("truncation_vs_difficulty.png", fig_truncation)):
         p = out / name
         try:
             fn(data, levels, p)
