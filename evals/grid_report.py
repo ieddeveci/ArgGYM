@@ -190,6 +190,39 @@ def _draw_gap(ax, grid, ylabels):
     return im
 
 
+def fig_score_matrix(data, levels, out_dir) -> List[str]:
+    """model x level score matrix, one per mode (content, symbolic). Viridis."""
+    import numpy as np
+    models = _models_sorted(data)
+    written = []
+    for mode in ("content", "symbolic"):
+        grid = np.full((len(models), len(levels)), np.nan)
+        for i, m in enumerate(models):
+            for j, lv in enumerate(levels):
+                v = _mode(data[m].get(lv), mode)
+                if v is not None:
+                    grid[i, j] = v
+        fig, ax = plt.subplots(
+            figsize=(1.8 + 1.0 * len(levels), 1.2 + 0.55 * len(models)), dpi=150)
+        im = ax.imshow(grid, cmap="viridis", vmin=0, vmax=1, aspect="auto")
+        ax.set_xticks(range(len(levels))); ax.set_xticklabels([f"L{l}" for l in levels])
+        ax.set_yticks(range(len(models))); ax.set_yticklabels(models, fontsize=9)
+        ax.set_xlabel("difficulty level")
+        for i in range(len(models)):
+            for j in range(len(levels)):
+                v = grid[i, j]
+                if v == v:
+                    ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=8,
+                            color="white" if v < 0.6 else "black")
+        ax.set_title(f"{mode.capitalize()} score matrix — model x difficulty",
+                     loc="left", fontweight="bold")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="mean score")
+        p = out_dir / f"score_matrix_{mode}.png"
+        fig.tight_layout(); fig.savefig(p, bbox_inches="tight"); plt.close(fig)
+        written.append(str(p))
+    return written
+
+
 def fig_gap_matrix(data, levels, out: Path):
     """model x level matrix of the modality gap (symbolic - content)."""
     models = _models_sorted(data)
@@ -426,7 +459,11 @@ def main():
                 figs.append(str(p))
         except Exception as e:
             print(f"  figure {name} skipped: {type(e).__name__}: {e}")
-    # Scaling matrices (one per family with >=2 sizes present).
+    # Score matrices (model x level, per mode) + scaling matrices (per family).
+    try:
+        figs += fig_score_matrix(data, levels, out)
+    except Exception as e:
+        print(f"  score matrices skipped: {type(e).__name__}: {e}")
     try:
         figs += fig_scaling(data, levels, out)
     except Exception as e:
