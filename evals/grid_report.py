@@ -163,6 +163,48 @@ def fig_gap(data, levels, out: Path):
     fig.tight_layout(); fig.savefig(out, bbox_inches="tight"); plt.close(fig)
 
 
+def _gap_grid(models, data, levels):
+    import numpy as np
+    grid = np.full((len(models), len(levels)), np.nan)
+    for i, m in enumerate(models):
+        for j, lv in enumerate(levels):
+            s, c = _mode(data[m].get(lv), "symbolic"), _mode(data[m].get(lv), "content")
+            if s is not None and c is not None:
+                grid[i, j] = s - c
+    return grid
+
+
+def _draw_gap(ax, grid, ylabels):
+    """Diverging heatmap of a signed gap centered at 0 (RdBu, CVD-safe: red =
+    symbolic easier, blue = content easier, near-white = no gap)."""
+    import numpy as np
+    vmax = max(float(np.nanmax(np.abs(grid))) if not np.all(np.isnan(grid)) else 0.01, 0.01)
+    im = ax.imshow(grid, cmap="RdBu_r", vmin=-vmax, vmax=vmax, aspect="auto")
+    ax.set_yticks(range(len(ylabels))); ax.set_yticklabels(ylabels, fontsize=9)
+    for i in range(grid.shape[0]):
+        for j in range(grid.shape[1]):
+            v = grid[i, j]
+            if v == v:
+                ax.text(j, i, f"{v:+.2f}", ha="center", va="center", fontsize=8,
+                        color="white" if abs(v) > 0.62 * vmax else "black")
+    return im
+
+
+def fig_gap_matrix(data, levels, out: Path):
+    """model x level matrix of the modality gap (symbolic - content)."""
+    models = _models_sorted(data)
+    grid = _gap_grid(models, data, levels)
+    fig, ax = plt.subplots(figsize=(1.8 + 1.0 * len(levels), 1.2 + 0.55 * len(models)),
+                           dpi=150)
+    im = _draw_gap(ax, grid, models)
+    ax.set_xticks(range(len(levels))); ax.set_xticklabels([f"L{l}" for l in levels])
+    ax.set_xlabel("difficulty level")
+    ax.set_title("Modality gap matrix  (symbolic − content; red = symbolic easier)",
+                 loc="left", fontweight="bold")
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="symbolic − content")
+    fig.tight_layout(); fig.savefig(out, bbox_inches="tight"); plt.close(fig)
+
+
 def fig_truncation(data, levels, out: Path):
     fig, ax = plt.subplots(figsize=(7.2, 4.6), dpi=150)
     _plot_series(ax, data, levels, lambda m: m["overall"].get("truncated_rate"))
@@ -254,6 +296,19 @@ def fig_scaling(data, levels, out_dir) -> List[str]:
             p = out_dir / f"scaling_{f}_{mode}.png"
             fig.tight_layout(); fig.savefig(p, bbox_inches="tight"); plt.close(fig)
             written.append(str(p))
+        # gap matrix for the family: size x level, symbolic - content (diverging)
+        gap = _gap_grid(models, data, levels)
+        fig, ax = plt.subplots(
+            figsize=(1.8 + 1.0 * len(levels), 1.2 + 0.6 * len(models)), dpi=150)
+        im = _draw_gap(ax, gap, labels)
+        ax.set_xticks(range(len(levels))); ax.set_xticklabels([f"L{l}" for l in levels])
+        ax.set_xlabel("difficulty level")
+        ax.set_title(f"Scaling: {f} (gap) — symbolic − content by size x difficulty",
+                     loc="left", fontweight="bold")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="symbolic − content")
+        p = out_dir / f"scaling_{f}_gap.png"
+        fig.tight_layout(); fig.savefig(p, bbox_inches="tight"); plt.close(fig)
+        written.append(str(p))
     return written
 
 
@@ -361,6 +416,7 @@ def main():
     figs = []
     for name, fn in (("difficulty_by_mode.png", fig_by_mode),
                      ("modality_gap_vs_difficulty.png", fig_gap),
+                     ("modality_gap_matrix.png", fig_gap_matrix),
                      ("truncation_vs_difficulty.png", fig_truncation),
                      ("task_difficulty_heatmap_by_mode.png", fig_task_heatmap)):
         p = out / name
