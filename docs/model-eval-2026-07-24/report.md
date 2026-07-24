@@ -68,6 +68,7 @@ and scores largely plateau there for the strong models.
 | qwen3.5-27b | 0.854 | 0.822 | 0.741 | 0.726 | 0.716 |
 | qwen3.5-9b | 0.645 | 0.569 | 0.514 | 0.462 | 0.513 |
 | qwen3.5-4b | 0.562 | 0.502 | 0.372 | 0.376 | 0.319 |
+| gemma-4-E4B-it | 0.591 | 0.458 | 0.354 | 0.388 | 0.375 |
 
 **Symbolic** (mean score)
 | model | L1 | L3 | L5 | L10 | L15 |
@@ -77,6 +78,7 @@ and scores largely plateau there for the strong models.
 | qwen3.5-27b | 0.908 | 0.828 | 0.733 | 0.751 | 0.704 |
 | qwen3.5-9b | 0.777 | 0.617 | 0.588 | 0.543 | 0.530 |
 | qwen3.5-4b | 0.655 | 0.559 | 0.403 | 0.353 | 0.267 |
+| gemma-4-E4B-it | 0.588 | 0.540 | 0.474 | 0.404 | 0.504 |
 
 **Reading:** In **content** the three ≥27B models cluster (qwen3.6 and gemma tied for
 the lead, qwen3.5-27b just behind), decaying then flattening. In **symbolic** they
@@ -147,13 +149,16 @@ much each size loses to difficulty.
 ![Qwen 3.5 scaling](figures/fig3_scaling_qwen3.5.png)
 ![Gemma scaling](figures/fig3_scaling_gemma-4.png)
 
-*(The Gemma ladder — gemma-4-E4B-it vs gemma-4-31b-it — is being completed; higher-level
-E4B points land as its addendum run finishes and this figure is regenerated.)*
-
 **Reading:** Size ordering is monotone at every level in both modes (Qwen 3.5:
 4B<9B<27B; Gemma: E4B<31B), and the level-curves fan out with size — **larger models
-lose less to difficulty.** (Small-model points here are *raw*; per §5 their true
-reasoning gap to the large models is smaller than these curves suggest.)
+lose less to difficulty.** The **Gemma family shows a much larger size step** than
+Qwen: gemma-4-31b-it beats gemma-4-E4B-it (~4B effective) by **~0.3–0.4 at every
+level in both modes**, versus ~0.1 between adjacent Qwen 3.5 sizes — though E4B is a
+nested/distilled variant, not a clean smaller pretrain, so this ladder is a rougher
+comparison than Qwen's. (Small-model points here are *raw*; per §5, for the Qwen
+small models the true reasoning gap is smaller than the raw curves suggest. Note E4B,
+like the 31B, does **not** truncate — its lower scores are genuine misses, not the
+length-control effect seen in the small Qwens.)
 
 ---
 
