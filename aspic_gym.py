@@ -1661,13 +1661,15 @@ _ORDERING_FRAMER_CACHE: Dict = {}
 
 
 def _framer_accepts_ordering(framer) -> bool:
-    key = id(framer)
-    if key not in _ORDERING_FRAMER_CACHE:
+    # Keyed on the framer itself, not id(): an address is only unique among live
+    # objects, so a collected framer's slot could be reused and answer for a
+    # different function.
+    if framer not in _ORDERING_FRAMER_CACHE:
         try:
-            _ORDERING_FRAMER_CACHE[key] = "ordering" in _inspect.signature(framer).parameters
+            _ORDERING_FRAMER_CACHE[framer] = "ordering" in _inspect.signature(framer).parameters
         except (TypeError, ValueError):
-            _ORDERING_FRAMER_CACHE[key] = False
-    return _ORDERING_FRAMER_CACHE[key]
+            _ORDERING_FRAMER_CACHE[framer] = False
+    return _ORDERING_FRAMER_CACHE[framer]
 
 
 class ASPICDataset:

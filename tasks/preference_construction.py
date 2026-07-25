@@ -282,7 +282,10 @@ def _pref_content(rng, level):
             ordinary = {o.content for o in ops if o.kind == "premise"}
             opts = []
             for t, _rn in uniq.items():
-                deps = [l for l in _anc(t, set()) if l in ordinary]
+                # sorted: _anc returns a set, and rng.choice below indexes into
+                # this list, so raw set order would make the generated item depend
+                # on PYTHONHASHSEED -- which differs per taskset-build worker.
+                deps = sorted(l for l in _anc(t, set()) if l in ordinary)
                 if deps:
                     opts.append((t, deps))
             if opts:

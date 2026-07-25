@@ -80,6 +80,18 @@ def test_preference_sets_are_invariant_under_hash_seed():
 # prompt + gold that actually ship.
 
 # Preference-emitting tasks at a level where undercuts/preferences are active.
+#
+# n matches a real build, not a token sample. At n=3 this suite passed while the
+# shipped taskset was hash-seed-dependent at indices 1-8: the framer reaches the
+# fragile template only after the earlier candidates are exhausted, so a short
+# cell never gets there. A taskset is built across worker processes and each gets
+# its own PYTHONHASHSEED, so anything this misses ships as a taskset that cannot
+# be regenerated.
+#
+# Level 5 only: it reproduced the real defect (at indices 1 and 4) for ~2s a
+# cell, while level 15 costs ~90s for the same signal. Run
+# `python -m evals.verify_taskset <dir>` for whole-grid coverage before shipping
+# a taskset -- that is the check this test is a fast proxy for.
 _PIPELINE_SNIPPET = """
 import hashlib, json, sys
 sys.path.insert(0, {repo!r})
@@ -90,7 +102,7 @@ TASKS = ["claim_identification", "preference_construction", "status_query",
 rows = []
 for t in TASKS:
     for mode in ("symbolic", "content"):
-        rows += build_rows([t], [mode], [5], 3, 20260721, True)
+        rows += build_rows([t], [mode], [5], 10, 20260721, True)
 blob = "\\n".join(r["prompt"] + "\\x00" + r["entry"]["answer"]
                   for r in sorted(rows, key=lambda r: r["sample_id"]))
 print(hashlib.sha256(blob.encode()).hexdigest())
@@ -109,9 +121,11 @@ def test_full_pipeline_is_invariant_under_hash_seed():
     """Prompt + gold of real generated cells must not depend on PYTHONHASHSEED.
 
     Covers the framer-level preference emission that the _raw_sample tests do
-    not reach.
+    not reach. Three seeds, not two: the observed failure changed different
+    sample ids under different seeds, so a two-seed comparison can agree by
+    coincidence on the pair it happens to pick.
     """
-    digests = {h: _pipeline_digest(h) for h in ("0", "1")}
+    digests = {h: _pipeline_digest(h) for h in ("0", "1", "2")}
     assert len(set(digests.values())) == 1, (
         "generated cells depend on PYTHONHASHSEED; digests: " + repr(digests)
     )
