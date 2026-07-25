@@ -6,7 +6,8 @@ benchmark across five difficulty levels, in both answer modes.
 - **Taskset:** `pilot-20260723T131917Z-b19e635a` (1200 items; KB `0994f44e`)
 - **Grid:** 12 tasks × 2 modes × 5 levels {1, 3, 5, 10, 15} × 10 samples
 - **Models:** qwen3.6-27b, qwen3.5-27b, qwen3.5-9b, qwen3.5-4b, gemma-4-31b-it,
-  gemma-4-E4B-it (llama-3.1-8b-instruct was rostered but is gated/uncached, skipped)
+  gemma-4-E4B-it, llama-3.1-8b-instruct (served from the ungated
+  `NousResearch/Meta-Llama-3.1-8B-Instruct` mirror of the identical weights)
 - **Elicitation:** none (thinking on where supported); greedy decode per each
   model's own `generation_config`.
 - Each `(model, level)` pair is a **standalone** 240-item run and score, so per-level
@@ -69,6 +70,7 @@ and scores largely plateau there for the strong models.
 | qwen3.5-9b | 0.645 | 0.569 | 0.514 | 0.462 | 0.513 |
 | qwen3.5-4b | 0.562 | 0.502 | 0.372 | 0.376 | 0.319 |
 | gemma-4-E4B-it | 0.591 | 0.458 | 0.354 | 0.388 | 0.375 |
+| llama-3.1-8b-instruct | 0.133 | 0.141 | 0.122 | 0.105 | 0.088 |
 
 **Symbolic** (mean score)
 | model | L1 | L3 | L5 | L10 | L15 |
@@ -79,6 +81,7 @@ and scores largely plateau there for the strong models.
 | qwen3.5-9b | 0.777 | 0.617 | 0.588 | 0.543 | 0.530 |
 | qwen3.5-4b | 0.655 | 0.559 | 0.403 | 0.353 | 0.267 |
 | gemma-4-E4B-it | 0.588 | 0.540 | 0.474 | 0.404 | 0.504 |
+| llama-3.1-8b-instruct | 0.286 | 0.204 | 0.120 | 0.107 | 0.097 |
 
 **Reading:** In **content** the three ≥27B models cluster (qwen3.6 and gemma tied for
 the lead, qwen3.5-27b just behind), decaying then flattening. In **symbolic** they
@@ -101,6 +104,7 @@ symbolic easier. (The signed gap is meaningful; the average of the two modes is 
 | gemma-4-31b-it | +0.052 | −0.006 | +0.100 | +0.116 | +0.134 |
 | qwen3.5-9b | +0.132 | +0.048 | +0.074 | +0.081 | +0.017 |
 | qwen3.5-4b | +0.093 | +0.057 | +0.031 | −0.023 | −0.052 |
+| llama-3.1-8b-instruct | +0.153 | +0.063 | −0.001 | +0.002 | +0.008 |
 
 **Reading:** All models start symbolic-favored at L1, then the gap collapses to ≈0
 at L3 (the L3 feature unlocks tax symbolic reasoning too). After L3, **gemma
@@ -132,11 +136,24 @@ completed answers.
 For the ≥27B models truncation is ≤5% and raw ≈ censored, so this correction does not
 apply to them (gemma never truncates).
 
+**llama-3.1-8b is the opposite case — format-limited, not length-limited.** It is the
+weakest model at every level (content 0.09–0.14, symbolic 0.10–0.29), but its
+truncation is near-zero (≤4%); instead **~30% of its items never emit the required
+`[answer]` region** (`no_answer_region` 0.29–0.36). So censoring truncated items
+barely moves its scores (censored ≈ raw), and its low numbers are largely an
+instruction-following failure — it does not reliably produce the answer-submission
+contract under the default `answer_tags` template — that cannot be cleanly separated
+from reasoning here. Read llama as a floor set by format compliance, not a clean
+reasoning measurement. (A less strict answer template, or a `cot`/`concise`
+elicitation, would likely recover some of this — the roster deliberately holds the
+template fixed for comparability.)
+
 **Reading:** The raw small-model "collapse" is largely a mirage. **Censored, the 9B
 holds ~0.69–0.83 and the 4B ~0.56–0.81 — far flatter and higher than raw** — because
 15–49% of their items never produce a scorable answer (degenerate looping into the
 cap), not because they reason that much worse. Any capability read on the small
-models must use censored alongside raw.
+models must use censored alongside raw. The two failure modes are distinct: the small
+Qwens fail by **truncation** (length), llama by **no answer region** (format).
 
 ---
 
@@ -187,11 +204,13 @@ harder in content than symbolic.
   it as a descriptive model property here, not a clean representation measurement. A
   follow-up benchmark pairing one fixed structure with several coherent content
   renderings is planned to de-confound it (repo issue #15).
-- **Small-model comparisons require censored scores** (§5).
+- **Small-model comparisons require censored scores** (§5) — but only for the
+  truncation-limited small Qwens; llama-3.1-8b is format-limited (censored ≈ raw).
 - **Pure-scale levels carry little extra signal** — the informative difficulty is the
   qualitative feature ladder (L1–L5).
-- **Roster gap:** llama-3.1-8b is gated/uncached and skipped; no external-family
-  small model is included.
+- **llama-3.1-8b's scores are a format-compliance floor**, not a clean reasoning
+  read (§5), and it is the only external-family model (served from an ungated mirror
+  of the identical weights; not cryptographically verified against Meta's repo).
 - **Point estimates:** single decode per item, 10 samples/cell (stderr ≈ 0.01–0.03).
 
 ---

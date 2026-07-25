@@ -24,11 +24,13 @@ OUT.mkdir(exist_ok=True)
 SWEEP = "grid-full"
 LEVELS = [1, 3, 5, 10, 15]
 ROSTER = ["qwen3.6-27b", "qwen3.5-27b", "gemma-4-31b-it", "qwen3.5-9b", "qwen3.5-4b",
-          "gemma-4-E4B-it"]
+          "gemma-4-E4B-it", "llama-3.1-8b-instruct"]
 COLORS = {"qwen3.6-27b": "#0072B2", "qwen3.5-27b": "#D55E00", "gemma-4-31b-it": "#009E73",
-          "qwen3.5-9b": "#CC79A7", "qwen3.5-4b": "#E69F00", "gemma-4-E4B-it": "#56B4E9"}
+          "qwen3.5-9b": "#CC79A7", "qwen3.5-4b": "#E69F00", "gemma-4-E4B-it": "#56B4E9",
+          "llama-3.1-8b-instruct": "#666666"}
 MARKERS = {"qwen3.6-27b": "o", "qwen3.5-27b": "s", "gemma-4-31b-it": "^",
-           "qwen3.5-9b": "D", "qwen3.5-4b": "v", "gemma-4-E4B-it": "P"}
+           "qwen3.5-9b": "D", "qwen3.5-4b": "v", "gemma-4-E4B-it": "P",
+           "llama-3.1-8b-instruct": "X"}
 FAMILY_SIZE = {"qwen3.5-27b": ("qwen3.5", 27), "qwen3.5-9b": ("qwen3.5", 9),
                "qwen3.5-4b": ("qwen3.5", 4), "gemma-4-31b-it": ("gemma-4", 31),
                "gemma-4-E4B-it": ("gemma-4", 4)}
