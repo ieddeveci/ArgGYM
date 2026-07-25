@@ -1,6 +1,11 @@
 name: llama-3.1-8b-instruct
+# Served from the ungated NousResearch re-upload of the identical
+# meta-llama/Llama-3.1-8B-Instruct weights (LlamaForCausalLM, hidden 4096, 32
+# layers, vocab 128256). The official meta-llama repo is gated and requires a
+# valid HF token with granted access; the mirror needs no auth, so the local
+# roster serves without credentials. Same weights, same generation_config.
 hf_id: meta-llama/Llama-3.1-8B-Instruct
-model_path: meta-llama/Llama-3.1-8B-Instruct
+model_path: NousResearch/Meta-Llama-3.1-8B-Instruct
 image: vllm/vllm-openai:latest
 reasoning_parser: null
 enable_thinking: null
