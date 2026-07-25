@@ -7,10 +7,13 @@ varying only the rendering. One harvested KB structure yields:
     the SAME ops (atoms anonymized to a0..aN). Same structure -> same gold -> the
     symbolic-content gap isolates representation, with the logical instance held
     constant (unlike v1, where content and symbolic are different instances).
-  * Metric 2 (surface variance): up to K content renderings of one structure drawn
-    from DISTINCT KB records (found by Weisfeiler-Leman iso-signature + matched
+  * Metric 2 (surface variance): up to `kmax` content renderings of one structure
+    drawn from DISTINCT KB records (found by Weisfeiler-Leman iso-signature + matched
     central-claim gold). Variance across them = robustness-to-phrasing / world-
-    knowledge interference.
+    knowledge interference. kmax is a cost/balance bound, not a design limit -- set
+    high (8) to maximize the surface signal; it binds mainly at L3 (some structures
+    have 20-28 records), while L5's KB supply is <=4 so it is naturally maximized
+    there. The report weights every structure equally regardless of its K.
 
 Every item is a plain `status_query` item querying the central claim c0 and its
 negation -c0 (the KB's canonical anchor), so `score_content`, `evals/runner.py`
@@ -326,7 +329,8 @@ def main():
     ap.add_argument("--levels", default="1,3,5")
     ap.add_argument("--draws", type=int, default=6000)
     ap.add_argument("--n-struct", type=int, default=40, help="structures per level")
-    ap.add_argument("--kmax", type=int, default=3, help="max content renderings per structure")
+    ap.add_argument("--kmax", type=int, default=8,
+                    help="max content renderings per structure (cost bound; binds ~L3 only)")
     ap.add_argument("--seed", type=int, default=20260725)
     ap.add_argument("--name", default="paired-v2")
     a = ap.parse_args()

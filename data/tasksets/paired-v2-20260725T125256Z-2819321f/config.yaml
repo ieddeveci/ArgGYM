@@ -12,6 +12,6 @@ queries:
 ordering: last_link_elitist
 draws_per_level: 7000
 n_struct: 50
-kmax: 3
+kmax: 8
 seed: 20260725
 notes: 'paired-content v2 (issue #15)'

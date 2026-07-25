@@ -96,40 +96,43 @@ def _mean(xs):
 
 
 def metrics(rows):
-    """Compute per-(model,level) metrics from joined sample rows."""
-    # index by structure
+    """Compute per-(model,level) metrics from joined sample rows.
+
+    All metrics are computed PER STRUCTURE then averaged across structures, so a
+    structure with many content renderings does not outweigh one with few (the K
+    per structure varies). The surface metric is the pairwise-disagreement rate,
+    an unbiased estimator of P(two renderings disagree) that -- unlike a flip rate
+    -- does not grow with K.
+    """
     by_struct = defaultdict(lambda: {"content": {}, "symbolic": {}})
     for r in rows:
         by_struct[r["structure_id"]][r["mode"]][r["rendering_id"]] = r["score"]
 
-    content_r0, symbolic = [], []          # Metric 1: paired
-    content_all = []                        # content accuracy (all renderings)
-    stdevs, flips, n_multi = [], 0, 0       # Metric 2
+    con_struct_means, sym_paired, gap_vals = [], [], []
+    stdevs, pair_disagree, n_multi = [], [], 0
     for sid, d in by_struct.items():
         c, s = d["content"], d["symbolic"]
-        content_all.extend(c.values())
-        if 0 in c and 0 in s:
-            content_r0.append(c[0])
-            symbolic.append(s[0])
-        if len(c) >= 2:
+        if c:
+            con_struct_means.append(_mean(list(c.values())))   # per-structure content acc
+        if 0 in c and 0 in s:                                   # Metric 1 paired point
+            sym_paired.append(s[0])
+            gap_vals.append(s[0] - c[0])
+        if len(c) >= 2:                                         # Metric 2
             n_multi += 1
             vals = list(c.values())
             stdevs.append(statistics.pstdev(vals))
-            perfect = [v >= 1.0 for v in vals]
-            if any(perfect) and not all(perfect):
-                flips += 1
-    sym_mean = _mean([symbolic[i] for i in range(len(symbolic))])
-    con_mean = _mean(content_all)
-    gap = _mean([symbolic[i] - content_r0[i] for i in range(len(symbolic))]) \
-        if symbolic else float("nan")
+            bits = [1 if v >= 1.0 else 0 for v in vals]         # full-correctness bit
+            K, m = len(bits), sum(1 for b in bits if b)
+            total = K * (K - 1) / 2                             # # rendering pairs
+            pair_disagree.append((m * (K - m)) / total if total else 0.0)
     return {
         "n_struct": len(by_struct),
-        "content_mean": con_mean,
-        "symbolic_mean": _mean(symbolic),
-        "gap": gap,                          # symbolic - content, paired
+        "content_mean": _mean(con_struct_means),   # per-structure-averaged (K-robust)
+        "symbolic_mean": _mean(sym_paired),        # 1 per structure
+        "gap": _mean(gap_vals) if gap_vals else float("nan"),  # symbolic - content, paired
         "n_multi": n_multi,
-        "surface_stdev": _mean(stdevs),      # mean within-structure score stdev
-        "flip_rate": (flips / n_multi) if n_multi else float("nan"),
+        "surface_stdev": _mean(stdevs),            # mean within-structure score stdev
+        "pairwise_disagree": _mean(pair_disagree),  # K-robust surface-sensitivity
     }
 
 
@@ -186,14 +189,15 @@ def fig_surface(res, levels, out):
     fig, ax = plt.subplots(figsize=(7.6, 4.6), dpi=150)
     for m in _models(res):
         xs = [i for i, lv in enumerate(levels) if lv in res[m]]
-        ys = [res[m][levels[i]]["flip_rate"] for i in xs]
+        ys = [res[m][levels[i]]["pairwise_disagree"] for i in xs]
         ax.plot(xs, ys, color=COLORS[m], marker=MARKERS[m], lw=2, ms=7, mec="white",
                 mew=1.2, label=m)
     ax.set_xticks(range(len(levels))); ax.set_xticklabels([f"L{l}" for l in levels])
-    ax.set_ylim(0, None); ax.set_ylabel("flip rate across K renderings"); ax.set_xlabel("difficulty")
+    ax.set_ylim(0, None); ax.set_ylabel("pairwise disagreement across renderings")
+    ax.set_xlabel("difficulty")
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="y", color="#e6e6e6", lw=0.8); ax.set_axisbelow(True)
-    ax.set_title("v2 surface sensitivity  (structures where correctness flips with phrasing)",
+    ax.set_title("v2 surface sensitivity  (P two phrasings of one structure disagree)",
                  loc="left", fontweight="bold")
     ax.legend(frameon=False, fontsize=7.5, ncol=2)
     fig.tight_layout(); fig.savefig(out / "v2_fig3_surface.png", bbox_inches="tight")
@@ -223,9 +227,10 @@ def write_md(res, levels, out):
           "**Paired gap (symbolic − content)** — representation effect, logical instance held constant:",
           "", _tbl(res, levels, "gap", "{:+.3f}"), "",
           "## Metric 2 — surface variance (K≥2 content renderings)", "",
-          "**Flip rate** — fraction of multi-rendering structures where the model is "
-          "*not* uniformly correct-or-wrong across phrasings (higher = phrasing/world-"
-          "knowledge drives the answer):", "", _tbl(res, levels, "flip_rate"), "",
+          "**Pairwise disagreement** — probability that two different phrasings of one "
+          "structure disagree on full-correctness (K-robust: unbiased regardless of how "
+          "many renderings a structure has; higher = phrasing/world-knowledge drives the "
+          "answer rather than the logic):", "", _tbl(res, levels, "pairwise_disagree"), "",
           "**Mean within-structure score stdev**:", "", _tbl(res, levels, "surface_stdev"), "",
           "## Figures", "",
           "![accuracy](v2_fig1_accuracy.png)", "", "![gap](v2_fig2_gap.png)", "",
@@ -259,7 +264,8 @@ def main():
                 r = res[m][l]
                 print(f"  {m} L{l}: content={r['content_mean']:.3f} "
                       f"symbolic={r['symbolic_mean']:.3f} gap={r['gap']:+.3f} "
-                      f"flip={r['flip_rate']:.3f} (n_struct={r['n_struct']}, multi={r['n_multi']})")
+                      f"pair_disagree={r['pairwise_disagree']:.3f} "
+                      f"(n_struct={r['n_struct']}, multi={r['n_multi']})")
     print(f"wrote {out}/v2-results.md + figures")
 
 
