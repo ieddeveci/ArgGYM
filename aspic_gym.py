@@ -289,7 +289,7 @@ CONTENT_KINDS = {"claim_identification", "formalization", "status_query",
 TASK_MIN_LEVEL = {}
 
 from prompting import (_INTRO, _SYMBOLIC_NOTATION, _CONTENT_NOTATION,
-                       _intro, _sym_notation, _format_block, _EXEMPLARS, exemplar)
+                       _intro, _sym_notation, _format_block)
 
 
 def _entry(kind, question, answer, ops, ordering, **meta) -> dict:
@@ -753,26 +753,50 @@ def _norm_syntax(s):
     return _CI_TOKEN_RE.sub(lambda m: m.group(1).lower(), t)
 
 def _answer_region(text):
+    """The content of the model's FINAL [answer]...[/answer] region.
+
+    The last complete region, not the first: a model that drafts an answer and
+    then revises it submits the revision, so scoring the abandoned draft would
+    misreport it. Returns None when no complete region is present.
+    """
     s = text or ""
-    m = re.search(r"\[\s*answer\s*\]", s, re.IGNORECASE)
-    if not m:
-        return None
-    rest = s[m.end():]
-    c = re.search(r"\[\s*/\s*answer\s*\]", rest, re.IGNORECASE)
-    if not c:
-        return None
-    return rest[:c.start()]
+    for m in reversed(list(re.finditer(r"\[\s*answer\s*\]", s, re.IGNORECASE))):
+        rest = s[m.end():]
+        c = re.search(r"\[\s*/\s*answer\s*\]", rest, re.IGNORECASE)
+        if c:
+            return rest[:c.start()]
+    return None
 
 
 _STATUS_WORDS = r"(justified|overruled|undecided|unsatisfiable)"
 
 
 def _parse_status_block(region, claims):
-    res = {}
+    """Resolve each claim's status; also report which claims the answer contradicts.
+
+    Three passes, most explicit first, each only filling gaps the earlier ones
+    left: a numbered `1: justified` token, a line carrying both a number and a
+    status word, and the claim's own text sitting next to a status word.
+
+    A claim assigned two different statuses is contradicted and earns no credit,
+    so the conflict set belongs here, beside the parsing it depends on. Passes 1
+    and 3 vote on it -- both read an explicit assignment. Pass 2 does not: it
+    pairs a line's first number with its last status word, so a single line
+    listing several claims ("1: justified, 2: overruled") would look like a
+    self-contradiction rather than the two answers it is.
+    """
+    res, seen, contradicted = {}, {}, set()
+
+    def note(i, status):
+        if i in seen and seen[i] != status:
+            contradicted.add(i)
+        seen[i] = status
+        res.setdefault(i, status)
+
     for m in re.finditer(r"(?<![\w-])(\d{1,2})\s*[\.\)\:\-]*\s*" + _STATUS_WORDS, region, re.I):
         n = int(m.group(1))
         if 1 <= n <= len(claims):
-            res.setdefault(n - 1, m.group(2).upper())
+            note(n - 1, m.group(2).upper())
     for line in region.splitlines():
         nums = re.findall(r"(?<![\w-])(\d{1,2})(?![\w])", line)
         sts = re.findall(_STATUS_WORDS, line, re.I)
@@ -781,13 +805,11 @@ def _parse_status_block(region, claims):
             if 1 <= n <= len(claims):
                 res.setdefault(n - 1, sts[-1].upper())
     for i, c in enumerate(claims):
-        if i in res:
-            continue
         cb = r"(?<![\w-])" + re.escape(c) + r"(?![\w])"
         m = re.search(cb + r"[^A-Za-z]{0,40}?" + _STATUS_WORDS, region, re.I)
         if m:
-            res[i] = m.group(1).upper()
-    return res
+            note(i, m.group(1).upper())
+    return res, contradicted
 
 
 def _prf1(correct: int, n_gold: int, n_pred: int) -> float:
@@ -829,6 +851,46 @@ def _jaccard(pred: set, gold: set) -> float:
         return 1.0
     union = pred | gold
     return len(pred & gold) / len(union) if union else 1.0
+
+
+def _split_antecedents(lhs, lit):
+    """Resolve a rule's antecedents, tolerating the joiner the theory displays.
+
+    The prompt asks for the uppercase joiner ("Join multiple conditions with
+    AND") and the gold uses it, but content mode *displays* rules as "if A and B,
+    then C", so a model that echoes the phrasing it was shown writes the joiner
+    in lowercase. That cannot simply be split on: inside a single statement
+    ("buyers and sellers") the word is part of the statement, and splitting there
+    fragments a valid answer into unresolvable pieces. Splitting on the uppercase
+    joiner only is no better -- it makes an answer's score depend on whether its
+    statements happen to contain the word, a content-correlated bias in a
+    benchmark that compares content against symbolic scores.
+
+    So: take the uppercase split when it resolves, else search the lowercase
+    split points for a segmentation whose every piece resolves, preferring longer
+    pieces so statements containing the word stay whole.
+
+    Returns the resolved literals, or None if no segmentation resolves them all.
+    """
+    ants = [lit(x) for x in re.split(r"\bAND\b", lhs)]
+    if all(a is not None for a in ants):
+        return ants
+
+    segs = re.split(r"\band\b", lhs, flags=re.I)
+    resolved = {len(segs): []}
+
+    def from_(i):
+        if i not in resolved:
+            resolved[i] = None
+            for j in range(len(segs), i, -1):
+                head = lit(" and ".join(segs[i:j]))
+                tail = from_(j) if head is not None else None
+                if tail is not None:
+                    resolved[i] = [head] + tail
+                    break
+        return resolved[i]
+
+    return from_(0)
 
 
 def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
@@ -898,14 +960,9 @@ def _content_to_ops(region, atoms, base, accept_neg_gloss=True):
             if sep is None:
                 return None
             lhs, rhs = body.split(sep, 1)
-            # Split only on the uppercase 'AND' joiner (per the prompt: "Join
-            # multiple conditions with AND"). NOT case-insensitive: a lowercase
-            # 'and' inside a single natural-language statement ("buyers and
-            # sellers") is part of that statement, not a condition separator, and
-            # splitting on it fragments a valid answer into unresolvable pieces.
-            ants = [lit(x) for x in re.split(r"\bAND\b", lhs)]
+            ants = _split_antecedents(lhs, lit)
             con = lit(rhs)
-            if con is None or any(a is None for a in ants):
+            if con is None or ants is None:
                 return None
             if kind == "defeasible":
                 dn += 1; nm = f"d{dn}"
@@ -1062,17 +1119,7 @@ def score_content(content: str, entry: dict) -> float:
 
     if kind == "status_query":
         claims = md["queries"]; gold = md["gold_statuses"]
-        res = _parse_status_block(region, claims)
-        seen = {}
-        contradicted = set()
-        for m in re.finditer(r"(?<![\w-])(\d{1,2})\s*[\.\)\:\-]*\s*" + _STATUS_WORDS,
-                             region, re.I):
-            i = int(m.group(1))
-            if 1 <= i <= len(claims):
-                st = m.group(2).upper()
-                if i - 1 in seen and seen[i - 1] != st:
-                    contradicted.add(i - 1)
-                seen[i - 1] = st
+        res, contradicted = _parse_status_block(region, claims)
         correct = sum(1 for i, g in enumerate(gold)
                       if i not in contradicted and res.get(i) == g)
         spurious = _count_spurious_status_lines(region, len(claims))
@@ -1272,7 +1319,10 @@ def score_content(content: str, entry: dict) -> float:
             trial = [o for o in kept if o is not op]
             if _works(trial):
                 kept = trial
-        return len(kept) / max(len(allops), 1)
+        # Economy over the preferences the answer added -- the set that was
+        # minimised. Dividing by every parsed directive would dock a minimal
+        # answer for restating a premise it did not have to add.
+        return len(kept) / len(added)
 
     if kind == "attack":
         base, added = _added_ops(md, region)
@@ -1440,7 +1490,12 @@ def score_content(content: str, entry: dict) -> float:
             named = [p for p in prem
                      if sanitize_statement(_gloss(atoms, p)).lower() in r]
         else:
-            toks = list(dict.fromkeys(re.findall(r"[a-z]\d+", region)))
+            # Anchored: an unanchored [a-z]\d+ carves atoms out of ordinary words
+            # ("Rule2" -> "e2", "claim3" -> "m3"), and every token it finds that is
+            # not a premise is treated below as a contract violation -- so a stray
+            # substring would zero an otherwise correct answer.
+            toks = list(dict.fromkeys(
+                re.findall(r"(?<![A-Za-z0-9])[a-z]\d+(?![A-Za-z0-9])", region)))
             named = [p for p in toks if p in prem]
             alien = [t for t in toks if t not in prem]
 

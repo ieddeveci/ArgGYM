@@ -1,5 +1,6 @@
 
 from aspic_gym import GYM_ORDERING, _entry, _norm_syntax
+from prompting import _format_block
 
 _ONE = ("In the answer, write exactly one directive, in the DSL syntax above, and nothing "
         "else. Replace the placeholders (X, A, B, C, dK) with the actual statements and rule "
@@ -235,24 +236,6 @@ def _syntax_items(rng):
     return fam, instr, gold, spec
 
 
-_DEMOS = {
-    "directive": (
-        "Example (a different, unrelated instruction, showing the required format):\n"
-        "Instruction: Write the rule \"if p then q\" (open to exceptions) as a directive.\n"
-        "Solution:\n[reasoning]\n"
-        "A default rule is a defeasible rule; its arrow is =>.\n"
-        "[/reasoning]\n[answer]\n[defeasible: p => q]\n[/answer]\n\n"
-    ),
-    "token": (
-        "Example (a different, unrelated instruction, showing the required format):\n"
-        "Instruction: Answer with the single word \"overruled\".\n"
-        "Solution:\n[reasoning]\n"
-        "The task asks for exactly one status word.\n"
-        "[/reasoning]\n[answer]\noverruled\n[/answer]\n\n"
-    ),
-}
-
-
 _SYNTAX_INTRO = (
     "You are translating between plain statements and the directive syntax (DSL) of "
     "defeasible argumentation. Your job is to write, or identify, a single directive in "
@@ -275,23 +258,8 @@ _SYNTAX_INTRO = (
 )
 
 
-def _syntax_format_block(spec: str) -> str:
-    return ("Task: " + spec + "\n\n"
-            "Think step by step about how to express the answer in the DSL directive syntax, "
-            "or, if the task only asks for a single word, about which word is correct. When "
-            "you have finished thinking, write the [/reasoning] tag. Then give your final "
-            "answer between [answer] and [/answer] tags, and stop.\n\n"
-            "Solution:\n[reasoning]\n")
-
-
-def _syntax_exemplar(family):
-    return _DEMOS["directive"] if family in ("contract", "recognition") else _DEMOS["token"]
-
-
 def frame_syntax(rng, with_content=False, level=1):
     fam, instr, gold, spec = _syntax_items(rng)
-    prompt = (_syntax_exemplar(fam) + _SYNTAX_INTRO + "\n\n" + instr + "\n\n"
-              + _syntax_format_block(spec + " Put it inside the [answer] tags."))
-    reference = "[answer]\n" + gold + "\n[/answer]"
-    return _entry("syntax", prompt, reference, [], GYM_ORDERING,
+    prompt = _SYNTAX_INTRO + "\n\n" + instr + "\n\n" + _format_block(spec)
+    return _entry("syntax", prompt, gold, [], GYM_ORDERING,
                   target_norm=_norm_syntax(gold), family=fam, mode="symbolic")

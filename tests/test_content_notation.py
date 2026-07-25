@@ -52,8 +52,7 @@ def test_labeled_added_rule_resolves():
 
 def test_lowercase_and_in_statement_not_split():
     """A single antecedent statement containing the word 'and' must parse as one
-    condition. Only the uppercase 'AND' joiner separates conditions; splitting on
-    lowercase 'and' fragments a valid statement into unresolvable pieces -> 0."""
+    condition, not be fragmented at the word into unresolvable pieces -> 0."""
     from aspic_gym import _content_to_ops
     atoms = {"a1": {"pos": "information asymmetry exists between buyers and sellers",
                     "neg": "no information asymmetry exists between buyers and sellers"},
@@ -81,6 +80,54 @@ def test_uppercase_AND_still_joins_conditions():
     assert ops is not None
     assert set(ops[0].antecedents) == {"a1", "a2"}   # split on AND, not on inner 'and'
     assert ops[0].consequent == "a3"
+
+
+def test_lowercase_and_joins_conditions():
+    """Content mode displays rules as "if A and B, then C", so a model that echoes
+    that phrasing writes the joiner in lowercase. That must score the same as the
+    uppercase gold -- otherwise the benchmark penalises its own phrasing."""
+    from aspic_gym import _content_to_ops
+    atoms = {"a1": {"pos": "it rains", "neg": "it does not rain"},
+             "a2": {"pos": "the drain is blocked", "neg": "the drain is clear"},
+             "a3": {"pos": "the road floods", "neg": "the road does not flood"}}
+    ops = _content_to_ops(
+        "[defeasible: it rains and the drain is blocked => the road floods]", atoms, [])
+    assert ops is not None
+    assert set(ops[0].antecedents) == {"a1", "a2"}
+    assert ops[0].consequent == "a3"
+
+
+def test_lowercase_joiner_keeps_statements_with_and_whole():
+    """The lowercase joiner and a statement containing the word must coexist: a
+    score that depended on whether a statement happens to contain 'and' would be a
+    content-correlated bias in a benchmark that compares content to symbolic."""
+    from aspic_gym import _content_to_ops
+    atoms = {"a1": {"pos": "it rains", "neg": "it does not rain"},
+             "a2": {"pos": "the ground is wet and slippery",
+                    "neg": "the ground is not wet and slippery"},
+             "a3": {"pos": "the road floods", "neg": "the road does not flood"}}
+    ops = _content_to_ops(
+        "[defeasible: it rains and the ground is wet and slippery => the road floods]",
+        atoms, [])
+    assert ops is not None
+    assert set(ops[0].antecedents) == {"a1", "a2"}   # two conditions, a2 kept whole
+    assert ops[0].consequent == "a3"
+
+
+def test_content_score_is_joiner_case_invariant():
+    """End to end: rewriting a gold's ' AND ' joiners to ' and ' must not change
+    its score on any content-mode item."""
+    ds = create_dataset("formalization", seed=20260721, size=25, level=5, with_content=True)
+    checked = 0
+    for i in range(25):
+        e = ds[i]
+        gold = e["answer"]
+        if " AND " not in gold:
+            continue
+        checked += 1
+        assert score_content(gold, e) == 1.0
+        assert score_content(gold.replace(" AND ", " and "), e) == 1.0
+    assert checked, "no multi-antecedent gold in the sample"
 
 
 def test_formalization_negation_quoted_affirmative():

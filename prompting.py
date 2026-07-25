@@ -70,20 +70,6 @@ def _format_block(answer_spec: str) -> str:
     """
     return "Task instructions: " + answer_spec
 
-_EXEMPLARS = {
-    "status_query": (
-        "Example (a different, unrelated problem, showing the required format):\n"
-        "Problem: [premise: p] [defeasible d1: p => q]. What is the status of claim 1. q?\n"
-        "[answer]\n"
-        "1: justified\n"
-        "[/answer]\n\n"
-    ),
-}
-
-
-def exemplar(kind: str, level: int) -> str:
-    return _EXEMPLARS.get(kind, "") if level == 1 else ""
-
 
 def assemble(intro: str, task_body: str, format_block: str) -> str:
     return intro + "\n\n" + task_body + "\n\n" + format_block

@@ -90,7 +90,8 @@ def build_report(runs: List[dict]) -> str:
     L.append("\n\n## Audit signals — tasks with high well-formed-but-zero rates\n")
     L.append("High `zero_score_with_valid_region` means a parseable answer still "
              "scored 0: either genuinely wrong, or a parser that cannot read a "
-             "valid answer. Worth inspecting per todo item 2.\n")
+             "valid answer. Read a sample of the raw generations for any task that "
+             "stands out before trusting its score.\n")
     rows = []
     keys = sorted({k for r in runs for k in r["metrics"].get("by_task", {})})
     for k in keys:

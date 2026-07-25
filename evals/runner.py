@@ -32,16 +32,17 @@ def resolve_taskset_dir(root: Path, cfg: DictConfig) -> Path:
         raise FileNotFoundError(
             f"no taskset matching '{cfg.taskset.name}-*' under {ts_root}; "
             f"run: python -m evals.taskset")
-    # Directory names carry a UTC build stamp, so the last one sorted is the
-    # newest. Default to it, but announce the choice: within a sweep every model
-    # must be pinned to the SAME taskset (run_all.sh sets taskset_id), or a newer
-    # build appearing mid-sweep would compare models across different questions.
-    chosen = matches[-1]
+    # Refuse to guess between builds. Silently taking the newest would let a
+    # taskset rebuilt mid-sweep score later models on different questions than
+    # earlier ones -- a comparison that looks valid and is not. The sweep drivers
+    # always pin (run_all.sh / run_grid.sh require TASKSET_ID), so this only ever
+    # stops an ad-hoc run, and only when the answer is genuinely ambiguous.
     if len(matches) > 1:
-        print(f"note: {len(matches)} tasksets match '{cfg.taskset.name}-*'; using the "
-              f"newest ({chosen.name}). Pass taskset_id=<dir> to pin a specific one.",
-              flush=True)
-    return chosen
+        raise ValueError(
+            f"{len(matches)} tasksets match '{cfg.taskset.name}-*' under {ts_root}: "
+            + ", ".join(p.name for p in matches)
+            + ". Pass taskset_id=<dir> to say which one.")
+    return matches[0]
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")

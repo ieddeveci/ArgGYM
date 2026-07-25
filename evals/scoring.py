@@ -1,8 +1,7 @@
 """Score stored generations offline and aggregate.
 
-Deliberately separated from inference: the answer parsers are still under audit
-(workspace/benchmark/todo.md item 2), and when one is fixed every number must be
-recomputable without touching a GPU.
+Deliberately separated from inference: the answer parsers are still under audit,
+and when one is fixed every number must be recomputable without touching a GPU.
 """
 from __future__ import annotations
 

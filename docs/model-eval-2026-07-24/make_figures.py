@@ -81,17 +81,29 @@ def _axline(ax):
     ax.grid(axis="y", color="#e6e6e6", lw=0.8); ax.set_axisbelow(True)
 
 
+def _series(rec_by_level, value):
+    """x/y over every level, with NaN where a run is missing.
+
+    NaN breaks the line there, so a missing cell reads as a gap rather than as a
+    straight segment interpolated through data that was never measured.
+    """
+    xs = list(range(len(LEVELS)))
+    ys = [value(rec_by_level[l]) if l in rec_by_level else float("nan") for l in LEVELS]
+    last = max((i for i, y in enumerate(ys) if y == y), default=None)
+    return xs, ys, last
+
+
 def fig1_accuracy_by_mode(data):
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), dpi=150, sharey=True)
     for ax, mode in zip(axes, ("content", "symbolic")):
         for m in _models(data):
-            xs = [i for i, l in enumerate(LEVELS) if l in data[m]]
-            ys = [data[m][LEVELS[i]][mode] for i in xs]
+            xs, ys, last = _series(data[m], lambda r: r[mode])
             ax.plot(xs, ys, color=COLORS[m], marker=MARKERS[m], lw=2, ms=7, mec="white",
                     mew=1.2, label=m)
-            if xs:
-                ax.annotate(m, (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
-                            va="center", fontsize=7.5, color=COLORS[m])
+            if last is not None:
+                ax.annotate(m, (xs[last], ys[last]), xytext=(6, 0),
+                            textcoords="offset points", va="center", fontsize=7.5,
+                            color=COLORS[m])
         _axline(ax); ax.set_ylim(0, 1); ax.set_title(mode, loc="left", fontweight="bold")
     axes[0].set_ylabel("mean score (0–1)")
     axes[0].legend(frameon=False, fontsize=7, loc="lower left", ncol=2)
@@ -103,13 +115,13 @@ def fig1_accuracy_by_mode(data):
 def fig2_modality_gap(data):
     fig, ax = plt.subplots(figsize=(7.6, 4.6), dpi=150)
     for m in _models(data):
-        xs = [i for i, l in enumerate(LEVELS) if l in data[m]]
-        ys = [data[m][LEVELS[i]]["symbolic"] - data[m][LEVELS[i]]["content"] for i in xs]
+        xs, ys, last = _series(data[m], lambda r: r["symbolic"] - r["content"])
         ax.plot(xs, ys, color=COLORS[m], marker=MARKERS[m], lw=2, ms=7, mec="white",
                 mew=1.2, label=m)
-        if xs:
-            ax.annotate(m, (xs[-1], ys[-1]), xytext=(6, 0), textcoords="offset points",
-                        va="center", fontsize=7.5, color=COLORS[m])
+        if last is not None:
+            ax.annotate(m, (xs[last], ys[last]), xytext=(6, 0),
+                        textcoords="offset points", va="center", fontsize=7.5,
+                        color=COLORS[m])
     ax.axhline(0, color="#888", lw=1, ls="--")
     _axline(ax); ax.set_ylabel("symbolic − content  (gap)")
     ax.set_title("Modality gap vs difficulty  (>0 = symbolic easier)", loc="left",
@@ -174,7 +186,7 @@ def fig4_censored(data):
     plt.close(fig)
 
 
-def fig5_task_profile(data, model="qwen3.6-27b"):
+def fig5_task_profile(data, model="gemma-4-31b-it"):
     if model not in data:
         return
     tasks = sorted({k.split("|")[0] for lv in data[model].values() for k in lv["by_task_mode"]})

@@ -1,9 +1,11 @@
 """Decide which text gets scored, and why.
 
-aspic_gym._answer_region matches the FIRST [answer] tag in a string. A reasoning
-model that drafts a candidate answer mid-chain-of-thought and then revises it
-would therefore be scored on the abandoned draft. Keeping chain-of-thought out of
-the scored text is the whole job of this module.
+Keeping chain-of-thought out of the scored text is the whole job of this module.
+A reasoning model may draft a candidate answer mid-chain-of-thought and then
+revise it, so the draft must never be what gets scored: the post-thinking
+`content` field wins whenever it carries an answer region, and where the two
+fields have to be concatenated, aspic_gym._answer_region takes the last complete
+region rather than the first.
 """
 from __future__ import annotations
 

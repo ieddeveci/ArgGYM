@@ -3,10 +3,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from aspic_gym import _answer_region
 from evals.extract import extract, has_region
 
 
 ANS = "[answer]\n1: justified\n[/answer]"
+
+
+def score_region(result):
+    """The text the scorer would actually read out of an extract() result."""
+    return _answer_region(result["text"]).strip()
 
 
 def test_answer_in_content_is_used_directly():
@@ -24,6 +30,24 @@ def test_content_wins_over_cot_when_both_have_answers():
     assert r["answer_in_cot"] is True      # recorded...
     assert "justified" in r["text"]        # ...but the content answer is scored
     assert "overruled" not in r["text"]
+
+
+def test_revised_answer_wins_inside_a_single_field():
+    """A model served without a reasoning parser puts draft and revision in one
+    field. The revision is the submission; the abandoned draft is not."""
+    cot = ("[answer]\n1: overruled\n[/answer]\n"
+           "wait, no -- the attack is undercut\n"
+           "[answer]\n1: justified\n[/answer]")
+    r = extract(cot, "")
+    assert r["has_region"]
+    assert score_region(r) == "1: justified"
+
+
+def test_unterminated_final_draft_falls_back_to_the_complete_region():
+    """An answer region cut off mid-write is not a submission; the last complete
+    one is."""
+    r = extract("[answer]\n1: justified\n[/answer]\nhmm, let me redo it\n[answer]\n1: over", "")
+    assert score_region(r) == "1: justified"
 
 
 def test_falls_back_to_cot_when_content_empty():

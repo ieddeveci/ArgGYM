@@ -8,7 +8,7 @@ Robust to partial data: plots whatever (model, level) runs exist, so it can be r
 mid-sweep or at completion.
 
     python -m evals.grid_report --sweep grid-full \
-        --out workspace/model-eval-2026-07-21/grid-report
+        --out outputs/reports/grid
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import glob
 import json
 import re
 import sys
+import zlib
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -33,10 +34,10 @@ RUN_RE = re.compile(r"__(?P<model>.+?)__L(?P<lvl>\d{2})__pilot$")
 # Canonical roster order -> stable color + marker per model, regardless of which
 # subset is present. Okabe-Ito (colorblind-safe); each model also gets a distinct
 # marker shape, so identity survives CVD and grayscale (secondary encoding).
-ROSTER = ["qwen3.6-27b", "qwen3.5-27b", "gemma-4-31b-it",
-          "qwen3.5-9b", "qwen3.5-4b", "llama-3.1-8b-instruct"]
-COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"]
-MARKERS = ["o", "s", "^", "D", "v", "P"]
+ROSTER = ["qwen3.6-27b", "qwen3.5-27b", "gemma-4-31b-it", "qwen3.5-9b",
+          "qwen3.5-4b", "gemma-4-E4B-it", "llama-3.1-8b-instruct"]
+COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#999999"]
+MARKERS = ["o", "s", "^", "D", "v", "P", "X"]
 
 # Model -> (scaling family, size in billions). A scaling matrix is drawn per
 # family that has >= 2 sizes present, so size effect can be read at fixed
@@ -55,7 +56,11 @@ def _fam_size(model):
 
 
 def style(model: str):
-    i = ROSTER.index(model) if model in ROSTER else (hash(model) % len(COLORS))
+    # A model off the roster still needs a fixed slot: Python randomises str
+    # hashing per process, so hash() would repaint it on every run and could
+    # recolour it into a roster model's colour. Digest the name instead.
+    i = (ROSTER.index(model) if model in ROSTER
+         else zlib.crc32(model.encode()) % len(COLORS))
     return COLORS[i % len(COLORS)], MARKERS[i % len(MARKERS)]
 
 
@@ -250,43 +255,6 @@ def fig_truncation(data, levels, out: Path):
     fig.tight_layout(); fig.savefig(out, bbox_inches="tight"); plt.close(fig)
 
 
-def fig_task_heatmap(data, levels, out: Path):
-    """task x level heatmaps, one panel per mode (content | symbolic), scores
-    averaged across models present. Modes are NOT combined. Viridis is
-    perceptually uniform and CVD-safe."""
-    import numpy as np
-    tasks = sorted({k.split("|")[0] for lm in data.values() for met in lm.values()
-                    for k in met.get("by_task_mode", {})})
-    if not tasks:
-        return
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6.4), dpi=150, sharey=True)
-    im = None
-    for ax, mode in zip(axes, ("content", "symbolic")):
-        grid = np.full((len(tasks), len(levels)), np.nan)
-        for ti, t in enumerate(tasks):
-            for li, lv in enumerate(levels):
-                key = f"{t}|{mode}"
-                vals = [met["by_task_mode"][key]["mean_score"]
-                        for met in (lm.get(lv) for lm in data.values())
-                        if met and key in met.get("by_task_mode", {})]
-                if vals:
-                    grid[ti, li] = sum(vals) / len(vals)
-        im = ax.imshow(grid, cmap="viridis", vmin=0, vmax=1, aspect="auto")
-        ax.set_xticks(range(len(levels))); ax.set_xticklabels([f"L{l}" for l in levels])
-        ax.set_title(mode, loc="left", fontweight="bold")
-        for ti in range(len(tasks)):
-            for li in range(len(levels)):
-                v = grid[ti, li]
-                if v == v:
-                    ax.text(li, ti, f"{v:.2f}", ha="center", va="center", fontsize=6,
-                            color="white" if v < 0.6 else "black")
-    axes[0].set_yticks(range(len(tasks))); axes[0].set_yticklabels(tasks, fontsize=8)
-    fig.suptitle("Mean score by task x difficulty (avg over models), by mode",
-                 x=0.01, ha="left", fontweight="bold")
-    fig.colorbar(im, ax=axes.ravel().tolist(), fraction=0.046, pad=0.04, label="mean score")
-    fig.savefig(out, bbox_inches="tight"); plt.close(fig)
-
-
 def _scaling_families(data):
     fam: Dict[str, list] = {}
     for model in data:
@@ -437,7 +405,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs-glob", default="outputs/runs/*__L*__pilot")
     ap.add_argument("--sweep", default=None)
-    ap.add_argument("--out", default="workspace/model-eval-2026-07-21/grid-report")
+    ap.add_argument("--out", default="outputs/reports/grid")
     a = ap.parse_args()
 
     data = discover(a.runs_glob, a.sweep)
@@ -447,8 +415,8 @@ def main():
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
 
     figs = []
-    # Cross-family averaging (mixing generations/sizes) is not apples-to-apples, so
-    # no task heatmap averaged over models. Per-mode, per-model tracks + gap only.
+    # Per-mode, per-model tracks + gap. Nothing is averaged across families:
+    # mixing generations and sizes is not an apples-to-apples comparison.
     for name, fn in (("difficulty_by_mode.png", fig_by_mode),
                      ("modality_gap_vs_difficulty.png", fig_gap),
                      ("modality_gap_matrix.png", fig_gap_matrix),

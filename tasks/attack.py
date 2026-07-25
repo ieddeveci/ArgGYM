@@ -178,6 +178,10 @@ def _attack_content(rng, level, req):
 def frame_attack(rng, with_content=False, level=2):
     req = rng.choice(["undermine", "rebut", "undercut"]
                      + (["outprefer"] if level >= 3 else []))
+    # Whether the answer must derive its attack through a rule instead of asserting
+    # it. The worked example, the hint, and the scorer's check (which recomputes
+    # this from md["level"]) must agree, so it is decided once.
+    chain = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
     if with_content:
         built = _attack_content(rng, level, req)
         if not built:
@@ -185,7 +189,6 @@ def frame_attack(rng, with_content=False, level=2):
         atoms, ops, C, witness = built
         ordering = GYM_ORDERING; gloss = lambda l: _gloss(atoms, l)
         theory_text = _render_content_theory(atoms, ops); notation = _CONTENT_NOTATION; mode = "content"
-        _chain_ex = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
         how = ("Write your attacking argument as bracketed directives, one per line, in this syntax: "
                "[premise: a statement], [defeasible: A AND B => C], [strict: A AND B -> C], using the "
                "statements as they read in the theory. To NEGATE a statement, prefix it with the "
@@ -193,21 +196,20 @@ def frame_attack(rng, with_content=False, level=2):
                "negation is also accepted). To switch off a rule (undercut), negate its label with '-', "
                + ("deriving it through a rule, e.g. [defeasible: some statement => -Rule 2] "
                   "(this means Rule 2 no longer applies)."
-                  if _chain_ex else
+                  if chain else
                   "e.g. [premise: -Rule 2] (this means Rule 2 no longer applies)."))
         meta_extra = {"atoms": atoms}
     else:
         ops, C, ordering, witness = _attack_symbolic(rng, level, req)
         gloss = lambda l: l
         theory_text = _render_symbolic_theory(ops); notation = _sym_notation(level); mode = "symbolic"
-        _chain_ex = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
         how = ("Write your attacking argument as bracketed directives, one per line, in this syntax: "
                "[premise: x], [defeasible: a AND b => c], [strict: a AND b -> c]. The negation of a "
                "statement x is written -x; to rebut a conclusion or undermine a premise, derive or "
                "assert its negation. To undercut a rule, "
                + ("derive the negation of its label through a rule, e.g. [premise: h] "
                   "followed by [defeasible: h => -d2]."
-                  if _chain_ex else
+                  if chain else
                   "assert the negation of its label, e.g. [premise: -d2]."))
         meta_extra = {}
     kindword = {"undermine": ("UNDERMINE - attack an ORDINARY PREMISE the argument relies on "
@@ -230,7 +232,6 @@ def frame_attack(rng, with_content=False, level=2):
         pref_hint = (" Preference directives: [prefer_rule: dI > dJ] (rules by their label) and "
                      "[prefer_premise: x > y]. A rule you add becomes the next label after those "
                      "shown, e.g. dN+1.")
-    chain = level >= ATTACK_CHAIN_LEVEL and req in ("rebut", "undercut")
     chain_hint = (" Do not simply assert the contrary as a premise; derive your attacking conclusion "
                   "through at least one rule (a chain)." if chain else "")
     task = ("You are analysing a defeasible argumentation theory. " + notation + "\n\nTheory:\n"

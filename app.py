@@ -582,7 +582,17 @@ async function submitAnswer(){
 """
 
 if __name__ == "__main__":
+    import os
+
+    # Serving on all interfaces lets others on the LAN solve tasks in the
+    # playground. The Werkzeug debugger is an arbitrary-code-execution console,
+    # so it stays off whenever the bind address is reachable from off-host; set
+    # ARGGYM_HOST=127.0.0.1 for a local dev session with the debugger and
+    # auto-reloader.
+    host = os.environ.get("ARGGYM_HOST", "0.0.0.0")
+    loopback = host in ("127.0.0.1", "localhost", "::1")
     print("\n" + "=" * 52)
-    print(" ARGGYM v2 STUDIO  ->  http://127.0.0.1:5000")
+    print(f" ARGGYM v2 STUDIO  ->  http://{'127.0.0.1' if host == '0.0.0.0' else host}:5000")
+    print(f" debugger: {'on' if loopback else 'off (not loopback)'}")
     print("=" * 52 + "\n")
-    app.run(debug=True, port=5000, host="0.0.0.0")
+    app.run(debug=loopback, port=5000, host=host)

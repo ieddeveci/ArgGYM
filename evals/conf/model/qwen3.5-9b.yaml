@@ -5,9 +5,9 @@ image: vllm/vllm-openai:latest
 reasoning_parser: qwen3
 # Qwen3.x templates think unless explicitly disabled; sent explicitly anyway.
 enable_thinking: true
-# 0.85 left only ~16GB for KV after 52GB of weights, capping concurrency at
-# 12-14 of 32 in-flight requests with the cache pegged at 98%. vLLM also warns
-# CUDA-graph profiling makes 0.85 effectively 0.8373.
+# Roster-wide value, chosen on the 27B-class models where KV headroom is the
+# binding constraint (see qwen3.5-27b.yaml). At ~18GB of bf16 weights
+# KV is not a constraint here, so this is inherited for uniformity, not need.
 gpu_memory_utilization: 0.93
 extra_args: []
 sampling:

@@ -87,6 +87,20 @@ def test_reinstate_items_are_generable_above_level_four():
     assert score_content(entry["answer"], entry) >= 0.999
 
 
+def test_every_registered_task_is_generable():
+    """A framer whose gold fails its own scorer makes the task unusable: every
+    generation attempt is rejected and create_dataset raises. syntax did this,
+    unnoticed, because it was the one framer still wrapping its gold in the
+    submission template that the taskset no longer pins."""
+    from tasks.registry import MODULAR_TASKS
+
+    for task in MODULAR_TASKS:
+        ds = create_dataset(task, size=2, level=5, seed=4, with_content=False)
+        for i in range(2):
+            ok, reasons = validate_entry(ds[i])
+            assert ok, f"{task} item {i} failed validation: {reasons}"
+
+
 def test_gold_still_self_scores_after_the_fixes():
     """Guard against a well-formedness fix quietly breaking gold."""
     for task in ("claim_identification", "formalization", "status_query"):
