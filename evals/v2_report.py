@@ -12,9 +12,12 @@ reported as parallel tracks plus their SIGNED gap -- never averaged.
   Metric 2 — surface variance. For structures with K>=2 content renderings (same
     structure, different KB records / phrasings, matched gold), how much the
     model's correctness varies across renderings: mean within-structure stdev of
-    score and the "flip rate" (fraction of structures where the model is not
-    all-correct-or-all-wrong across renderings). High = phrasing/world-knowledge
-    drives the answer rather than the logic.
+    score and the PAIRWISE-DISAGREEMENT rate (probability two renderings disagree
+    on full-correctness -- unbiased in K, so it does not grow with the rendering
+    count). High = phrasing/world-knowledge drives the answer rather than the logic.
+
+All metrics are computed per structure then averaged across structures, so a
+structure with many renderings does not outweigh one with few.
 
 Writes v2-results.md + figures into the given output dir.
 """
@@ -242,7 +245,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sweep", default="paired-v2")
     ap.add_argument("--levels", default="3,5")
-    ap.add_argument("--out", default="workspace/model-eval-2026-07-21/v2-report")
+    ap.add_argument("--out", default="outputs/reports/v2")
     a = ap.parse_args()
     levels = [int(x) for x in a.levels.split(",")]
     out = ROOT / a.out
