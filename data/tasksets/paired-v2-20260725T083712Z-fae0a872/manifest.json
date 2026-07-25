@@ -1,0 +1,20 @@
+{
+  "name": "paired-v2",
+  "taskset_hash": "fae0a8725f32636a0beb81b6281afdfaeb5f687a7dd00ba0d806d7ec1bb37cec",
+  "taskset_id": "paired-v2-20260725T083712Z-fae0a872",
+  "built_at": "2026-07-25T08:37:12.070426Z",
+  "git_sha": "33dbf73443cf03e4614dcdfe0dff6531eb7b0af8",
+  "git_dirty": true,
+  "n_samples": 346,
+  "n_cells": 4,
+  "cells": {
+    "status_query|content|L03": 127,
+    "status_query|symbolic|L03": 50,
+    "status_query|content|L05": 119,
+    "status_query|symbolic|L05": 50
+  },
+  "kb_sha256": "0994f44e4af18507ac313befb950d9ffdc35da87bd26e6fe0c23de777af505ef",
+  "gold_self_check": "passed (every item's own gold answer scores 1.0)",
+  "generator_skips": {},
+  "total_generator_skips": 0
+}

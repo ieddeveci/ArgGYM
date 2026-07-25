@@ -1,0 +1,17 @@
+name: paired-v2
+task: status_query
+modes:
+- content
+- symbolic
+levels:
+- 3
+- 5
+queries:
+- c0
+- -c0
+ordering: last_link_elitist
+draws_per_level: 7000
+n_struct: 50
+kmax: 3
+seed: 20260725
+notes: 'paired-content v2 (issue #15)'
