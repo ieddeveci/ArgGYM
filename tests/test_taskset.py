@@ -1,5 +1,8 @@
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -61,3 +64,30 @@ def test_taskset_hash_tracks_prompts_and_kb():
 def test_row_count_matches_grid():
     rows = build_rows(TASKS, MODES, LEVELS, 3, SEED)
     assert len(rows) == len(TASKS) * len(MODES) * len(LEVELS) * 3
+
+
+def test_write_taskset_refuses_a_dirty_tree(tmp_path, monkeypatch):
+    """A taskset built from uncommitted code records a git_sha that does not
+    regenerate it, so nobody can later tell what the benchmark measured. The
+    shipped pilot taskset was built this way and no commit reproduces it."""
+    from omegaconf import OmegaConf
+
+    import evals.taskset as ts
+
+    monkeypatch.setattr(ts, "git_dirty", lambda: True)
+    with pytest.raises(RuntimeError, match="dirty working tree"):
+        ts.write_taskset(tmp_path, "probe", [], OmegaConf.create({}), None)
+
+
+def test_allow_dirty_tags_the_directory_name(tmp_path, monkeypatch):
+    """The escape hatch stays usable for local experiments, but the build is
+    marked so a glob or a reader cannot mistake it for a canonical taskset."""
+    from omegaconf import OmegaConf
+
+    import evals.taskset as ts
+
+    monkeypatch.setattr(ts, "git_dirty", lambda: True)
+    out = ts.write_taskset(tmp_path, "probe", [], OmegaConf.create({}), None,
+                           allow_dirty=True)
+    assert "-dirty-" in out.name
+    assert json.loads((out / "manifest.json").read_text())["git_dirty"] is True

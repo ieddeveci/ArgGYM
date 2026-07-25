@@ -36,14 +36,20 @@ serve:
   # (a full replica per GPU, each serving different requests) gives near-linear
   # throughput -- unlike tensor parallelism, which would split one model across
   # cards and add communication overhead for no capacity gain.
-  gpus: "0,1,2,3"
-  data_parallel_size: 4
+  gpus: "0,1,2"
+  data_parallel_size: 3
 
 # Set by run_all.sh so every run in one sweep can be grouped.
 sweep_id: null
 
+# Build a taskset from a working tree with uncommitted changes. Off, because the
+# recorded git_sha would then name a tree that does not regenerate the taskset --
+# the benchmark's questions would have no identifiable source. Turning it on tags
+# the directory name `dirty` so a throwaway build cannot be mistaken for canonical.
+allow_dirty: false
+
 # Directory name under taskset_root. Left null, the runner resolves it by
-# globbing `<taskset.name>-*` and refuses to guess if several match -- comparing
+# globbing `<taskset.name>-*`, and refuses to guess if several match -- comparing
 # models across different question sets would invalidate the whole sweep.
 taskset_id: null
 

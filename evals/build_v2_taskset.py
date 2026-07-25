@@ -333,6 +333,8 @@ def main():
                     help="max content renderings per structure (cost bound; binds ~L3 only)")
     ap.add_argument("--seed", type=int, default=20260725)
     ap.add_argument("--name", default="paired-v2")
+    ap.add_argument("--allow-dirty", action="store_true",
+                    help="build from a dirty tree (throwaway; tags the dir name)")
     a = ap.parse_args()
 
     levels = [int(x) for x in a.levels.split(",")]
@@ -349,7 +351,8 @@ def main():
         "draws_per_level": a.draws, "n_struct": a.n_struct, "kmax": a.kmax,
         "seed": a.seed, "notes": "paired-content v2 (issue #15)",
     })
-    out = write_taskset(root / "data" / "tasksets", a.name, rows, cfg, kb_sha)
+    out = write_taskset(root / "data" / "tasksets", a.name, rows, cfg, kb_sha,
+                        allow_dirty=a.allow_dirty)
 
     n_c = sum(r["mode"] == "content" for r in rows)
     n_s = sum(r["mode"] == "symbolic" for r in rows)

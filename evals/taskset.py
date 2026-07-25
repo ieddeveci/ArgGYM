@@ -200,7 +200,28 @@ def taskset_hash(rows: List[dict], kb_sha: Optional[str]) -> str:
 
 
 def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
-                  kb_sha: Optional[str], stats: Optional[dict] = None) -> Path:
+                  kb_sha: Optional[str], stats: Optional[dict] = None,
+                  allow_dirty: bool = False) -> Path:
+    """Freeze `rows` into a taskset directory.
+
+    Refuses a dirty working tree by default. A taskset is a benchmark artifact
+    whose identity is (code, config, kb): if the code that produced it was never
+    committed, the recorded `git_sha` names a tree that does not regenerate it,
+    and nobody -- including its author a week later -- can tell what it measured.
+    Recording `git_dirty` is not enough on its own; that only documents the
+    problem after the fact.
+
+    `allow_dirty=True` is the escape for local experiments. It stamps `dirty`
+    into the directory name so such a build can never be picked up as canonical
+    by a glob or mistaken for one by eye.
+    """
+    dirty = git_dirty()
+    if dirty and not allow_dirty:
+        raise RuntimeError(
+            "refusing to build a taskset from a dirty working tree: the recorded "
+            "git_sha would not reproduce it. Commit (or stash) first, or pass "
+            "allow_dirty=true for a throwaway local build.")
+
     full = taskset_hash(rows, kb_sha)
     built = datetime.now(timezone.utc)
     # Time-ordered directory name: the UTC build stamp sorts chronologically, so
@@ -208,7 +229,8 @@ def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
     # after it as a stable identity -- same code+config+kb reproduce the same
     # hash, which is how two builds are told apart from mere re-runs.
     stamp = built.strftime("%Y%m%dT%H%M%SZ")
-    out = Path(root) / f"{name}-{stamp}-{full[:8]}"
+    tag = "-dirty" if dirty else ""
+    out = Path(root) / f"{name}{tag}-{stamp}-{full[:8]}"
     out.mkdir(parents=True, exist_ok=True)
 
     with open(out / "taskset.jsonl", "w") as fh:
@@ -228,7 +250,7 @@ def write_taskset(root: Path, name: str, rows: List[dict], cfg_node,
         "taskset_id": out.name,
         "built_at": built.isoformat().replace("+00:00", "Z"),
         "git_sha": git_sha(),
-        "git_dirty": git_dirty(),
+        "git_dirty": dirty,
         "n_samples": len(rows),
         "n_cells": len(cells),
         "cells": cells,
@@ -290,7 +312,8 @@ def main(cfg: DictConfig) -> None:
                       int(ts.base_seed), bool(ts.validate_gold), progress=progress,
                       stats=stats, workers=int(workers) if workers else None)
 
-    out = write_taskset(root / cfg.taskset_root, ts.name, rows, ts, kb_sha, stats)
+    out = write_taskset(root / cfg.taskset_root, ts.name, rows, ts, kb_sha, stats,
+                        allow_dirty=bool(cfg.get("allow_dirty")))
     print(f"\nwrote {len(rows)} samples to {out}")
     if stats.get("total_skipped"):
         print(f"generator skipped {stats['total_skipped']} unproducible indices "

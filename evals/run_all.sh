@@ -29,6 +29,7 @@ else
     gemma-4-31b-it
     qwen3.5-9b
     qwen3.5-4b
+    gemma-4-E4B-it
     llama-3.1-8b-instruct
   )
 fi

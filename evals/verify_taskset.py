@@ -63,6 +63,16 @@ def main() -> None:
           f"{len(only_shipped)} missing, {len(only_fresh)} new")
     for k in (changed or only_shipped or only_fresh)[:5]:
         print(f"  {k}")
+    if manifest.get("git_dirty"):
+        print(f"\nThis taskset was built from a dirty working tree, so its recorded "
+              f"git_sha ({(manifest.get('git_sha') or '?')[:8]}) is not the code that "
+              f"produced it and no commit regenerates it. The mismatch above is "
+              f"expected and says nothing about the current generator. Rebuild from "
+              f"a clean tree to get a taskset that verifies.")
+    else:
+        print(f"\nThis taskset was built clean at {(manifest.get('git_sha') or '?')[:8]}, "
+              f"so the generator has changed since. Either the change was intended -- "
+              f"rebuild and re-run -- or it is drift to investigate.")
     sys.exit(1)
 
 
