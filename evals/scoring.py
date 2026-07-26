@@ -73,19 +73,27 @@ def score_sample(row: dict, gen: dict) -> dict:
 _FLAGS = ("api_error", "truncated", "no_answer_region", "zero_score_with_valid_region")
 
 
-def _agg(rows: List[dict]) -> dict:
+def _agg(rows: List[dict], scores_ok: bool = True) -> dict:
+    """Aggregate a group of scored samples.
+
+    `scores_ok=False` omits every score field and keeps only the counts and the
+    format/plumbing rates. Use it for any group that spans both answer modes:
+    content and symbolic present different representations of the task and are
+    not commensurable, so a mean over the two is not a quantity -- while
+    "how often did a generation hit the token cap" is one regardless of mode.
+    Withholding the number is the only reliable way to stop it being quoted.
+    """
     if not rows:
         return {}
-    scores = [r["score"] for r in rows]
     toks = [r["completion_tokens"] for r in rows if r.get("completion_tokens")]
-    out = {
-        "n": len(rows),
-        "mean_score": round(statistics.fmean(scores), 4),
-        "perfect_rate": round(sum(1 for s in scores if s >= 1.0) / len(scores), 4),
-        "zero_rate": round(sum(1 for s in scores if s <= 0.0) / len(scores), 4),
-    }
-    if len(scores) > 1:
-        out["stderr"] = round(statistics.stdev(scores) / (len(scores) ** 0.5), 4)
+    out = {"n": len(rows)}
+    if scores_ok:
+        scores = [r["score"] for r in rows]
+        out["mean_score"] = round(statistics.fmean(scores), 4)
+        out["perfect_rate"] = round(sum(1 for s in scores if s >= 1.0) / len(scores), 4)
+        out["zero_rate"] = round(sum(1 for s in scores if s <= 0.0) / len(scores), 4)
+        if len(scores) > 1:
+            out["stderr"] = round(statistics.stdev(scores) / (len(scores) ** 0.5), 4)
     for f in _FLAGS:
         out[f + "_rate"] = round(sum(1 for r in rows if r.get(f)) / len(rows), 4)
     if toks:
@@ -93,20 +101,30 @@ def _agg(rows: List[dict]) -> dict:
     return out
 
 
+# Groups whose members all share one answer mode, so a mean over them is a
+# quantity. Every other group mixes content and symbolic and is emitted without
+# score fields -- see _agg. Each cross-mode group has a mode-split counterpart
+# here, so nothing is lost by refusing to average across them.
+_MODE_HOMOGENEOUS = ("by_mode", "by_task_mode", "by_level_mode")
+
+
 def aggregate(scored: List[dict]) -> dict:
     by: Dict[str, Dict[str, list]] = {
         "by_task": defaultdict(list), "by_mode": defaultdict(list),
         "by_level": defaultdict(list), "by_task_mode": defaultdict(list),
+        "by_level_mode": defaultdict(list),
     }
     for r in scored:
         by["by_task"][r["task"]].append(r)
         by["by_mode"][r["mode"]].append(r)
         by["by_level"][f"L{r['level']:02d}"].append(r)
         by["by_task_mode"][f"{r['task']}|{r['mode']}"].append(r)
+        by["by_level_mode"][f"L{r['level']:02d}|{r['mode']}"].append(r)
 
     return {
-        "overall": _agg(scored),
-        **{k: {kk: _agg(vv) for kk, vv in sorted(v.items())} for k, v in by.items()},
+        "overall": _agg(scored, scores_ok=False),
+        **{k: {kk: _agg(vv, scores_ok=(k in _MODE_HOMOGENEOUS))
+               for kk, vv in sorted(v.items())} for k, v in by.items()},
     }
 
 
@@ -117,7 +135,8 @@ def write_metrics_csv(path: Path, metrics: dict) -> None:
         w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         w.writerow({"group": "overall", "key": "all", **metrics["overall"]})
-        for group in ("by_task", "by_mode", "by_level", "by_task_mode"):
+        for group in ("by_task", "by_mode", "by_level", "by_task_mode",
+                      "by_level_mode"):
             for key, vals in metrics.get(group, {}).items():
                 w.writerow({"group": group, "key": key, **vals})
 
@@ -165,8 +184,13 @@ def main() -> None:
     a = ap.parse_args()
     m = score_run(Path(a.run_dir), Path(a.taskset_dir) if a.taskset_dir else None)
     o = m["overall"]
-    print(f"{m['_meta']['model']}: n={o['n']} mean={o['mean_score']:.4f} "
-          f"perfect={o['perfect_rate']:.3f} "
+    # One score per mode, never their mean: the two modes are different
+    # representations of the task and are not commensurable. The rates that
+    # follow are format/plumbing counters, which are mode-agnostic.
+    modes = " ".join(f"{mode}={v['mean_score']:.4f}"
+                     for mode, v in sorted(m.get("by_mode", {}).items())
+                     if "mean_score" in v)
+    print(f"{m['_meta']['model']}: n={o['n']} {modes} "
           f"no_region={o['no_answer_region_rate']:.3f} "
           f"truncated={o['truncated_rate']:.3f} "
           f"api_err={o['api_error_rate']:.3f}")

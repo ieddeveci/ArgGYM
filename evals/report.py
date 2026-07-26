@@ -44,8 +44,15 @@ def table(rows: List[List[str]], headers: List[str]) -> str:
     return "\n".join(out)
 
 
+def _mode_score(run: dict, mode: str):
+    return (run["metrics"].get("by_mode", {}).get(mode) or {}).get("mean_score")
+
+
 def build_report(runs: List[dict]) -> str:
-    runs = sorted(runs, key=lambda r: -r["metrics"]["overall"].get("mean_score", 0))
+    # Ordered by symbolic score, stated as such. There is no single ranking:
+    # ordering by a content+symbolic mean would rank models on a quantity that
+    # does not exist, and the two orders genuinely differ.
+    runs = sorted(runs, key=lambda r: -(_mode_score(r, "symbolic") or 0))
     L = []
     L.append("# ArgGYM pilot evaluation — cross-model report\n")
     L.append(f"Generated {datetime.now().isoformat(timespec='seconds')}\n")
@@ -54,38 +61,45 @@ def build_report(runs: List[dict]) -> str:
     L.append(f"Taskset: `{meta.get('taskset_id')}`  \n"
              f"KB sha256: `{(meta.get('kb_sha256') or '')[:16]}`\n")
 
-    L.append("\n## Overall\n")
+    L.append("\n## Scores by mode\n")
+    L.append("Content and symbolic are separate columns and are never averaged: "
+             "they are different representations of the same tasks, so their mean "
+             "is not a quantity. Rows are ordered by symbolic score.\n")
     rows = []
     for r in runs:
         o = r["metrics"]["overall"]
-        rows.append([r["model"], o.get("n"), _fmt(o.get("mean_score"), 4),
-                     _fmt(o.get("stderr"), 4), _fmt(o.get("perfect_rate")),
+        con = r["metrics"].get("by_mode", {}).get("content") or {}
+        sym = r["metrics"].get("by_mode", {}).get("symbolic") or {}
+        gap = (None if not (con.get("mean_score") is not None
+                            and sym.get("mean_score") is not None)
+               else sym["mean_score"] - con["mean_score"])
+        rows.append([r["model"], o.get("n"),
+                     _fmt(con.get("mean_score"), 4), _fmt(con.get("stderr"), 4),
+                     _fmt(sym.get("mean_score"), 4), _fmt(sym.get("stderr"), 4),
+                     _fmt(gap, 4),
                      _fmt(o.get("no_answer_region_rate")),
                      _fmt(o.get("truncated_rate")),
                      _fmt(o.get("api_error_rate")),
                      _fmt(o.get("mean_completion_tokens"), 0)])
-    L.append(table(rows, ["model", "n", "mean", "stderr", "perfect",
-                          "no_region", "trunc", "api_err", "mean_tok"]))
+    L.append(table(rows, ["model", "n", "content", "±", "symbolic", "±",
+                          "gap (sym−con)", "no_region", "trunc", "api_err",
+                          "mean_tok"]))
 
-    for group, title in (("by_mode", "By mode"), ("by_level", "By level"),
-                         ("by_task", "By task")):
-        L.append(f"\n\n## {title}\n")
-        keys = sorted({k for r in runs for k in r["metrics"].get(group, {})})
-        rows = []
-        for r in runs:
-            g = r["metrics"].get(group, {})
-            rows.append([r["model"]] + [_fmt(g.get(k, {}).get("mean_score")) for k in keys])
-        L.append(table(rows, ["model"] + keys))
-
-    L.append("\n\n## Content vs symbolic gap\n")
-    rows = []
-    for r in runs:
-        g = r["metrics"].get("by_mode", {})
-        s = g.get("symbolic", {}).get("mean_score")
-        c = g.get("content", {}).get("mean_score")
-        gap = None if (s is None or c is None) else s - c
-        rows.append([r["model"], _fmt(s), _fmt(c), _fmt(gap)])
-    L.append(table(rows, ["model", "symbolic", "content", "gap (sym-con)"]))
+    # Both breakdowns are keyed <thing>|<mode>, so every column is one mode. The
+    # cross-mode by_level / by_task groups carry no scores by construction.
+    for group, title in (("by_level_mode", "By level"),
+                         ("by_task_mode", "By task")):
+        for mode in ("content", "symbolic"):
+            L.append(f"\n\n## {title} — {mode}\n")
+            keys = [k for k in sorted({k for r in runs
+                                       for k in r["metrics"].get(group, {})})
+                    if k.endswith("|" + mode)]
+            rows = []
+            for r in runs:
+                g = r["metrics"].get(group, {})
+                rows.append([r["model"]]
+                            + [_fmt(g.get(k, {}).get("mean_score")) for k in keys])
+            L.append(table(rows, ["model"] + [k.rsplit("|", 1)[0] for k in keys]))
 
     L.append("\n\n## Audit signals — tasks with high well-formed-but-zero rates\n")
     L.append("High `zero_score_with_valid_region` means a parseable answer still "

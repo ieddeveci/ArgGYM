@@ -38,7 +38,12 @@ RUN_RE = re.compile(r"__(?P<model>.+?)__L(?P<lvl>\d{2})__pilot$")
 
 
 def load():
-    """{model:{level:{'content':x,'symbolic':x,'trunc':x,'raw':x,'censored':x}}}"""
+    """{model: {level: {content, symbolic, trunc, raw|<mode>, censored|<mode>}}}
+
+    raw/censored are per mode. Averaging a model's content and symbolic scores
+    into one "raw" number would be the cross-mode mean this report exists to
+    avoid -- and the truncation it corrects for is not even mode-symmetric.
+    """
     data = {}
     for d in sorted(glob.glob(str(ROOT / "outputs/runs/*__L*__pilot"))):
         m = RUN_RE.search(d)
@@ -54,11 +59,13 @@ def load():
                "by_task_mode": met.get("by_task_mode", {})}
         rows = [json.loads(x) for x in open(Path(d) / "samples.jsonl")] \
             if (Path(d) / "samples.jsonl").exists() else []
-        if rows:
-            raw = [r["score"] for r in rows]
-            cens = [r["score"] for r in rows if not r.get("truncated")]
-            rec["raw"] = sum(raw) / len(raw)
-            rec["censored"] = (sum(cens) / len(cens)) if cens else None
+        for mode in ("content", "symbolic"):
+            mrows = [r for r in rows if r.get("mode") == mode]
+            if not mrows:
+                continue
+            cens = [r["score"] for r in mrows if not r.get("truncated")]
+            rec[f"raw|{mode}"] = sum(r["score"] for r in mrows) / len(mrows)
+            rec[f"censored|{mode}"] = (sum(cens) / len(cens)) if cens else None
         data.setdefault(model, {})[lv] = rec
     return data
 
@@ -163,22 +170,25 @@ def fig3_scaling(data):
 
 
 def fig4_censored(data):
+    """Raw vs censored, one panel per mode -- never a content+symbolic mean."""
     small = [m for m in ("qwen3.5-9b", "qwen3.5-4b") if m in data]
-    fig, ax = plt.subplots(figsize=(7.6, 4.6), dpi=150)
-    for m in small:
-        xs = [i for i, l in enumerate(LEVELS) if l in data[m] and data[m][l].get("censored") is not None]
-        raw = [data[m][LEVELS[i]]["raw"] for i in xs]
-        cen = [data[m][LEVELS[i]]["censored"] for i in xs]
-        ax.plot(xs, cen, color=COLORS[m], marker=MARKERS[m], lw=2, ms=7, mec="white", mew=1.2,
-                label=f"{m} — censored")
-        ax.plot(xs, raw, color=COLORS[m], marker=MARKERS[m], lw=1.5, ms=6, ls="--", alpha=0.75,
-                label=f"{m} — raw")
-        for i, r, c in zip(xs, raw, cen):
-            ax.annotate("", (i, c));
-    _axline(ax); ax.set_ylim(0, 1); ax.set_ylabel("mean score (0–1)")
-    ax.set_title("Small models: raw vs censored (truncated items dropped)", loc="left",
-                 fontweight="bold")
-    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), dpi=150, sharey=True)
+    for ax, mode in zip(axes, ("content", "symbolic")):
+        for m in small:
+            xs = [i for i, l in enumerate(LEVELS)
+                  if l in data[m] and data[m][l].get(f"censored|{mode}") is not None]
+            raw = [data[m][LEVELS[i]][f"raw|{mode}"] for i in xs]
+            cen = [data[m][LEVELS[i]][f"censored|{mode}"] for i in xs]
+            ax.plot(xs, cen, color=COLORS[m], marker=MARKERS[m], lw=2, ms=7, mec="white",
+                    mew=1.2, label=f"{m} — censored")
+            ax.plot(xs, raw, color=COLORS[m], marker=MARKERS[m], lw=1.5, ms=6, ls="--",
+                    alpha=0.75, label=f"{m} — raw")
+        _axline(ax); ax.set_ylim(0, 1)
+        ax.set_title(mode, loc="left", fontweight="bold")
+    axes[0].set_ylabel("mean score (0–1)")
+    axes[1].legend(frameon=False, fontsize=8, loc="upper right")
+    fig.suptitle("Small models: raw vs censored (truncated items dropped)", x=0.01,
+                 ha="left", fontweight="bold")
     fig.text(0.01, -0.02, "Solid = censored (reasoning on completed answers); "
              "dashed = raw. The wide gap is length-control (truncation), not reasoning.",
              fontsize=7.5, color="#555")

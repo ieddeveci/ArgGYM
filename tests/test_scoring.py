@@ -65,7 +65,6 @@ def test_aggregate_groups_and_keeps_flags_out_of_the_mean():
          "completion_tokens": 20},
     ]
     m = aggregate(scored)
-    assert m["overall"]["mean_score"] == 0.5
     assert m["overall"]["truncated_rate"] == 0.5
     assert m["by_mode"]["symbolic"]["mean_score"] == 1.0
     assert m["by_mode"]["content"]["mean_score"] == 0.0
@@ -75,3 +74,42 @@ def test_aggregate_groups_and_keeps_flags_out_of_the_mean():
 
 def test_agg_of_empty_is_empty():
     assert _agg([]) == {}
+
+
+def _rows(*specs):
+    """(mode, score) pairs -> scored-sample dicts."""
+    return [{"sample_id": f"t__{m}__L01__{i:03d}", "task": "status_query", "mode": m,
+             "level": 1, "idx": i, "score": s, "api_error": False, "truncated": False,
+             "no_answer_region": False, "zero_score_with_valid_region": False,
+             "completion_tokens": 10}
+            for i, (m, s) in enumerate(specs)]
+
+
+def test_cross_mode_groups_carry_no_score():
+    """Content and symbolic are different representations of the same tasks, so a
+    mean over both is not a quantity. Groups that span them must not publish one --
+    a stored number gets quoted, however it is captioned."""
+    from evals.scoring import aggregate
+
+    m = aggregate(_rows(("content", 0.0), ("content", 0.0),
+                        ("symbolic", 1.0), ("symbolic", 1.0)))
+    for group, key in (("overall", None), ("by_task", "status_query"),
+                       ("by_level", "L01")):
+        node = m[group] if key is None else m[group][key]
+        assert "mean_score" not in node, f"{group} published a cross-mode mean"
+        assert "perfect_rate" not in node and "zero_rate" not in node
+        assert node["n"] == 4                      # counts still reported
+        assert "truncated_rate" in node            # mode-agnostic plumbing kept
+
+
+def test_mode_split_groups_do_carry_scores():
+    """Every cross-mode group has a per-mode counterpart, so refusing to average
+    loses no information."""
+    from evals.scoring import aggregate
+
+    m = aggregate(_rows(("content", 0.0), ("content", 0.5),
+                        ("symbolic", 1.0), ("symbolic", 1.0)))
+    assert m["by_mode"]["content"]["mean_score"] == 0.25
+    assert m["by_mode"]["symbolic"]["mean_score"] == 1.0
+    assert m["by_level_mode"]["L01|content"]["mean_score"] == 0.25
+    assert m["by_task_mode"]["status_query|symbolic"]["mean_score"] == 1.0
