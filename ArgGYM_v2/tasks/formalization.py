@@ -344,18 +344,20 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -
             "Answer format: one directive per line, between [answer] and [/answer].")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+# Answer region comes from core.scoring: the LAST complete region, so a
+# reasoning model that drafts and then revises is scored on the revision.
+from core.scoring import answer_region
 _P = re.compile(r"^\[(premise|axiom):\s*(-?\w+)\]$")
 _R = re.compile(r"^\[(defeasible|strict)\s+([\w]+)\s*:\s*(.+?)\s*(=>|->)\s*(-?\w+)\]$")
 _F = re.compile(r"^\[prefer_(rule|premise):\s*(-?\w+)\s*>\s*(-?\w+)\]$")
 
 
 def parse(text: str) -> Tuple[List[Operation], int]:
-    m = _ANSWER.search(text or "")
+    m = answer_region(text)
     if m is None:
         return [], -1
     ops, bad = [], 0
-    body = m.group(1)
+    body = m
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
     stray = [t for t in leftover.split()

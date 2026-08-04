@@ -7,7 +7,28 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+_ANSWER_OPEN = re.compile(r"\[\s*answer\s*\]", re.I)
+_ANSWER_CLOSE = re.compile(r"\[\s*/\s*answer\s*\]", re.I)
+
+
+def answer_region(text: Optional[str]) -> Optional[str]:
+    """The content of the FINAL complete [answer]...[/answer] region.
+
+    The last region, not the first: a reasoning model routinely drafts an answer
+    mid-chain-of-thought and then revises it, and what it submits is the
+    revision. Scoring the abandoned draft would report the model as wrong on
+    work it had already corrected. Returns None when no complete region exists,
+    which the callers report as a format failure rather than a wrong answer.
+    """
+    s = text or ""
+    for m in reversed(list(_ANSWER_OPEN.finditer(s))):
+        rest = s[m.end():]
+        c = _ANSWER_CLOSE.search(rest)
+        if c:
+            return rest[:c.start()]
+    return None
+
+
 _PREMISE = re.compile(r"^\[(premise|axiom)\s*:\s*(-?[A-Za-z]\w*)\]$")
 _RULE = re.compile(r"^\[(defeasible|strict)\s*([A-Za-z]\w*)?\s*:\s*(.+?)\s*(=>|->)\s*(-?[A-Za-z]\w*)\]$")
 _PREF = re.compile(r"^\[prefer_(rule|premise)\s*:\s*(-?[A-Za-z]\w*)\s*>\s*(-?[A-Za-z]\w*)\]$")
@@ -24,12 +45,11 @@ class ParsedAnswer:
 
 def parse_answer(text: str) -> ParsedAnswer:
     out = ParsedAnswer()
-    m = _ANSWER.search(text or "")
-    if m is None:
+    body = answer_region(text)
+    if body is None:
         out.no_region = True
         return out
     auto = 0
-    body = m.group(1)
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
     stray = [t for t in leftover.split()

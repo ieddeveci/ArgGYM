@@ -311,7 +311,9 @@ def _render_prompt(theory: str, pert: str, ordering: str) -> str:
             "and [/answer]. If no claim changes status, write `none`.")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+# Answer region comes from core.scoring: the LAST complete region, so a
+# reasoning model that drafts and then revises is scored on the revision.
+from core.scoring import answer_region
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b", re.I)
 
 
@@ -319,10 +321,10 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
     diag: Dict = {"n_lines": 0, "n_unparseable": 0, "n_predicted": 0,
                   "n_gold": len(item.gold), "wrong_status": [], "false_positives": [],
                   "missed": []}
-    m = _ANSWER.search(answer_text or "")
+    m = answer_region(answer_text)
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1).strip()
+    body = m.strip()
     pred: Dict[str, str] = {}
     if body.lower() == "none":
         diag["n_lines"] = 1

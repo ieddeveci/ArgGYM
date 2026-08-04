@@ -252,16 +252,18 @@ def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
             "between [answer] and [/answer].")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+# Answer region comes from core.scoring: the LAST complete region, so a
+# reasoning model that drafts and then revises is scored on the revision.
+from core.scoring import answer_region
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b(?!\w)", re.I)
 
 
 def score(answer_text: str, item: SQItem) -> Dict:
     diag: Dict = {"n_predicted": 0, "n_gold": len(item.gold), "wrong": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
+    m = answer_region(answer_text)
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = m
     pred: Dict[str, str] = {}
     for claim, stat in _PAIR.findall(body):
         pred[claim] = stat.upper()

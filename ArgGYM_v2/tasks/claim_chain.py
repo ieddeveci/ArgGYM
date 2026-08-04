@@ -237,15 +237,17 @@ def _render_prompt(theory: str, claim: str, ordering: str) -> str:
             "[answer] and [/answer].")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+# Answer region comes from core.scoring: the LAST complete region, so a
+# reasoning model that drafts and then revises is scored on the revision.
+from core.scoring import answer_region
 
 
 def score(answer_text: str, item: CCItem) -> Dict:
     diag: Dict = {"n_quoted": 0, "n_gold": len(item.line_ops), "extra": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
+    m = answer_region(answer_text)
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = m
     quoted = re.findall(r"\[[^\]]*\]", body)
     if not quoted:
         quoted = [l.strip() for l in body.splitlines() if l.strip()]

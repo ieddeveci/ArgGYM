@@ -253,7 +253,9 @@ def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) 
             "asserted premise doing the attacking\n" + extra)
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+# Answer region comes from core.scoring: the LAST complete region, so a
+# reasoning model that drafts and then revises is scored on the revision.
+from core.scoring import answer_region
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
 _FIELD = re.compile(r"(\w+)\s*[:=]\s*([^;\n]+)")
 
@@ -261,10 +263,10 @@ _FIELD = re.compile(r"(\w+)\s*[:=]\s*([^;\n]+)")
 def score(answer_text: str, item: DDItem) -> Dict:
     diag: Dict = {"n_quoted": 0, "n_gold": len(item.diagnoses),
                   "status_correct": False, "extra": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
+    m = answer_region(answer_text)
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = m
 
     for _k in re.findall(r"kind\s*[:=]\s*([^;\n,]+)", body, flags=re.I):
         if _k.strip().strip(",;.").lower() not in (UNDERMINE, UNDERCUT, REBUT):
