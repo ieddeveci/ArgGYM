@@ -32,22 +32,35 @@ def read_json(path: Path) -> Optional[dict]:
         return None
 
 
+# Row fields that differ between the two benchmarks. v1 nests gold under
+# `entry` and identifies an item by (mode, idx); ArgGYM_v2 stores `reference`
+# at the top level and identifies by (ordering, seed). Everything else in the
+# harness is shape-agnostic, so this is the only place that needs to know.
+_V1_ONLY = ("mode", "idx")
+_V2_ONLY = ("ordering", "seed", "min_directives")
+
+
 def write_sample_input(run_dir: Path, row: dict) -> None:
     """Prompt and gold, written before inference so they exist even if it dies."""
     d = sample_dir(run_dir, row["sample_id"])
     d.mkdir(parents=True, exist_ok=True)
     with open(d / "input.txt", "w") as fh:
         fh.write(row["prompt"])
-    entry = row["entry"]
-    write_json(d / "gold.json", {
-        "sample_id": row["sample_id"],
-        "task": row["task"],
-        "mode": row["mode"],
-        "level": row["level"],
-        "idx": row["idx"],
-        "gold_answer": entry["answer"],
-        "metadata": entry["metadata"],
-    })
+
+    gold = {"sample_id": row["sample_id"], "task": row["task"],
+            "level": row["level"]}
+    for k in _V1_ONLY + _V2_ONLY:
+        if k in row:
+            gold[k] = row[k]
+
+    entry = row.get("entry")
+    if entry is not None:                      # v1
+        gold["gold_answer"] = entry["answer"]
+        gold["metadata"] = entry["metadata"]
+    else:                                      # ArgGYM_v2
+        gold["gold_answer"] = row["reference"]
+        gold["metadata"] = row.get("metadata")
+    write_json(d / "gold.json", gold)
 
 
 def write_generation(run_dir: Path, sample_id: str, gen: dict) -> None:
