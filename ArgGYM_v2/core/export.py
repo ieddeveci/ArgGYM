@@ -21,14 +21,58 @@ _EXPORTABLE = {
     "defeat_diagnosis": "defeatdiag",
     "formalization": "formalize",
     "status_query": "statusquery",
+    # attack_defense is one module with three modes; each is exported as its own
+    # task so a per-task score is a score for one kind of move, not a blend of
+    # attacking, defending and doing both at once.
+    "attack": "attackdef",
+    "defence": "attackdef",
+    "attack_defense": "attackdef",
+    "perturbation": "perturb",
 }
+
+_ATTACKDEF_MODES = {"attack": "attack", "defence": "defence",
+                    "attack_defense": "attack_defense"}
+
+
+class _PerturbView:
+    """Row-shaped view of a PerturbItem.
+
+    Every other task exposes `reference` as an attribute; PerturbItem builds it
+    on demand. Adapting here keeps the export loop uniform and leaves the task
+    module untouched.
+    """
+
+    __slots__ = ("prompt", "reference", "metadata")
+
+    def __init__(self, item, reference: str):
+        self.prompt = item.prompt
+        self.reference = reference
+        self.metadata = dict(item.metadata)
+        self.metadata.setdefault("n_changed", len(item.gold))
+        self.metadata.setdefault("n_survivors", len(item.survivors))
 
 
 def _export_row(task: str, lv: int, o: str, s: int):
     from tasks import preference_construction as prefcon
     from tasks import (counter_argument as counterarg, claim_chain as claimchain,
                        defeat_diagnosis as defeatdiag, formalization as formalize,
-                       status_query as statusquery)
+                       status_query as statusquery, attack_defense as attackdef,
+                       perturbation as perturb)
+    if task in _ATTACKDEF_MODES:
+        it = attackdef.make_item(lv, s, o, mode=_ATTACKDEF_MODES[task])
+        if it is None:
+            return None
+        return it, score_item(it.reference, it.as_score_input())["score"], \
+            [dict(g) for g in it.goals], it.min_directives
+    if task == "perturbation":
+        it = perturb.make_item(lv, s, o)
+        if it is None:
+            return None
+        # `reference` is a method here, and there is no minimum to be efficient
+        # against: the task predicts status changes rather than making moves.
+        ref = it.reference()
+        return _PerturbView(it, ref), perturb.score(ref, it)["score"], \
+            [{"claim": c, "want": st} for c, st in sorted(it.gold.items())], None
     if task == "preference_construction":
         it = prefcon.make_item(lv, s, o)
         if it is None:
