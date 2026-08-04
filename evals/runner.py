@@ -60,11 +60,21 @@ def main(cfg: DictConfig) -> None:
     # exactly the subset it covered.
     eval_filter = OmegaConf.to_container(cfg.get("eval_filter") or {}, resolve=True)
     n_total = len(rows)
-    for field, key in (("levels", "level"), ("tasks", "task"), ("modes", "mode")):
+    # `mode` is v1-only and `ordering` v2-only, so a filter naming a field this
+    # taskset does not carry is a mistake about which benchmark is being run --
+    # said plainly here rather than surfacing as a KeyError mid-sweep.
+    for field, key in (("levels", "level"), ("tasks", "task"),
+                       ("modes", "mode"), ("orderings", "ordering")):
         allowed = eval_filter.get(field)
-        if allowed:
-            allowed = set(allowed)
-            rows = [r for r in rows if r[key] in allowed]
+        if not allowed:
+            continue
+        if key not in rows[0]:
+            raise RuntimeError(
+                f"eval_filter.{field} was given, but this taskset has no "
+                f"'{key}' field (it has: {sorted(rows[0])}). "
+                f"'modes' applies to v1 tasksets and 'orderings' to v2.")
+        allowed = set(allowed)
+        rows = [r for r in rows if r[key] in allowed]
     if not rows:
         raise RuntimeError(f"eval_filter {eval_filter} left 0 of {n_total} rows")
 

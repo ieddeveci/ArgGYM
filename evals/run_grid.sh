@@ -8,6 +8,11 @@
 #   TASKSET_ID=<dir> SWEEP_ID=<id> LEVELS="1 3 5 10 15" MODELS="qwen3.6-27b ..." \
 #     bash evals/run_grid.sh
 #
+# SCORER selects the benchmark's scorer: evals.scoring for v1, evals.v2_scoring
+# for ArgGYM_v2. The two are different benchmarks with different scorers, so the
+# taskset and the scorer must be chosen together -- pointing one at the other's
+# taskset produces numbers that mean nothing.
+#
 # Markers under outputs/sweeps/<id>/: <model>.L<lvl>.done / .crashed, <model>.failed
 # (serve failure). A completed <model>.L<lvl>.done is skipped on re-run (resume).
 set -uo pipefail
@@ -28,6 +33,13 @@ mkdir -p "$STATE"
 # Levels to run, each as a standalone eval. Space-separated.
 read -ra LEVELS <<< "${LEVELS:-1 3 5 10 15}"
 
+# Scorer module, paired with the taskset. v1: evals.scoring. v2: evals.v2_scoring.
+SCORER="${SCORER:-evals.scoring}"
+
+# Suffix on each run directory, so runs from different benchmarks never
+# land in one namespace and get globbed into a single report.
+RUN_TAG="${RUN_TAG:-pilot}"
+
 if [ -n "${MODELS:-}" ]; then
   read -ra MODELS <<< "$MODELS"
 else
@@ -42,7 +54,7 @@ else
   )
 fi
 
-echo "grid $SWEEP_ID | taskset $TASKSET_ID | ${#MODELS[@]} models | levels: ${LEVELS[*]}"
+echo "grid $SWEEP_ID | taskset $TASKSET_ID | scorer $SCORER | ${#MODELS[@]} models | levels: ${LEVELS[*]}"
 echo "$TASKSET_ID" > "$STATE/taskset_id"
 
 for m in "${MODELS[@]}"; do
@@ -78,11 +90,11 @@ for m in "${MODELS[@]}"; do
       continue
     fi
 
-    run_dir=$("$PY" - "$m" "$lvl" <<'EOF'
+    run_dir=$("$PY" - "$m" "$lvl" "$RUN_TAG" <<'EOF'
 import sys, datetime, pathlib
 m, lvl = sys.argv[1], sys.argv[2]
 ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-print(pathlib.Path("outputs/runs") / f"{ts}__{m}__L{int(lvl):02d}__pilot")
+print(pathlib.Path("outputs/runs") / f"{ts}__{m}__L{int(lvl):02d}__{sys.argv[3]}")
 EOF
 )
 
@@ -94,7 +106,7 @@ EOF
           "eval_filter.levels=[$lvl]" \
           hydra.run.dir="$run_dir" 2>&1 | tee "$STATE/$m.L$lvl.log"; then
       echo "--- score $m L$lvl"
-      "$PY" -m evals.scoring "$run_dir" \
+      "$PY" -m "$SCORER" "$run_dir" \
           --taskset-dir "data/tasksets/$TASKSET_ID" 2>&1 | tee -a "$STATE/$m.L$lvl.log"
       # Gate on API error rate: a run dominated by API errors means the server
       # died mid-run, not that the model is bad (runner exits 0 either way).
@@ -119,4 +131,4 @@ done
 
 echo
 echo "=== grid $SWEEP_ID finished at $(date -Is)"
-echo "run dirs: outputs/runs/*__L*__pilot (sweep $SWEEP_ID)"
+echo "run dirs: outputs/runs/*__L*__$RUN_TAG (sweep $SWEEP_ID)"
