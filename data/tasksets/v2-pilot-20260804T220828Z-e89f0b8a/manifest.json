@@ -156,5 +156,14 @@
   "total_generator_rejections": 4,
   "gold_self_check": "passed (every item's own reference scores 1.0)",
   "minimum_caveat": "min_directives is minimal among the candidate directives the generator produced, not proven globally minimal. Efficiency is therefore an upper bound on the moves required: a model that finds a cheaper legal answer than gold is clamped to 1.0, never rewarded beyond it.",
-  "no_content_mode": "ArgGYM_v2 is symbolic only. There is no content rendering, so no score here is comparable with a v1 content-mode number."
+  "no_content_mode": "ArgGYM_v2 is symbolic only. There is no content rendering, so no score here is comparable with a v1 content-mode number.",
+  "verification": {
+    "verified": true,
+    "verified_at": "2026-08-05T04:30:00Z",
+    "method": "python -m evals.verify_v2_taskset",
+    "result": "MATCH -- 2196 samples reproduce exactly",
+    "regenerated_hash": "e89f0b8a05f60ffa7a71e395db1aadcf0e455ec293de1636e0cbe325f1f1d325",
+    "wall_clock": "~6h25m",
+    "note": "Regeneration is as expensive as the original build, and the cost is concentrated in the three tasks that run minimal_subset_exact (counter_argument, counter_argument_strict, preference_construction). A reproduction check this slow will not be run often, which weakens the guarantee in practice even though it holds in principle."
+  }
 }
