@@ -16,6 +16,7 @@ import argparse
 import csv
 import glob
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -47,8 +48,16 @@ def load_runs(pattern: str, sweep: str | None = None) -> List[dict]:
             # A v1 run dir caught by the glob. Skipped rather than rendered, so
             # a v1 score can never appear inside a v2 table.
             continue
+        # Each run dir is one (model, level) cell, because the grid driver runs
+        # every level as a standalone eval. Label rows with both: a bare model
+        # name would repeat five times with no way to tell the levels apart.
+        name = (run.get("model") or {}).get("name", d.name)
+        lvl = re.search(r"__L(\d+)__", d.name)
         runs.append({"dir": str(d), "run": run, "metrics": metrics,
-                     "model": (run.get("model") or {}).get("name", d.name)})
+                     "model_name": name,
+                     "level": int(lvl.group(1)) if lvl else None,
+                     "model": f"{name} L{int(lvl.group(1)):02d}" if lvl else name})
+    runs.sort(key=lambda r: (r["model_name"], r["level"] if r["level"] else 0))
     return runs
 
 
@@ -83,7 +92,12 @@ def _macro(run: dict, tasks, field: str = "mean_score"):
 
 def build_report(runs: List[dict]) -> str:
     tasks = sorted({t for r in runs for t in r["metrics"].get("by_task", {})})
-    runs = sorted(runs, key=lambda r: -(_macro(r, tasks) or 0))
+    # Ordered by (model, level), not by score. Each row is one (model, level)
+    # cell, so a score ordering interleaves a model's levels with other models'
+    # and makes the difficulty curve — the thing these tables are for —
+    # impossible to read off.
+    runs = sorted(runs, key=lambda r: (r.get("model_name", r["model"]),
+                                       r.get("level") or 0))
 
     L = []
     L.append("# ArgGYM_v2 — cross-model report\n")
