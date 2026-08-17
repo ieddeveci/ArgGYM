@@ -223,13 +223,36 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
     return item
 
 
+# (n_attackers, n_strict_attackers, support_depth, attacker_depth) per level.
+#
+# Written out rather than derived from level//4 because the derived form was
+# wrong in two ways that only an explicit table makes visible. All three counts
+# stepped together on the same divisor and capped at 5, so L12 and L15 produced
+# byte-identical recipes -- a fifteen-level ladder with four distinct rungs at
+# the top. And strict attackers switched on at `level >= 7`, which put a new
+# *kind* of attack on the same rung that added a fourth attacker; that one step
+# cost more than the rest of the ladder combined (gemma-4-31b-it fell 0.575 to
+# 0.025 across it and never recovered).
+#
+# The schedule below moves at most one count per rung and never introduces the
+# strict attacker on a rung that also changes n_attackers.
+_DEFENCE_KNOBS = {
+    1:  (2, 0, 2, 2), 2:  (2, 0, 2, 2), 3:  (2, 0, 2, 2),
+    4:  (3, 0, 2, 3), 5:  (3, 0, 3, 3), 6:  (3, 0, 3, 3),
+    7:  (3, 1, 3, 3), 8:  (3, 1, 4, 3), 9:  (3, 1, 4, 4),
+    10: (4, 1, 4, 4), 11: (4, 1, 5, 5), 12: (5, 1, 5, 5),
+    13: (5, 2, 5, 5), 14: (5, 2, 6, 5), 15: (5, 2, 6, 6),
+}
+
+
+def _defence_knobs(level: int) -> tuple:
+    return _DEFENCE_KNOBS[max(1, min(15, level))]
+
+
 def build_defence_item(level: int, seed: int, ordering: str) -> Optional[Item]:
-    n = max(2, min(5, 2 + level // 4))
-    n_strict = 1 if level >= 7 else 0
+    n, n_strict, sup, atk_d = _defence_knobs(level)
     n_decoy = 0 if level < 6 else min(2, 1 + (level - 6) // 5)
     names = _names(stable_seed(seed, level, ordering, "def"), 60 + n * 8 + n_decoy * 6)
-    sup = max(2, min(5, 2 + level // 4))
-    atk_d = max(2, min(5, 2 + level // 4))
     d = build_defence(n, ordering, names, support_depth=sup,
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
                       attacker_depth=atk_d)

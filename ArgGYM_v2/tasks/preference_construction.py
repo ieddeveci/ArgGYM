@@ -94,9 +94,21 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PCItem]:
     if level >= 3:
         n_conf = min(10, n_conf + rng.randint(0, 1))
         depth = max(1, min(5, depth + rng.randint(-1 if level >= 8 else 0, 1)))
-    shared = level >= 5 and (level % 3 == 2)
+    # How many EXTRA claims hang off conflict 0, so one preference there settles
+    # several goals at once. This is the only thing that makes the minimum
+    # smaller than "one directive per goal", and so the only thing that gives the
+    # efficiency half of the score anything to measure: without it a correct
+    # answer is necessarily minimal and `0.5 + 0.5 * efficiency` is pass/fail
+    # wearing a partial-credit costume.
+    #
+    # It was previously gated on `level >= 5 and level % 3 == 2`, which fires at
+    # levels 5, 8, 11 and 14 -- and the evaluated grid is 3, 6, 9, 12, 15. The
+    # feature existed but no evaluated item ever contained it, which is why
+    # efficiency came back 1.000 in all 30 defined cells of the 2026-08-11 sweep.
+    n_shared = 0 if level < 5 else min(1 + (level - 5) // 5, 3)
+    shared = n_shared > 0
     if shared:
-        n_claims = min(8, n_claims + 1)
+        n_claims = min(8, n_claims + n_shared)
         n_conf = min(10, max(n_conf, n_claims + 1))
     with_prefs = level >= 10
 
@@ -129,7 +141,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PCItem]:
 
     claim_lits: List[str] = []
     for k in range(n_claims):
-        if shared and k <= 1:
+        if shared and k <= n_shared:
             src = conflicts[0]
         elif k < n_conf:
             src = conflicts[k]

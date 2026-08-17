@@ -135,6 +135,17 @@ class _Cycler:
         return pool.pop()
 
 
+# Singular noun phrases for a conjunctive antecedent, so the rule templates keep
+# subject-verb agreement. Each must be read as requiring BOTH conjuncts -- these
+# are the only surface forms in which the benchmark expresses `a AND c`.
+_CONJ_PHRASES = [
+    "{a} together with {c}",
+    "the combination of {a} and {c}",
+    "{a} in conjunction with {c}",
+    "the presence of both {a} and {c}",
+]
+
+
 def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
@@ -249,6 +260,39 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                 sentences.append(_sentence(
                     cyc.pick(DEFEASIBLE).format(p=c, q=_lit_phrase(b, rng, cyc)), rng,
                     prefix=cyc.pick(FORWARD_CONNECTIVES)))
+            if b not in queried:
+                queried.append(b)
+            continue
+
+        # A CONJUNCTION unit, every fourth from level 4. `a AND b => c` has always
+        # been in the DSL, the parser has always accepted it and the engine has
+        # always evaluated it -- but no generator ever emitted one, so every
+        # formalization item was solvable by a model that believes a rule takes
+        # exactly one antecedent. Nothing in the benchmark could tell that model
+        # apart from a correct one.
+        if level >= 4 and u % 4 == 1:
+            if u > 0:
+                sentences.append(cyc.pick(NEW_TOPIC))
+            ops.append(Operation(kind="premise", content=a))
+            sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
+            ops.append(Operation(kind="premise", content=c))
+            sentences.append(_sentence(cyc.pick(PREMISE).format(p=c), rng))
+            ridx[0] += 1
+            rule_op = Operation(kind="defeasible", name=f"q_{ridx[0]}",
+                                antecedents=(a, c), consequent=b)
+            ops.append(rule_op)
+            # The rule forms carry a single antecedent slot and are written for a
+            # singular subject ("{p} creates a presumption..."), so the
+            # conjunction goes in as a singular noun phrase. Plain "a and c"
+            # would read "a and c creates", putting a grammar error in front of
+            # the model on exactly the items testing a construct it has never
+            # seen -- a confound between parsing conjunction and parsing bad
+            # English.
+            sentences.append(_sentence(
+                cyc.pick(DEFEASIBLE).format(p=rng.choice(_CONJ_PHRASES).format(a=a, c=c),
+                                            q=_lit_phrase(b, rng, cyc)),
+                rng, prefix=cyc.pick(FORWARD_CONNECTIVES)))
+            typed.append(("defeasible", rule_op))
             if b not in queried:
                 queried.append(b)
             continue

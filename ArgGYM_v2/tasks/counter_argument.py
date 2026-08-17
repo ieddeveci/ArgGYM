@@ -76,12 +76,32 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
           allow_strict: bool = False) -> Optional[CAItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
     n_chain = max(1, min(1 + (level * 5) // 15, 6))
-    depth = max(2, min(2 + (level * 3) // 15, 5))
+    # Chains start at depth 3, not 2. A depth-2 chain has no middle, so
+    # `mid_target` below could not fire at the bottom of the ladder however it
+    # was gated -- and a mid-chain cut is *cheaper* than cutting at the apex.
+    # The old schedule therefore made L3 cost more directives than L6 (3.5 vs
+    # 3.0 on the frozen taskset) and models scored 0.125 at L3 against 0.600 at
+    # L6: the first rung of the ladder was the second-hardest.
+    # Only the floor moves: `max(3, ...)` instead of the old `max(2, ...)`, with
+    # the rest of the curve exactly as it was. A depth-2 chain has no middle, so
+    # `mid_target` below could not fire at L3 however it was gated -- and a
+    # mid-chain cut is *cheaper* than cutting at the apex. That made L3 cost more
+    # directives than L6 (3.5 against 3.0 on the frozen taskset) and models
+    # scored 0.125 at L3 against 0.600 one rung later: the first rung of the
+    # ladder was the second-hardest.
+    #
+    # Raising the whole curve instead would deepen L6, L9 and L12 as well, which
+    # is a difficulty change nobody asked for and expensive besides -- minimality
+    # search here costs 0.07s/item at L3 and 14s/item at L15.
+    depth = max(3, min(2 + (level * 3) // 15, 5))
     n_strict = 0 if level < 3 else min(n_chain, 1 + (level - 3) // 4)
     n_axiom_strict = 0
     use_decoy = level >= 9 and n_strict < n_chain
     contested = level >= 8 or allow_strict
-    mid_target = level >= 6 and (seed % 2 == 1)
+    # Target position is a variation axis, not a difficulty axis: half the items
+    # cut mid-chain at every level, so the mixture is constant down the ladder
+    # instead of arriving as a step that lowers the cost of a rung.
+    mid_target = (seed % 2 == 1)
 
     names = _names(stable_seed(seed, level, ordering, "nm"), 20 + n_chain * (depth + 5))
     it = iter(names)

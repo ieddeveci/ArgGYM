@@ -95,8 +95,16 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
     n_query = max(3, round(3 + (level - 1) * (40 - 3) / 14))
     n_group = max(3, round(n_query / 1.6))
     max_tower = 0 if level < 5 else min(1 + (level - 5) // 4, 3)
+    # Rules with a conjunctive antecedent (`a AND b => c`). The DSL, the parser
+    # and the engine have always supported them; no generator ever emitted one,
+    # so conjunction -- a core ASPIC+ construct -- was untested by the whole
+    # benchmark. Introduced here because status_query takes its gold from the
+    # engine's own status map, so adding structure cannot desynchronise it from
+    # a hand-derived answer.
+    n_conj = 0 if level < 4 else min(1 + (level - 4) // 3, 4)
+    made_conj = [0]
 
-    names = _names(stable_seed(seed, level, ordering, "nm"), 40 + n_group * 12)
+    names = _names(stable_seed(seed, level, ordering, "nm"), 60 + n_group * 16)
     it = iter(names)
     ops: List[Operation] = []
     ridx = [0]
@@ -179,6 +187,27 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
             if max_tower and rng.random() < 0.7:
                 _tower(ops, it, ridx, c2, 2 * rng.randint(1, max_tower))
             planned.append((c2, "JUSTIFIED"))
+
+        if made_conj[0] < n_conj and g % 3 == 0:
+            made_conj[0] += 1
+            p1, p2, cc = next(it), next(it), next(it)
+            ops.append(Operation(kind="premise", content=p1))
+            ops.append(Operation(kind="premise", content=p2))
+            # Every second conjunction has its second antecedent defeated, so the
+            # rule cannot fire even though the first antecedent is justified.
+            # A model that reads `a AND b => c` as `a => c` gets exactly these
+            # wrong, which is what makes the construct measurable rather than
+            # merely present.
+            blocked = made_conj[0] % 2 == 0
+            if blocked:
+                ops.append(Operation(kind="premise", content="-" + p2))
+                ops.append(Operation(kind="prefer_premise", stronger="-" + p2, weaker=p2))
+            ridx[0] += 1
+            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                 antecedents=(p1, p2), consequent=cc))
+            if max_tower and rng.random() < 0.7:
+                _tower(ops, it, ridx, cc, 2 * rng.randint(1, max_tower))
+            planned.append((cc, "OVERRULED" if blocked else "JUSTIFIED"))
 
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
