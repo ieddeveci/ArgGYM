@@ -13,6 +13,16 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Iterable, List, Optional
 
+# Sampling keys forwarded to the server, and the only ones a model config may
+# name. The three repetition controls differ in kind and are not
+# interchangeable: `repetition_penalty` is multiplicative over the whole context
+# (vLLM-native), while `presence_penalty` and `frequency_penalty` are additive
+# and OpenAI-style, the first a flat charge for reusing any token and the second
+# scaling with the count. Qwen documents `presence_penalty` in [0, 2] as the
+# knob for endless repetition, so that is the one the roster sets.
+SAMPLING_KEYS = ("temperature", "top_p", "top_k", "min_p",
+                 "presence_penalty", "frequency_penalty", "repetition_penalty")
+
 
 def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int,
                   enable_thinking: Optional[bool] = None,
@@ -27,7 +37,15 @@ def build_payload(model: str, prompt: str, sampling: dict, max_tokens: int,
         "stream": False,
         "max_tokens": int(max_tokens),
     }
-    for key in ("temperature", "top_p", "top_k"):
+    unknown = set(sampling) - set(SAMPLING_KEYS)
+    if unknown:
+        # Silently dropping a sampling key is the worst failure mode here: the
+        # run looks configured, records the key in run.json, and generates as if
+        # it were never set. A whole sweep was scored under
+        # `repetition_penalty` that never reached the server this way.
+        raise ValueError(f"unknown sampling keys {sorted(unknown)}; "
+                         f"supported: {sorted(SAMPLING_KEYS)}")
+    for key in SAMPLING_KEYS:
         val = sampling.get(key)
         if val is not None:
             body[key] = val
