@@ -1,14 +1,148 @@
-# ArgGYM_v2 — cross-model report
+# ArgGYM_v2 — evaluation on the pilot taskset
 
-Generated 2026-08-11T16:37:14
+**Taskset** `v2-pilot-20260804T220828Z-e89f0b8a` (hash `e89f0b8a05f60ffa…`, 2196 items:
+11 tasks × 5 levels × 2 orderings × 20 seeds, symbolic mode only)
+**Sweep** `v2-20260805-093137` — 7 models × 5 levels, 14,495 generations, 33 of 35 cells
+**Gold** computed by the PyArg engine; every score below is a replay of `ArgGYM_v2/core/scoring.py`
+over stored generations, so no number here depends on a GPU being up.
 
-Benchmark: **ArgGYM_v2** (symbolic only)  
-Taskset: `v2-pilot-20260804T220828Z-e89f0b8a`  
-Taskset hash: `e89f0b8a05f60ffa`
+ArgGYM_v2 is reported on its own. It shares no task, scorer or answer representation with the v1
+generator, so no v1 number appears anywhere in this document.
 
+---
 
-> Scores are per task. ArgGYM_v2's tasks do not share a scale — `min_directives` counts moves to make for the construction tasks and theory size for `status_query` and `formalization` — so the harness emits no mean across tasks. The macro-average below is an unweighted mean of per-task means, shown as a ranking aid beside the full table, never in place of it.
+## What the numbers say
 
+**1. For three of seven models, this sweep does not measure reasoning — it measures whether the
+model stops talking.** qwen3.5-4b and qwen3.5-9b lose 74–89% of items to the token cap at *every*
+level, including the easiest. qwen3.6-27b loses 10–22% to request timeouts, rising with level, and
+its L12/L15 cells were rejected outright by the harness gate. A score computed over the surviving
+minority of a 79%-truncated cell is not an estimate of the model's ability; it is an estimate of
+its ability *on the items it happened to finish*, which are the short ones. Figure 1 is therefore
+the first figure, and the four contaminated model-rows should not be read as measurements.
+
+**2. Half of all truncation is a degenerate repetition loop, not long reasoning.** Across 4,312
+truncated generations, 2,153 (50%) end with a tail in which one identical line occupies ≥25% of the
+last quarter of the output. In `attack__ll__L03__000` (qwen3.5-9b) the model emitted 174,628
+characters of `reasoning_content` and **zero** characters of answer, burning all 61,440 tokens. The
+line ``Wait, is there any way to defeat `gy9` by adding `[prefer_rule: gy9 > gy9]`? No.`` appears
+**1,654 times** in that single generation — a rule preferred over *itself*, which is vacuous, asked
+and answered sixteen hundred times. The per-model rate is
+llama-3.1-8b 82%, qwen3.6-27b 54%, qwen3.5-4b 50%, qwen3.5-9b 47%, qwen3.5-27b 43%.
+
+This is the answer to "why not just raise the cap": a looping model fills any budget. The cap was
+already raised once (to 61,440 for the qwen/llama family) and the truncation rate did not improve.
+The fix is a sampling change (`repetition_penalty` / `frequency_penalty`, both currently unset) or
+a stop condition — not more tokens.
+
+**3. Recognising a theory and constructing in one are separable, and only the first is widespread.**
+Among the models that reliably produce an answer, reading a finished theory off the page is largely
+solved: `status_query` runs 0.34–0.82 for the four uncontaminated models. (Across the whole roster
+the floor is 0.044, but that is qwen3.5-9b losing 81% of its items to the cap, not a reading
+failure.) Building in a theory is not solved. gemma-4-E4B-it scores **0.63–0.80 on `status_query`
+and 0.008–0.059 on the mean of the six construction tasks** — near the 31B model on reading, near
+the floor on building. llama-3.1-8b scores exactly 0.000 at every level on six of eleven tasks
+(`attack`, `attack_defense`, `counter_argument`, `counter_argument_strict`, `formalization`,
+`preference_construction`) while still managing 0.643 on `status_query` at L3. This is the sharpest
+capability boundary in the sweep and it is not explained by contamination: gemma's truncation rate
+is 0.0–0.2%.
+
+**4. Only gemma-4-31b-it and qwen3.5-27b produce a clean ladder across all five levels.** Both
+degrade with difficulty, and neither degrades monotonically. Read those two rows; treat the rest as
+diagnostics of the harness rather than of reasoning.
+
+**5. Several per-task curves are non-monotone in ways a difficulty ladder should not produce.**
+On gemma-4-31b-it (contamination ≤0.9%, so this is real): `claim_chain` falls 0.925 → 0.275 from L3
+to L12 then recovers to 0.524 at L15; `counter_argument_strict` jumps 0.125 → 0.600 at L6 before
+sagging to 0.190 at L12; `defence` collapses 0.575 → 0.025 between L6 and L9 and never recovers. Levels are recipes, not a
+scalar — a level change alters which knobs are on, so adjacent levels can differ in kind rather
+than degree. These three are worth inspecting as level-recipe discontinuities before the ladder is
+treated as ordinal.
+
+**6. On `preference_construction` the efficiency term is inert, and the flat ~0.475–0.500 scores are
+real behaviour rather than a scoring bug.** Of 972 parseable answers, only **19 (2.0%)** used more
+directives than the verified minimum, while **561 (58%) used fewer** — and using fewer cannot satisfy
+the goals, so those score 0. Since `efficiency = min(1, minimum/n_used)` only drops below 1.0 when a
+model *overshoots*, and models here essentially never overshoot, efficiency is 1.000 in all 30 cells
+where it is defined. The consequence is that on this task `mean_score` collapses to the success rate:
+for every uncontaminated cell the two agree to within 0.011. The `0.5 + 0.5 × efficiency` split buys
+nothing here — it is pass/fail wearing a partial-credit costume. Either the minimality search is
+finding minima that are also the only solutions, or the task needs distractor-rich instances where
+padding is tempting.
+
+(For the contaminated models the two diverge sharply — qwen3.5-9b at L15 shows `mean_score` 0.075
+against `success_rate` 1.000 — because `success_rate` is computed over items that produced a
+scorable answer while `mean_score` is computed over all items. Of that cell's 40 items, **4**
+produced a parseable answer region; the "1.000" describes those. It is a reminder to read
+`success_rate` only alongside the contamination columns.)
+
+---
+
+## How to read these tables
+
+- **Scores are per task and do not share a scale.** `min_directives` counts moves to make on the
+  construction tasks and theory size on `status_query`/`formalization`. The harness deliberately
+  emits no mean across tasks. The **macro-average** is an unweighted mean of the eleven per-task
+  means, printed as a ranking aid beside the full table and never in place of it.
+- **Each row is one (model, level) cell.** Rows are ordered by model then level so a difficulty
+  curve reads down the page.
+- **`macro-eff` is computed only over items the model actually solved**, so it reads as "when
+  right, how economical". A model that solves almost nothing can still post a high efficiency; read
+  it beside the score, never instead of it.
+- **`no_region` is not a synonym for `trunc`.** A model can finish cleanly and still fail the answer
+  contract. For qwen3.5-27b at L12, `no_region` (0.167) slightly exceeds `trunc` (0.164).
+
+## Caveats
+
+- **Four model-rows are contaminated** (qwen3.5-4b, qwen3.5-9b at all levels; qwen3.6-27b at L9+;
+  llama-3.1-8b mildly, 5.7–12.1%). Their scores are reported for completeness and are drawn dashed
+  with hollow markers in every figure.
+- **qwen3.6-27b has no L12 or L15 cell.** The grid driver's gate (`api_error_rate > 0.20` →
+  `REJECTED`) fired at L9 and broke that model's level loop. 33 of 35 cells completed.
+- **Symbolic mode only.** The v2 taskset carries no content-mode rendering, so nothing here speaks
+  to the modality gap.
+- **20 seeds per (task, level, ordering) cell** — 40 items per (model, level, task). Per-task
+  per-level cells are small; the L15 `preference_construction` success of 1.000 for qwen3.5-9b rests
+  on a handful of non-truncated items and means nothing on its own.
+- **No multi-antecedent rules.** The generator emits no `[defeasible d1: a AND b => c]`, a known gap
+  carried over from the v2 rewrite. Conjunctive antecedents are untested by this sweep.
+
+## Figures
+
+![Contamination by level](figures/fig1_contamination.png)
+
+*Figure 1 — the fraction of items that never reached the scorer, split into its two mechanisms.
+Hitting the token cap and timing out are different failures with different fixes: qwen3.6-27b is
+contaminated almost entirely by timeouts while its truncation rate falls to 6% at L9. Models flat at
+0% are drawn as markers, jittered sideways so they do not hide each other.*
+
+![Macro-average by level](figures/fig2_macro_by_level.png)
+
+*Figure 2 — macro-average against difficulty. Dashed with hollow markers means >20% of that model's
+items never reached the scorer, averaged over its levels.*
+
+![Recognise vs construct](figures/fig3_recognise_vs_construct.png)
+
+*Figure 3 — the sweep's sharpest result. gemma-4-E4B-it (light blue) sits near the 31B model on
+`status_query` and near the floor on construction.*
+
+![Task profile, gemma-4-31b-it](figures/fig4_task_profile_gemma-4-31b-it.png)
+
+*Figure 4 — every task at every level for the strongest uncontaminated model. The non-monotone
+curves noted in finding 5 are visible here; `preference_construction` is the near-flat line at
+~0.47–0.50 discussed in finding 6.*
+
+![Tokens vs truncation](figures/fig5_tokens_vs_truncation.png)
+
+*Figure 5 — truncation tracks mean output length, and output length clusters by model family. Each
+point is one (model, level) cell. qwen3.6-27b breaks the trend: 32–39K mean tokens at only 6–9%
+truncation, i.e. it writes long without looping.*
+
+Regenerate with `python docs/arggym2-eval-2026-08-11/make_figures.py` (needs the project venv).
+
+---
+
+# Appendix — full tables
 
 ## Macro-average and plumbing
 

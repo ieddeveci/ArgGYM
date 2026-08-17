@@ -27,3 +27,4 @@ data/tasksets/**/*.jsonl
 # Personal working area (notes, todos, coordination files)
 workspace/
 tmp/
+.claude/
