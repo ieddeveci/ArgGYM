@@ -21,6 +21,7 @@ and no figure puts a contaminated cell on the same visual footing as a clean one
 """
 from __future__ import annotations
 
+import argparse
 import glob
 import json
 import os
@@ -56,13 +57,19 @@ CONSTRUCTION = ["attack", "defence", "attack_defense", "counter_argument",
 # without reading a caption.
 CONTAM_LIMIT = 0.20
 
-RUN_RE = re.compile(r"__(?P<model>.+?)__L(?P<lvl>\d{2})__v2$")
+# Run-directory suffix identifying the sweep. A tag rather than a hardcoded
+# "v2" because a later sweep on a rebuilt taskset writes `__v3` dirs, and
+# globbing both at once would silently average two different tasksets into one
+# figure -- the exact mistake the tag exists to prevent.
+def run_re(tag: str) -> "re.Pattern":
+    return re.compile(rf"__(?P<model>.+?)__L(?P<lvl>\d{{2}})__{re.escape(tag)}$")
 
 
-def load() -> dict:
+def load(tag: str = "v2") -> dict:
+    rx = run_re(tag)
     cells = {}
-    for d in glob.glob(str(ROOT / "outputs" / "runs" / "*__v2")):
-        m = RUN_RE.search(os.path.basename(d))
+    for d in glob.glob(str(ROOT / "outputs" / "runs" / f"*__{tag}")):
+        m = rx.search(os.path.basename(d))
         if not m:
             continue
         p = Path(d) / "metrics.json"
@@ -280,8 +287,17 @@ def fig5_tokens_vs_truncation(cells):
 
 
 def main() -> None:
-    cells = load()
-    print(f"loaded {len(cells)} scored cells")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--tag", default="v2",
+                    help="run-directory suffix to read (v2, v3, ...). One tag "
+                         "per invocation: mixing sweeps built on different "
+                         "tasksets into one figure would compare models on "
+                         "different questions.")
+    tag = ap.parse_args().tag
+    cells = load(tag)
+    print(f"loaded {len(cells)} scored cells (tag {tag})")
+    if not cells:
+        raise SystemExit(f"no scored runs matching outputs/runs/*__{tag}")
     fig1_contamination(cells)
     fig2_macro_by_level(cells)
     fig3_recognise_vs_construct(cells)
