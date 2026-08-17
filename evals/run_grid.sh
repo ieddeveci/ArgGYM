@@ -108,16 +108,37 @@ EOF
       echo "--- score $m L$lvl"
       "$PY" -m "$SCORER" "$run_dir" \
           --taskset-dir "data/tasksets/$TASKSET_ID" 2>&1 | tee -a "$STATE/$m.L$lvl.log"
-      # Gate on API error rate: a run dominated by API errors means the server
-      # died mid-run, not that the model is bad (runner exits 0 either way).
+      # A high API-error rate has two causes that demand opposite responses, and
+      # the rate alone cannot tell them apart:
+      #
+      #   * the server died mid-run -- the cell is invalid, and the remaining
+      #     levels would only hammer a broken endpoint;
+      #   * the model times out on hard items -- the cell is a VALID measurement
+      #     of a model that cannot answer in the time allowed.
+      #
+      # Treating the second as the first loses data: in the 2026-08-11 sweep this
+      # gate fired on qwen3.6-27b at L9 and broke its level loop, so that model
+      # has no L12 or L15 cell at all. "Not measured" and "measured as failing"
+      # then look identical in the report, and only the second is a result.
+      #
+      # The server's own health endpoint is the discriminator: it answers whether
+      # the endpoint is alive, which is exactly the question the error rate
+      # cannot. A live server means the errors came from the model's latency, so
+      # the cell is kept and the ladder continues.
       err=$("$PY" -c "import json;print(json.load(open('$run_dir/metrics.json'))['overall'].get('api_error_rate',1))" 2>/dev/null || echo 1)
       if "$PY" -c "import sys;sys.exit(0 if $err<=0.20 else 1)" 2>/dev/null; then
         echo "$run_dir" > "$STATE/$m.L$lvl.done"
+      elif curl -sf -m 10 "${ENDPOINT_HEALTH:-http://localhost:8900/health}" >/dev/null 2>&1; then
+        # Server alive: model-side timeouts. Keep the cell, flag it so the report
+        # can mark it contaminated, and carry on down the ladder.
+        echo "$run_dir" > "$STATE/$m.L$lvl.done"
+        echo "$run_dir api_error_rate=$err" | tee "$STATE/$m.L$lvl.higherror"
+        echo "HIGH-ERROR (kept) $m L$lvl: api_error_rate=$err -- server healthy, model timed out"
       else
         echo "$run_dir api_error_rate=$err" | tee "$STATE/$m.L$lvl.crashed"
-        echo "REJECTED $m L$lvl: api_error_rate=$err -- server died mid-run"
-        # The server is likely dead; stop looping this model's remaining levels
-        # rather than hammering a broken endpoint. Remaining levels resume later.
+        echo "REJECTED $m L$lvl: api_error_rate=$err -- server unreachable"
+        # Endpoint is genuinely down; the remaining levels would fail the same
+        # way. They resume on the next run once the server is back.
         break
       fi
     else
