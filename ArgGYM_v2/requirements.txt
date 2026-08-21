@@ -1,25 +1,2 @@
-# ArgGYM dependencies.
-#
-# py_arg is the ASPIC+ engine. Its semantics ARE the gold: a version change can
-# legitimately alter claim statuses and invalidate a frozen taskset without any
-# change to this repository. Pin it alongside the taskset hash recorded in each
-# exported JSONL manifest.
-# NOT ON PyPI. The distribution is named `python-argumentation` and is published only as source:
-#
-#     git clone --depth 1 https://github.com/DaphneOdekerken/PyArg.git
-#     pip install ./PyArg
-#
-# That installs version 2.0.2, which imports as `py_arg`. `pip install py_arg` finds nothing, and
-# `importlib.metadata.version("py_arg")` raises -- query `python-argumentation` instead.
-#
-# Verified equivalent after a fresh install: 26/26 modules import, 26/26 task-ordering cells score
-# 1.000, cross-process determinism holds, and taskset hashes reproduce byte-identically.
-py_arg==2.0.2  # distribution: python-argumentation, from GitHub source
-
-# Flask is needed ONLY by inspector.py, the item-reading UI. Generation, scoring
-# and export do not import it.
+py_arg==2.0.2
 flask>=3.0
-
-# Python 3.12.3 was used throughout. Nothing here requires 3.12 specifically, but
-# the determinism gate compares runs across PYTHONHASHSEED values on one interpreter,
-# so the version is recorded in every export manifest.
