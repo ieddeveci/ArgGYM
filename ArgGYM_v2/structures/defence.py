@@ -68,11 +68,6 @@ def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
 
     support: List[str] = []
     cur = root
-    # A JUNCTION on the support chain: the defended claim rests on TWO branches, so an attacker can
-    # be aimed at either, and the defence must keep both alive. Placed off the final step so the
-    # target's own rule is untouched.
-    # Several junction points along the support chain, not one. A single junction in a 47-rule
-    # theory is a curiosity rather than a tested mechanism.
     j_points = set()
     if junction and support_depth >= 3:
         step = max(1, support_depth // (n_junctions + 1))
@@ -100,9 +95,6 @@ def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
 
     attackers: List[Attacker] = []
     ad = max(2, attacker_depth)
-    # Junctions on ATTACKER chains as well as the support chain. Confining them to the support chain
-    # capped the item at the support depth -- three junctions in a 52-rule theory. Each attacker chain
-    # is another place a branch can be cut.
     atk_junctions = max(0, n_junctions - len(j_points))
     for a in range(n_attackers):
         ar = next(it)
@@ -119,8 +111,6 @@ def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
                 first_mid = nxt
             nm = f"x{a+1}" if last else f"x{a+1}_{q}"
             _is_strict = last and strict
-            # A junction on a DEFEASIBLE step of the attacker chain: another branch the defence can
-            # cut. Never on a strict step, where an undercut would be inert and the branch decorative.
             if _use_j and not _is_strict and q == 0:
                 extra = []
                 for _e in range(2 if ternary else 1):

@@ -94,12 +94,6 @@ def _sentence(text: str, rng: random.Random, prefix: str = "",
 
 
 def _plain_neg(lit: str) -> str:
-    """A negated literal rendered plainly, for positions inside a larger clause.
-
-    The varied forms are clauses -- "p fails", "it is not the case that p" -- and substituting one into
-    a rule template gives "it is not the case that bm3 ordinarily yields ek3", which reads as denying
-    the whole rule rather than as a rule firing from not-bm3. In antecedent and rule-reference position
-    the negation must scope over the literal only."""
     return f"not {lit[1:]}" if lit.startswith("-") else lit
 
 
@@ -110,12 +104,6 @@ def _lit_phrase(lit: str, rng, cyc=None) -> str:
 
 
 def _rule_ref(o: Operation, rng, cyc=None) -> str:
-    """A rule described as a noun phrase, e.g. "the step from p to q".
-
-    A negated consequent is rendered plainly as "not q" here, NOT through the varied negated-literal
-    forms. Those forms are clauses -- "q fails", "q does not hold" -- and embedding a clause inside a
-    noun phrase produces "the move from ml7 to no4 fails", which reads as a sentence about the move
-    failing rather than a reference to it."""
     def plain(lit):
         return f"not {lit[1:]}" if lit.startswith("-") else lit
     tmpl = cyc.pick(RULE_REFERENCE) if cyc else rng.choice(RULE_REFERENCE)
@@ -161,11 +149,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     sentences.append(cyc.pick(OPENERS))
     for u in range(n_units):
         a, b, c = next(it), next(it), next(it)
-        # A NEGATION unit, every third from level 3. Before this the prose carried no negated
-        # literal a model had to write: zero negated premises, zero rebuts. The only negation was the
-        # word "not" inside an undercut template.
-        # a JUNCTION unit from level 8: two premises feed one rule, and the prose must make the
-        # conjunction explicit so the model writes both antecedents.
         if j_used[0] < j_budget:
             j1, j2, jr = next(it), next(it), next(it)
             use_strict_j = (u % 8 == 5) and prof.permits("strict")
@@ -188,12 +171,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
         neg_unit = level >= 3 and u % 3 == 2
         if neg_unit:
-            # cycle the four negation kinds in order, so the axiom-of-impossibility appears as often
-            # as the others. Indexing on `u` alone gave it only every twelfth unit.
-            # The five negation kinds are not all expressible in every fragment: kinds 0 and 4 need
-            # an axiom (impossibility), 3 and 4 need a strict rule. Rather than emit a forbidden kind
-            # and filter it away -- which would silently delete the MECHANISM, not just the directive --
-            # the cycle is restricted to the kinds the fragment can actually express.
             _avail = [1, 2]
             if prof.permits("axiom"):
                 _avail.append(0)
@@ -205,7 +182,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             kind = _avail[n_neg[0] % len(_avail)]
             n_neg[0] += 1
             if kind == 0:
-                # axiom of IMPOSSIBILITY, contradicted by an ordinary premise that loses outright
                 ops.append(Operation(kind="axiom", content="-" + a))
                 sentences.append(_sentence(cyc.pick(NEGATED_AXIOM).format(p=a), rng, at_start=True))
                 ops.append(Operation(kind="premise", content=a))
@@ -218,7 +194,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                                                 q=_lit_phrase(b, rng, cyc)), rng,
                     prefix=cyc.pick(FORWARD_CONNECTIVES)))
             elif kind == 1:
-                # a fallible DENIAL, decided by a premise preference
                 ops.append(Operation(kind="premise", content=a))
                 ops.append(Operation(kind="premise", content="-" + a))
                 ops.append(Operation(kind="prefer_premise", stronger="-" + a, weaker=a))
@@ -234,7 +209,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                                                 q=_lit_phrase(b, rng, cyc)), rng,
                     prefix=cyc.pick(FORWARD_CONNECTIVES)))
             elif kind == 2:
-                # a REBUT: two rules, one concluding b and one concluding -b, resolved by preference
                 ops.append(Operation(kind="premise", content=a))
                 ops.append(Operation(kind="premise", content=c))
                 sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
@@ -255,9 +229,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 sentences.append(_sentence(cyc.pick(PREFER_RULE).format(
                     R1=_rule_ref(ops[-3], rng, cyc), R2=_rule_ref(ops[-2], rng, cyc)), rng))
             elif kind == 4:
-                # an IMPOSSIBILITY AXIOM feeding a STRICT step: the conclusion is unassailable, and an
-                # attacker aimed at it is overruled. The same shape with a defeasible step would fall to
-                # an undercut, which is the type decision this unit tests.
                 ops.append(Operation(kind="axiom", content="-" + a))
                 sentences.append(_sentence(cyc.pick(NEGATED_AXIOM).format(p=a), rng, at_start=True))
                 ridx[0] += 1
@@ -274,7 +245,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 sentences.append(_sentence(cyc.pick(REBUT_RULE).format(p=c, q=b), rng,
                                            prefix=cyc.pick(OBJECTION_CONNECTIVES)))
             else:
-                # a strict EXCLUSION: p rules out q, and something else argues for q
                 ops.append(Operation(kind="premise", content=a))
                 ops.append(Operation(kind="premise", content=c))
                 sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))

@@ -98,10 +98,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     n_query = max(3, round(3 + (level - 1) * (40 - 3) / 14))
     n_group = max(3, round(n_query / 1.6))
     max_tower = 0 if level < 5 else min(1 + (level - 5) // 4, 3)
-    # JUNCTIONS from level 8. Cutting either branch kills the conclusion, so a claim above a junction
-    # can be overruled by a defeat on a branch that never mentions it.
-    # Sized from the EXPECTED rule count so the share is constant across the curriculum.
-    # A level-scaled budget gave 3% at level 5 and 21% at level 15 from the same machinery.
     j_budget = junctions_for(level, max(1, n_group * 3))
     j_used = [0]
 
@@ -116,8 +112,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         root, mid = next(it), next(it)
 
         if j_used[0] < j_budget and prof.permits("defeasible"):
-            # a junction whose SECOND branch is dead, so the conclusion is overruled even though
-            # nothing attacks it and its first branch is healthy
             b1, b2, jt = next(it), next(it), next(it)
             ops.append(Operation(kind="premise", content=b1))
             ops.append(Operation(kind="premise", content=b2))
@@ -140,9 +134,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             continue
 
         if not prof.permits("defeasible"):
-            # P_S: no defeasible rules, so neither undercut nor rebut is available. The only lever is
-            # a premise preference on the root, which is why this fragment is a different problem
-            # rather than an easier one.
             ops.append(Operation(kind="premise", content=root))
             ridx[0] += 1
             ops.append(Operation(kind="strict", name=f"r_{ridx[0]}",
@@ -208,9 +199,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 ops.append(Operation(kind="prefer_rule", stronger=atk, weaker=sup))
         planned.append((mid, want))
 
-        # The axiom root and the strict step are gated SEPARATELY. Tying them together meant P_S_D,
-        # which forbids axioms but permits strict rules, produced no strict rules at all and was
-        # indistinguishable from P_D.
         if g % 4 == 1 and prof.permits("strict"):
             a2, b2 = next(it), next(it)
             ops.append(Operation(kind="axiom" if prof.permits("axiom") else "premise",

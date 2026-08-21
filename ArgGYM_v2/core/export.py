@@ -111,5 +111,3 @@ def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1)) ->
             f.write(json.dumps(r, default=str) + "\n")
     print(f"wrote {len(rows)} items ({manifest['n_valid']} valid) -> {path}")
     print(f"taskset_hash {manifest['taskset_hash']}")
-
-

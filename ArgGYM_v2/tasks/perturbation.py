@@ -121,8 +121,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ridx = 0
 
     n_axiom = max(0, n_comp // 4)
-    # Estimate includes the enrichment and perturbation rules, not just the component
-    # chains -- sizing on chains alone undershot at 11%.
     j_budget = junctions_for(level, max(1, n_comp * depth + n_pert + 6))
     for ci in range(n_comp):
         root = next(it)
@@ -134,12 +132,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         chain: List[Tuple[str, str, bool]] = []
         strict_at = ((depth // 2) if (depth >= 3 and ci % 3 == 0
                                      and PROFILES[profile].permits("strict")) else -1)
-        # a JUNCTION step from level 8, on every third component. Cutting either branch changes
-        # everything above it, so a perturbation on the branch propagates to claims that never
-        # mention it -- a cascade a linear chain cannot produce.
-        # Depth gate lowered from 4 to 2 and MULTIPLE points per component. Requiring depth >= 4 gave
-        # 0% at level 5, where components are shallow, and one point per component capped the share at
-        # about 11% however large the budget was.
         _pts = set()
         if depth >= 2 and ci < j_budget:
             _pts.add(min(depth - 1, depth // 2 + 1))
@@ -155,8 +147,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             strict = (j == strict_at)
             if j in _pts:
                 broot = next(it)
-                # a share of branches fire from a NEGATED root. Junctions are a fifth of all rules
-                # now, so positive-only branches diluted negation from 17% to 6% as theories grew.
                 _bsrc = ("-" + broot) if negated_branch(ci) else broot
                 ops.append(Operation(kind="premise", content=_bsrc))
                 ridx += 1

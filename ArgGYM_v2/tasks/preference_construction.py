@@ -117,14 +117,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         node = next(it)
         cur = pro_root
         pro_rules: List[str] = []
-        # a JUNCTION on the supporting chain from level 8. Under weakest-link this matters most:
-        # the argument is only as strong as its weaker branch, so a preference over one branch does
-        # not settle the conflict on its own.
-        # depth jitters per seed, so gating on depth >= 3 made the junction count depend on
-        # the draw rather than the level. A depth-2 chain can carry a junction on its
-        # first rule, so the floor is 2 and the index is clamped.
-        # Multiple points per conflict. One point per conflict capped the share near 14%: the number
-        # of conflicts is the curriculum's own axis, so the budget could not be spent.
         _pts = set()
         if depth >= 2 and ci < j_budget:
             _pts.add(min(depth // 2, depth - 1))
@@ -300,9 +292,6 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
     wants = ", ".join(f"{g['claim']} {_STATUS_WORD.get(g['want'], g['want'].lower())}"
                       for g in goals)
     verb = "makes" if len(goals) == 1 else "simultaneously makes"
-    # The permitted FORMS live in docs/NOTATION.md. The one-line constraint stays, because it is part
-    # of the question rather than an explanation of the notation: it says what kind of answer is being
-    # asked for, not what the syntax looks like.
     lines += ["", f"What is the minimal set of preference directives that {verb} {wants}?", "",
               "Permitted additions: preference directives only. "
               "No new rules or premises may be added.", "",

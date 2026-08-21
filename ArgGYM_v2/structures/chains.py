@@ -62,17 +62,6 @@ def _chain_of(root: str, root_axiom: bool, target: str, depth: int,
               rule_names: Sequence[str], strict_at: Sequence[int], config: str,
               mid_names: Sequence[str], n_junctions: int = 0,
               ternary: bool = False) -> Chain:
-    """Build a chain, optionally with junction steps.
-
-    Junctions are a PROPERTY OF ANY CHAIN rather than a separate configuration. They arrived as C8, a
-    dedicated config, which meant a junction appeared only when the pool happened to draw C8 -- one
-    multi-antecedent rule in a 46-rule theory, about 2%. Multi-premise rules are the normal case in
-    argumentation, not a special shape, so any configuration can now carry them and the count is a
-    parameter rather than an accident of config selection.
-
-    A junction is never placed on a STRICT step: a strict rule cannot be undercut, so a branch feeding
-    one contributes no new cut point and the extra structure would be decoration.
-    """
     assert depth >= 1
     mids = list(mid_names[:max(0, depth - 1)])
     seq = [root] + mids + [target]
@@ -91,11 +80,6 @@ def _chain_of(root: str, root_axiom: bool, target: str, depth: int,
         for k, i in enumerate(sorted(set(picks))):
             n_extra = 2 if (ternary and k % 2 == 0) else 1
             for e in range(n_extra):
-                # Branch root and branch literal must be DISTINCT names. Deriving the literal from
-                # seq[i] collided with the root at i == 0, where seq[0] IS the root, producing the
-                # self-supporting rule `rt_j00 => rt_j00`.
-                # a share of branches fire from a NEGATED root. Junctions are a fifth of all rules,
-                # so positive-only branches diluted negation as theories grew -- attack fell to 9%.
                 broot = f"{root}_jr{i}{e}"
                 if negated_branch(i * 2 + e):
                     broot = "-" + broot
@@ -165,17 +149,6 @@ def build_c7(root, mids, target, rn, depth=4, n_defeasible=2,
 
 def build_c9(root, mids, target, rn, depth=3,
              n_junctions: int = 0, ternary: bool = False) -> Chain:
-    """A chain whose FINAL rule is defeasible, so the target is REBUTTABLE here.
-
-    Every other configuration ends strict, which closed the rebut route entirely and meant the task
-    never exercised the third attack form. Measured: with EVERY chain ending defeasibly, one rebut plus
-    a preference over each final rule clears the item -- n+1 directives, no per-chain discrimination.
-    That is why the pool must MIX: a rebut cannot touch a strict-final chain, so an item containing
-    both forces both strategies, and the proven minimum stays at one move per chain.
-
-    A mid-chain strict rule is kept so the configuration is not simply "all defeasible": that rule
-    cannot be undercut, so the cut point must be chosen rather than applied by formula.
-    """
     d = max(3, depth)
     mid_strict = (d // 2,) if d >= 3 else ()
     return _chain_of(root, False, target, d, rn, mid_strict, "C9", mids, n_junctions=n_junctions, ternary=ternary)
@@ -183,23 +156,11 @@ def build_c9(root, mids, target, rn, depth=3,
 
 def build_c8(root, mids, target, rn, depth=3,
              n_junctions: int = 0, ternary: bool = False) -> Chain:
-    """A JUNCTION chain: one step draws on a second branch with its own root.
-
-    Cutting either branch kills the target, so this configuration admits an undermine at EITHER root
-    and an undercut on either branch's rule. Every other configuration is linear, which meant nothing
-    in the suite exercised a conclusion with two independent supports.
-
-    The second branch is carried in extra_ops so the existing profile machinery is untouched."""
     d = max(3, depth)
-    # The FINAL rule is strict, matching every other configuration this family uses: the attack
-    # builder rejects any chain whose last rule is defeasible, because a defeasible final rule makes
-    # the target rebuttable and the family's items are built around undercut and undermine.
     ch = _chain_of(root, False, target, d, rn, (d - 1,), "C8", mids, n_junctions=n_junctions, ternary=ternary)
     broot = f"{root}_b"
     blit = f"{mids[0]}_b" if mids else f"{target}_b"
     brule = f"{rn[0]}b"
-    # the junction sits on a DEFEASIBLE step, never the strict final one, so both branches remain
-    # attackable
     at = min(d // 2, d - 2)
     ch.rules[at]["ants"] = [ch.rules[at]["ants"][0], blit]
     ch.extra_ops.extend([

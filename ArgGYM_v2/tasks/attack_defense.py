@@ -56,11 +56,6 @@ class Item:
 
     @property
     def subgoals(self) -> List[str]:
-        """Literals whose defeat is measurable progress toward an OVERRULED goal.
-
-        The chain APEXES -- the antecedents of the rules concluding the target. The target itself is
-        justified while any chain survives, so it carries no incremental signal; the apexes fall one at
-        a time. Declared rather than inferred, so the scorer stays task-agnostic."""
         out = []
         for g in self.goals:
             if g.get("want") != "OVERRULED":
@@ -124,9 +119,6 @@ def build_attack_item(level: int, seed: int, ordering: str,
                                       ["C2", "C4", "C6", "C7", "C8", "C9"])
     prof = PROFILES[profile]
     if not prof.permits("axiom"):
-        # C3 and C4 are the only configurations with an axiom root -- measured. Dropping them leaves
-        # five configs at level 10+, still above the want_distinct floor of three, so the item can
-        # still mix. P_D is NOT reachable here: the task requires at least one strict-final chain.
         pool = [c for c in pool if c not in ("C3", "C4")] or ["C2"]
     picks = [pool[i % len(pool)] for i in range(n)]
     rng.shuffle(picks)
@@ -162,10 +154,6 @@ def build_attack_item(level: int, seed: int, ordering: str,
         for _ in range(depth + 2):
             ridx += 1
             rn.append(f"d{ridx}")
-        # Junctions per chain, from the item budget spread across chains. Previously a junction
-        # appeared only when the pool drew C8 -- one multi-antecedent rule in a 46-rule theory, about
-        # 2%. Every configuration now carries them, so the count is a parameter rather than an
-        # accident of config selection.
         per_chain = max(0, j_budget // max(1, len(picks)))
         if j_budget and per_chain == 0 and ci < j_budget:
             per_chain = 1
@@ -176,20 +164,6 @@ def build_attack_item(level: int, seed: int, ordering: str,
         else:
             ch = cs.builder(root, mids, target, rn, depth,
                             n_junctions=per_chain, ternary=wants_ternary(level, ci))
-        # AT LEAST ONE chain must end strict -- not every chain.
-        #
-        # Measured. With every chain ending defeasibly, one rebut plus a preference over each final
-        # rule clears the item. That is n+1 directives, MORE than the n needed to cut each chain, so
-        # it is not cheaper -- but it is ONE STRATEGY REPEATED, with no per-chain discrimination, and
-        # discrimination is what this task exists to test.
-        #
-        # A MIX is strictly better than all-strict: the rebut formula cannot touch the strict chains,
-        # so the model must undercut or undermine those AND may rebut the defeasible ones. Verified on
-        # a four-chain SSDD configuration: the formula alone leaves the target JUSTIFIED, and the
-        # proven minimum stays at one move per chain.
-        #
-        # Requiring every chain to end strict also removed rebut from the task entirely, which is why
-        # a defeasible-final chain should appear.
         pass
         chains.append(ch)
         ops.extend(ch.to_ops())
@@ -253,10 +227,6 @@ def build_attack_item(level: int, seed: int, ordering: str,
                 metadata={
                     "n_chains": n, "chain_depth": depth, "configs": picks,
                     "distinct_configs": len(set(picks)),
-                    # CHAIN rules only -- decoy strict rules and language enrichment are excluded.
-                    # Named `n_chain_rules` because `n_rules` was read as theory size in the
-                    # curriculum audit and reported 30 where the theory held 41. `n_theory_rules` is
-                    # the total, so a reader cannot pick the wrong one by accident.
                     "n_chain_rules": sum(len(c.rules) for c in chains),
                     "n_theory_rules": sum(1 for o in base
                                           if o.kind in ("defeasible", "strict")),

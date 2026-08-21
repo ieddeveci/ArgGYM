@@ -213,21 +213,6 @@ def _decompose(candidates, holds, probe_singletons=True):
 
 
 def minimal_subset_exact(candidates, holds, max_calls=20000):
-    """Smallest subset of `candidates` satisfying `holds`, with a proof flag.
-
-    PRECONDITION: THE CANDIDATES MUST BE INDEPENDENT.
-
-    The forced-element prefilter asks, for each candidate, whether removing it breaks the answer. That
-    question is only meaningful if removing one candidate leaves the rest VALID. A preference over a
-    rule that is itself among the candidates violates this: drop the rule and the preference is not
-    merely absent, it is a dangling reference the engine rejects, so the prefilter marks the rule
-    forced when it is not.
-
-    Measured on a four-chain mixed configuration: with `w` and `prefer_rule: w > b2` both among the
-    candidates the search returned 5 when 4 sufficed. Not a logic error -- a precondition violation.
-
-    Verified across every task: 0 dependent preferences in any real reference answer, so current
-    minima are sound. `minimality.candidates_independent` gates that it stays true."""
     full = list(candidates)
     calls = [0]
 
@@ -274,18 +259,6 @@ def minimal_subset_exact(candidates, holds, max_calls=20000):
 
 
 def transpose_rule(op):
-    """Every transposition of a strict rule, as a list of Operations.
-
-    For a1 AND ... AND an -> c the transpositions are, for each i,
-        -c AND (all aj, j != i) -> -ai
-
-    Closure under transposition is a PRECONDITION of the Caminada and Amgoud rationality postulates,
-    not a stylistic choice. Without it, two strict rules with contradictory conclusions leave both
-    conclusions justified and the extension inconsistent -- verified on the Married John example, where
-    hs and -hs are both justified and is_consistent() returns False. With the transpositions present the
-    cluster becomes UNDECIDED, which is the correct defeasible answer, and a preference on the
-    DEFEASIBLE step below resolves it. Strict rules themselves cannot be out-preferred.
-    """
     from aspic.engine import Operation
     if op.kind != "strict":
         return []
@@ -306,13 +279,6 @@ def transpose_rule(op):
 
 
 def close_under_transposition(ops):
-    """Add every missing transposition of every strict rule. Returns (ops, n_added).
-
-    Measured on existing tasks: adding these changes ZERO statuses in status_query,
-    defeat_diagnosis and attack, because no current generator emits two strict rules with
-    contradictory consequents. It is therefore a free addition, and its value is that it stops the
-    postulates holding by luck of construction.
-    """
     have = {(tuple(o.antecedents or ()), o.consequent)
             for o in ops if o.kind == "strict"}
     added = []
@@ -328,11 +294,6 @@ def close_under_transposition(ops):
 
 
 def strict_conclusions_clash(ops):
-    """Strict rules whose conclusions contradict, as (name_a, name_b) pairs.
-
-    Such a pair without transposition closure is exactly the configuration that violates indirect
-    consistency, so a generator emitting one must also close under transposition.
-    """
     strict = [o for o in ops if o.kind == "strict" and o.consequent]
     out = []
     for i, a in enumerate(strict):

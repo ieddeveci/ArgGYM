@@ -121,11 +121,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             else:
                 nxt = next(it)
             strict = ax_strict or (last and strict_flags[ci])
-            # a JUNCTION step from level 8. It gives each chain a second branch that must also be
-            # dealt with, and under weakest-link the chain is only as strong as its weaker branch.
-            # Junctions on every chain, spread along its defeasible steps, from the item budget.
-            # The old condition put one on alternate chains at a single depth, capping the item at
-            # three multi-antecedent rules in a 38-rule theory.
             _per = max(0, j_budget // max(1, n_chain))
             if j_budget and _per == 0 and ci < j_budget:
                 _per = 1
@@ -137,8 +132,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 _extra = []
                 for _e in range(2 if wants_ternary(level, ci) else 1):
                     broot = next(it)
-                    # a share of branches fire from a NEGATED root -- junctions are a fifth of all
-                    # rules, so positive-only branches diluted negation as theories grew
                     _bsrc = ("-" + broot) if negated_branch(ci) else broot
                     ops.append(Operation(kind="premise", content=_bsrc))
                     ridx += 1
@@ -346,10 +339,6 @@ def _render_prompt(theory: str, target: str, ordering: str,
                    allow_strict: bool = False) -> str:
     on = "the last-link strength ordering" if ordering == LAST_LINK \
         else "the weakest-link strength ordering"
-    # The PERMITTED-FORMS block lives in docs/NOTATION.md. A benchmark item states the
-    # question; what the DSL looks like and which additions are legal is context a
-    # researcher supplies deliberately, so that notation-knowledge stays a separate
-    # variable from reasoning.
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {target} is currently justified.\n"

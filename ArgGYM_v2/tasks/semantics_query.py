@@ -1,30 +1,3 @@
-"""semantics_query -- status under a NAMED semantics.
-
-Every other task in the suite evaluates under grounded. Grounded is unique and maximally sceptical,
-which makes it the right default for a determinate answer, but it means nothing in ArgGYM ever tests
-the distinction between semantics, or between sceptical and credulous acceptance.
-
-THE MEASURED CONSTRAINT. Preferred is intractable above roughly 25 directives, and the cost is NOT in
-enumerating extensions -- it is in argument construction and the admissibility search:
-
-    17 directives, 4 preferred extensions -> 0.20s
-    22 directives, 4 preferred extensions -> 2.51s
-    32 directives, 4 preferred extensions -> over 12s
-
-So this task cannot share `status_query`'s theories, which reach 280 directives. It is a separate task
-with small theories, and its curriculum grows by WHICH DISTINCTION IS REQUIRED rather than by size.
-
-THE STRUCTURES, each verified for cost and divergence:
-
-    floating conclusion   6 ops   f: grounded UNDECIDED, sceptical preferred JUSTIFIED
-    two-cycle             6 ops   p: sceptical UNDECIDED, credulous JUSTIFIED
-    odd conflict          9 ops   no stable extension in some configurations
-    reinstatement         6 ops   all semantics agree -- a control, so divergence is not automatic
-
-The floating conclusion is the important one. Both preferred extensions contain `f` -- one via `p`, one
-via `-p` -- so it is sceptically justified while grounded declines to commit. This is one of the field's
-longest-running disagreements, and no other ArgGYM task can express it.
-"""
 from __future__ import annotations
 
 import collections
@@ -44,21 +17,6 @@ LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 EASY_LEVELS = 3
 MAX_DIRECTIVES = 26
 
-# EAGER'S CEILING IS ARGUMENTS, NOT DIRECTIVES.
-#
-# Measured on the leanest possible encoding -- independent one-step rules, one argument each:
-#
-#     16 arguments ->  8.46s
-#     18 arguments -> 42.63s
-#     20 arguments -> over 90s
-#
-# Growth is 2.24x per additional argument, so a 60-second budget buys 18 and no more: 19 is 96s, 20 is
-# 215s, and 40 would be roughly 72 years. Structure does not help -- a determinate chain with ONE
-# semi-stable extension costs the same as a cyclic one at equal argument count, because semi-stable
-# enumeration searches the argument powerset rather than the extensions.
-#
-# Only levels that ASK under eager pay this. Everything below level 14 is bounded by preferred, which
-# is far cheaper, and keeps the larger MAX_DIRECTIVES.
 MAX_EAGER_ARGUMENTS = 18
 MAX_STATUS_SHARE = 0.45
 PANEL_THRESHOLD = round(MAX_STATUS_SHARE + 0.03, 3)
@@ -115,16 +73,6 @@ def render_ops(ops: Sequence[Operation]) -> str:
 
 def status_under(ops: Sequence[Operation], claim: str, semantics: str,
                  ordering: str) -> Optional[str]:
-    """The status of `claim` under a named semantics.
-
-    Each of the four is determinate for a given claim even where the EXTENSIONS are not, which is what
-    makes per-claim scoring possible at all. The multiplicity lives in the extensions, not in the
-    answer to "is this claim accepted".
-
-    Sceptical stable on a framework with NO stable extension is vacuously true of everything. That is
-    the standard convention and it is why existence must be reported separately rather than folded into
-    the status.
-    """
     try:
         v = ASPICVerifier.from_operations(list(ops), ordering=ordering)
     except Exception:
@@ -144,9 +92,6 @@ def status_under(ops: Sequence[Operation], claim: str, semantics: str,
                 return "OVERRULED"
             return "JUSTIFIED" if any(claim in e for e in exts) else "OVERRULED"
         if semantics == EAGER:
-            # UNIQUE, like grounded, so the status is determinate and there is no sceptical/credulous
-            # split. Eager is less sceptical: it commits where grounded declines, which is the whole
-            # reason for asking under both.
             eager = {str(getattr(x, "conclusion", x)) for x in v.fw.eager_extension()}
             if claim in eager:
                 return "JUSTIFIED"
@@ -171,7 +116,7 @@ class SemItem:
     prompt: str
     theory_text: str
     base_ops: List[Operation]
-    queries: List[Tuple[str, str]]          # (claim, semantics)
+    queries: List[Tuple[str, str]]
     gold: Dict[Tuple[str, str], str]
     ordering: str
     level: int
@@ -180,10 +125,6 @@ class SemItem:
 
 
 def _floating(it, ridx) -> Tuple[List[Operation], str, str]:
-    """Two rival premises, both routes reaching the SAME conclusion.
-
-    Verified: the shared conclusion is UNDECIDED under grounded and JUSTIFIED under sceptical
-    preferred, because both preferred extensions contain it by different routes."""
     a, b, p, f = next(it), next(it), next(it), next(it)
     ridx[0] += 1
     r1 = f"r_{ridx[0]}"
@@ -202,7 +143,6 @@ def _floating(it, ridx) -> Tuple[List[Operation], str, str]:
 
 
 def _settled(it, ridx) -> Tuple[List[Operation], str]:
-    """A reinstatement chain. All four semantics agree, so divergence is not automatic."""
     a, b, c, x = next(it), next(it), next(it), next(it)
     ridx[0] += 1
     r1 = f"r_{ridx[0]}"
@@ -219,21 +159,6 @@ def _settled(it, ridx) -> Tuple[List[Operation], str]:
 
 
 def _self_undermining(it, ridx):
-    """A loop that undermines itself: p is derived from -p by way of q.
-
-    THE STRUCTURE WHERE EAGER AND GROUNDED PART. Grounded refuses to commit to -p or q, because the
-    chain leads to p and p contradicts its own root. Eager commits: the argument for -p sits in every
-    semi-stable extension and defends itself, so it is admissible throughout.
-
-    Found by random search over small ASPIC+ theories rather than constructed from theory -- 2
-    divergences in 60 tries, and this is the smallest. Purely abstract frameworks diverge far more
-    readily (4 in 4000 random graphs), but ASPIC+ instantiation constrains the attack relation:
-    sub-argument closure and contrariness-derived attacks rule out most of the asymmetric shapes that
-    separate the two semantics.
-
-    Verified identical under both orderings, and cheap: four such loops in sixteen directives cost
-    0.33s.
-    """
     from aspic.engine import Operation
     a, p, q = next(it), next(it), next(it)
     names = []
@@ -248,12 +173,6 @@ def _self_undermining(it, ridx):
 
 
 def _junction_cluster(it, ridx, ternary: bool):
-    """A conclusion resting on TWO or THREE branches, one of which is contested.
-
-    semantics_query had NO multi-antecedent rules at all -- its structures are built from single-
-    antecedent chains. A junction whose branches disagree across extensions is exactly where the
-    semantics differ: the conclusion is undecided under grounded and can be justified under preferred
-    if every extension supplies some branch."""
     from aspic.engine import Operation
     roots = [next(it) for _ in range(3 if ternary else 2)]
     lits = [next(it) for _ in roots]
@@ -267,19 +186,11 @@ def _junction_cluster(it, ridx, ternary: bool):
     ridx[0] += 1
     ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
                          antecedents=tuple(lits), consequent=concl))
-    # contest the FIRST branch, so the junction's status depends on how that contest resolves
     ops.append(Operation(kind="premise", content="-" + roots[0]))
     return ops, concl
 
 
 def _defeated(it, ridx):
-    """A claim decisively DEFEATED by a preference: overruled under every semantics.
-
-    Needed because the other three structures produce only JUSTIFIED and UNDECIDED, so gold had two
-    statuses and the blind-guess floor could not fall below one half. A third status is what moves the
-    floor towards one third. Verified: the loser is OVERRULED under grounded, sceptical preferred,
-    credulous preferred and stable alike, because the preference settles the conflict in every
-    extension."""
     from aspic.engine import Operation
     a, b, x = next(it), next(it), next(it)
     ridx[0] += 1
@@ -290,17 +201,11 @@ def _defeated(it, ridx):
            Operation(kind="defeasible", name=pro, antecedents=(a,), consequent=x),
            Operation(kind="defeasible", name=con, antecedents=(b,), consequent="-" + x),
            Operation(kind="prefer_rule", stronger=con, weaker=pro),
-           # A PREMISE preference as well as a rule preference. Under weakest-link an argument is only
-           # as strong as its weakest element, so a rule preference alone leaves the conflict
-           # UNDECIDED -- verified. Without this the cluster produced one distinct status, the balance
-           # check rejected the item, and levels 1-3, which ask under grounded only, had nothing left
-           # to vary: yield was 0/4 under weakest-link at every level below 4.
            Operation(kind="prefer_premise", stronger=b, weaker=a)]
     return ops, x
 
 
 def _odd(it, ridx) -> Tuple[List[Operation], str]:
-    """Three claims in a cycle of conflict. Drives stable non-existence in some configurations."""
     a, b, c, x, y, z = (next(it) for _ in range(6))
     names = []
     for _ in range(6):
@@ -320,10 +225,6 @@ def _odd(it, ridx) -> Tuple[List[Operation], str]:
 def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
-    # Clusters STOP growing at 2. Levels 12-15 add stable semantics, and adding a third
-    # cluster at the same time pushed generation to 61s per item. The curriculum here is
-    # meant to grow by WHICH DISTINCTION IS REQUIRED, not by theory size -- that is the
-    # whole reason this is a separate task from status_query.
     n_cluster = 2
 
     it = iter(_names(stable_seed(seed, level, ordering, "nm"), 40 + n_cluster * 12))
@@ -331,26 +232,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     ridx = [0]
     candidates: List[str] = []
 
-    # The FIRST cluster is always floating. Divergence is not automatic -- a settled or odd cluster
-    # alone gives an item on which every semantics agrees, which tests nothing about semantics and is
-    # rejected below. Rotating freely left level 4 with no floating cluster and a 0/4 yield.
-    # A DEFEATED cluster is always present alongside the floating one, so gold carries three
-    # statuses rather than two. With only JUSTIFIED and UNDECIDED available the blind-guess floor is
-    # one half by construction, whatever the balancing does.
     kinds = ["defeated", "settled", "odd"]
-    # TWO clusters total, always floating + defeated. Adding a third pushed level 12 from
-    # 0.2s to 17.6s -- preferred enumeration is exponential in the argument graph, so every
-    # extra cluster is expensive. Two suffice: floating gives the grounded/preferred
-    # divergence and defeated gives the third status the floor needs.
     j_budget = junction_budget(level, JUNCTION_CAPS.get("semantics_query", 3))
-    # The self-undermining cluster REPLACES the junction cluster when eager is asked, rather than
-    # adding to it. Every cluster adds arguments and eager is computed from the semi-stable extensions,
-    # so the cost is exponential in the graph: measured, adding a fourth cluster took level 14 from
-    # about 3s to 61.8s. Three clusters is the ceiling this task can afford.
-    # At eager levels a FOURTH cluster fits inside the 18-argument budget: the three base clusters
-    # come to about 14 arguments, and a settled chain adds three or four. Below eager levels the
-    # budget is bounded by preferred instead, which is far cheaper, so a fourth cluster is affordable
-    # there too.
     _n_cluster = 2 + (1 if (j_budget or EAGER in sems) else 0)
     for k in range(_n_cluster):
         kind = ("floating" if k == 0 else "defeated" if k == 1
@@ -362,10 +245,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
             block, x = _self_undermining(it, ridx)
             candidates.append(x)
         elif kind == "junction":
-            # BINARY only. A third branch adds another argument to the graph and preferred
-            # enumeration is exponential in it -- measured, level 12 went from 2.9s to 17.1s with a
-            # ternary junction. This task is bounded by that cost in a way no other task is, so it
-            # takes the cheaper structure and the ternary arity lives in the tasks that can afford it.
             block, x = _junction_cluster(it, ridx, ternary=False)
             candidates.append(x)
         elif kind == "defeated":
@@ -393,12 +272,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     base = facts + rules + prefs
 
     if EAGER in sems:
-        # FILL THE ARGUMENT BUDGET EXACTLY.
-        #
-        # Three clusters come to 14 arguments and a fourth to 20, so cluster granularity cannot land
-        # on 18. Lean units -- one premise feeding one rule -- add exactly two arguments each, so the
-        # budget can be spent to the last one. Each is an independent claim, which also gives the
-        # query selector more material to balance over.
         try:
             _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
             _na = len(_v.fw.af.arguments)
@@ -421,7 +294,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         except Exception:
             return None
 
-    # every (claim, semantics) pair the item could ask, with its engine-computed answer
     gold: Dict[Tuple[str, str], str] = {}
     for c in candidates:
         for s in sems:
@@ -432,8 +304,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     if not gold:
         return None
 
-    # keep the pairs, preferring ones where the semantics DISAGREE -- an item on which every
-    # semantics gives the same answer tests nothing about semantics
     by_claim: Dict[str, List[str]] = {}
     for (c, s) in gold:
         by_claim.setdefault(c, []).append(s)
@@ -441,17 +311,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     if level > EASY_LEVELS and not diverging:
         return None
 
-    # BALANCED SELECTION, ported from `status_query`.
-    #
-    # Measured before this: gold was 61.1% JUSTIFIED and a blind "everything justified" scored 0.611
-    # against this task's own 0.48 threshold. The cause is structural rather than accidental -- a
-    # floating conclusion is JUSTIFIED under sceptical preferred, credulous preferred AND stable, and
-    # only UNDECIDED under grounded, so asking one claim under four semantics yields three "justified"
-    # answers by construction.
-    #
-    # `status_query` has this step for exactly the same reason and it was not carried over when this
-    # task was written. Selection caps the modal share per item, which is what moves the floor from the
-    # majority class down towards the number of distinct answers.
     by_status = collections.defaultdict(list)
     for k, v in gold.items():
         by_status[v].append(k)
@@ -460,15 +319,10 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         rng.shuffle(by_status[v])
     order = sorted(by_status, key=lambda v: -len(by_status[v]))
     queries = []
-    # round-robin across statuses, so the scarcest is never crowded out
     while any(by_status[v] for v in order):
         for v in order:
             if by_status[v]:
                 queries.append(by_status[v].pop())
-    # GUARANTEE REPRESENTATION FOR EVERY SEMANTICS ASKED. Balancing alone selects on status, so at
-    # eager levels -- where five semantics compete for three query slots -- eager pairs were dropped
-    # entirely: measured 0 eager queries across generated items. A semantics the item pays for and
-    # never asks about is wasted cost, and eager is the most expensive of the five.
     _first_of = {}
     for q in queries:
         _first_of.setdefault(q[1], q)
@@ -481,7 +335,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         cand = counts.copy()
         cand[gold[q]] += 1
         n = sum(cand.values())
-        # required pairs bypass the share cap; the cap then governs everything after them
         if q not in _required and n >= 3 and max(cand.values()) / n > MAX_STATUS_SHARE:
             continue
         kept.append(q)

@@ -446,10 +446,6 @@ def api_generate():
                         "level": cit.level, "ordering": cit.ordering, "prompt": cit.prompt,
                         "reference": cit.reference, "ref_score": ref["score"],
                         "min_directives": cit.min_directives,
-                        # BOTH goals, matching the scorer, which requires -tg JUSTIFIED AND tg
-                        # OVERRULED. Listing one made the inspector disagree with the grader about
-                        # what the item requires -- the worst inconsistency in a tool whose only job
-                        # is letting a human read items correctly.
                         "goals": [{"claim": "-" + cit.target, "current": "not justified",
                                    "want": "JUSTIFIED"},
                                   {"claim": cit.target, "current": "justified",

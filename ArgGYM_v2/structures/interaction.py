@@ -66,11 +66,6 @@ def build_mixed(names: Sequence[str], ordering: str = LAST_LINK,
     ops: List[Operation] = [Operation(kind="premise", content=root)]
     cur = root
     shared_rule = None
-    # A JUNCTION on the shared stem. The stem already feeds BOTH targets, so a second branch means an
-    # attack aimed at the branch propagates to the claim that must be defended as well as the one that
-    # must be attacked -- the interference this task is built around, one step further back.
-    # Junction points across the shared stem, from the item budget. One point gave a single
-    # multi-antecedent rule in a 41-rule theory, about 2%.
     j_points = set()
     if junction and max(1, shared_depth) >= 1:
         for k in range(max(1, n_junctions)):
