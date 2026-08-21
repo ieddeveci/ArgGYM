@@ -7,6 +7,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
+from core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
+from core.curriculum import negated_branch
 from core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
                         randomize_rule_names, remap_text, language_enrichment)
 
@@ -101,6 +103,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     strict_flags = [i < n_strict for i in range(n_chain)]
     rng.shuffle(strict_flags)
     junction = next(it) if (mid_target and depth >= 3 and n_chain >= 2) else None
+    j_budget = junctions_for(level, max(1, n_chain * depth))
     for ci in range(n_chain):
         root = next(it)
         ax_strict = ci < n_axiom_strict
@@ -118,8 +121,40 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             else:
                 nxt = next(it)
             strict = ax_strict or (last and strict_flags[ci])
-            ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
-                                 antecedents=(cur,), consequent=nxt))
+            # a JUNCTION step from level 8. It gives each chain a second branch that must also be
+            # dealt with, and under weakest-link the chain is only as strong as its weaker branch.
+            # Junctions on every chain, spread along its defeasible steps, from the item budget.
+            # The old condition put one on alternate chains at a single depth, capping the item at
+            # three multi-antecedent rules in a 38-rule theory.
+            _per = max(0, j_budget // max(1, n_chain))
+            if j_budget and _per == 0 and ci < j_budget:
+                _per = 1
+            _jpts = set()
+            if _per and depth >= 2:
+                _stepj = max(1, (depth - 1) // (_per + 1))
+                _jpts = {min(depth - 2, _stepj * (z + 1)) for z in range(_per)}
+            if (not strict and not last and j in _jpts):
+                _extra = []
+                for _e in range(2 if wants_ternary(level, ci) else 1):
+                    broot = next(it)
+                    # a share of branches fire from a NEGATED root -- junctions are a fifth of all
+                    # rules, so positive-only branches diluted negation as theories grew
+                    _bsrc = ("-" + broot) if negated_branch(ci) else broot
+                    ops.append(Operation(kind="premise", content=_bsrc))
+                    ridx += 1
+                    bnm = f"d{ridx}"
+                    blit = next(it)
+                    ops.append(Operation(kind="defeasible", name=bnm, antecedents=(_bsrc,),
+                                         consequent=blit))
+                    rules.append((bnm, blit, False))
+                    _extra.append(blit)
+                ridx += 1
+                nm = f"d{ridx}"
+                ops.append(Operation(kind="defeasible", name=nm,
+                                     antecedents=tuple([cur] + _extra), consequent=nxt))
+            else:
+                ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
+                                     antecedents=(cur,), consequent=nxt))
             rules.append((nm, nxt, strict))
             cur = nxt
         chains.append({"root": root, "rules": rules, "strict_final": strict_flags[ci]})
@@ -311,21 +346,15 @@ def _render_prompt(theory: str, target: str, ordering: str,
                    allow_strict: bool = False) -> str:
     on = "the last-link strength ordering" if ordering == LAST_LINK \
         else "the weakest-link strength ordering"
-    strict_line = ("   [strict <name>: <antecedent> -> <consequent>]\n" if allow_strict else "")
-    perm = ("Permitted additions, written exactly in these forms:\n"
-            "   [defeasible <name>: <antecedent> => <consequent>]\n"
-            + strict_line +
-            "   [prefer_rule: <rule> > <rule>]\n"
-            "   [prefer_premise: <literal> > <literal>]\n"
-            "   [premise: -<literal>]   permitted only as the negation of an ordinary premise above\n")
+    # The PERMITTED-FORMS block lives in docs/NOTATION.md. A benchmark item states the
+    # question; what the DSL looks like and which additions are legal is context a
+    # researcher supplies deliberately, so that notation-knowledge stays a separate
+    # variable from reasoning.
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {target} is currently justified.\n"
             f"What is the minimal set of directives that makes -{target} justified "
             f"and {target} overruled?\n\n"
-            + perm +
-            "Rule antecedents must be literals already present in the theory. "
-            "A rule name in a consequent, written -<name>, switches that rule off.\n\n"
             "Answer format: one directive per line, between [answer] and [/answer].")
 
 

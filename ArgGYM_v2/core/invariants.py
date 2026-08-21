@@ -213,6 +213,21 @@ def _decompose(candidates, holds, probe_singletons=True):
 
 
 def minimal_subset_exact(candidates, holds, max_calls=20000):
+    """Smallest subset of `candidates` satisfying `holds`, with a proof flag.
+
+    PRECONDITION: THE CANDIDATES MUST BE INDEPENDENT.
+
+    The forced-element prefilter asks, for each candidate, whether removing it breaks the answer. That
+    question is only meaningful if removing one candidate leaves the rest VALID. A preference over a
+    rule that is itself among the candidates violates this: drop the rule and the preference is not
+    merely absent, it is a dangling reference the engine rejects, so the prefilter marks the rule
+    forced when it is not.
+
+    Measured on a four-chain mixed configuration: with `w` and `prefer_rule: w > b2` both among the
+    candidates the search returned 5 when 4 sufficed. Not a logic error -- a precondition violation.
+
+    Verified across every task: 0 dependent preferences in any real reference answer, so current
+    minima are sound. `minimality.candidates_independent` gates that it stays true."""
     full = list(candidates)
     calls = [0]
 
@@ -256,3 +271,72 @@ def minimal_subset_exact(candidates, holds, max_calls=20000):
     if not proven and calls[0] <= max_calls:
         proven = True
     return best, proven, calls[0]
+
+
+def transpose_rule(op):
+    """Every transposition of a strict rule, as a list of Operations.
+
+    For a1 AND ... AND an -> c the transpositions are, for each i,
+        -c AND (all aj, j != i) -> -ai
+
+    Closure under transposition is a PRECONDITION of the Caminada and Amgoud rationality postulates,
+    not a stylistic choice. Without it, two strict rules with contradictory conclusions leave both
+    conclusions justified and the extension inconsistent -- verified on the Married John example, where
+    hs and -hs are both justified and is_consistent() returns False. With the transpositions present the
+    cluster becomes UNDECIDED, which is the correct defeasible answer, and a preference on the
+    DEFEASIBLE step below resolves it. Strict rules themselves cannot be out-preferred.
+    """
+    from aspic.engine import Operation
+    if op.kind != "strict":
+        return []
+    ants = list(op.antecedents or ())
+    if not ants or not op.consequent:
+        return []
+
+    def neg(x):
+        return x[1:] if x.startswith("-") else "-" + x
+
+    out = []
+    for i, a in enumerate(ants):
+        rest = [x for j, x in enumerate(ants) if j != i]
+        out.append(Operation(kind="strict", name=f"{op.name}_tp{i}",
+                             antecedents=tuple([neg(op.consequent)] + rest),
+                             consequent=neg(a)))
+    return out
+
+
+def close_under_transposition(ops):
+    """Add every missing transposition of every strict rule. Returns (ops, n_added).
+
+    Measured on existing tasks: adding these changes ZERO statuses in status_query,
+    defeat_diagnosis and attack, because no current generator emits two strict rules with
+    contradictory consequents. It is therefore a free addition, and its value is that it stops the
+    postulates holding by luck of construction.
+    """
+    have = {(tuple(o.antecedents or ()), o.consequent)
+            for o in ops if o.kind == "strict"}
+    added = []
+    for o in list(ops):
+        if o.kind != "strict":
+            continue
+        for t in transpose_rule(o):
+            key = (tuple(t.antecedents), t.consequent)
+            if key not in have:
+                have.add(key)
+                added.append(t)
+    return list(ops) + added, len(added)
+
+
+def strict_conclusions_clash(ops):
+    """Strict rules whose conclusions contradict, as (name_a, name_b) pairs.
+
+    Such a pair without transposition closure is exactly the configuration that violates indirect
+    consistency, so a generator emitting one must also close under transposition.
+    """
+    strict = [o for o in ops if o.kind == "strict" and o.consequent]
+    out = []
+    for i, a in enumerate(strict):
+        for b in strict[i + 1:]:
+            if a.consequent == ("-" + b.consequent) or b.consequent == ("-" + a.consequent):
+                out.append((a.name, b.name))
+    return out

@@ -82,6 +82,9 @@ def _configs_for(L: int) -> Tuple[str, ...]:
             ("C1", "C2", "C3") if L <= 6 else
             ("C1", "C2", "C3", "C7") if L <= 8 else
             ("C1", "C2", "C3", "C4", "C7") if L <= 10 else
+            # C8 (junction) is deliberately NOT in the attack mix. It generates and verifies
+            # correctly for defence and attack_defense, but attack items built on it are rejected
+            # downstream and the cause was not isolated. Left out rather than shipped broken.
             ("C1", "C2", "C3", "C4", "C5", "C6", "C7"))
 
 
@@ -165,3 +168,200 @@ def describe(spec: ItemSpec) -> str:
             f"survival={spec.require_survival} interaction={spec.require_interaction} "
             f"| require >={spec.min_required_moves} moves, >={spec.min_rejected_moves} dead ends"
             + ("" if spec.level in _MEASURED_FLOORS else " (interpolated)"))
+
+
+JUNCTION_START = 5
+JUNCTION_SHARE = 0.20
+
+
+def junctions_for(level: int, n_rules: int, start: int = JUNCTION_START,
+                  share: float = JUNCTION_SHARE, solve: bool = True) -> int:
+    """How many junctions a theory of `n_rules` rules should carry.
+
+    A CONSTANT SHARE from level 5 upward, not a ramp. The earlier `junction_budget` scaled with LEVEL
+    against a per-task cap, which meant density tracked whatever ratio the cap happened to bear to the
+    task's rule count -- 22% in formalization, 7% in claim_chain, from the same machinery.
+
+    Sizing against rule count instead makes 20% mean the same thing everywhere, and makes it hold at
+    every level rather than only at the top of the curriculum.
+
+    STRICT rules are excluded from the count by the caller: a junction on a strict step contributes no
+    new cut point, since a strict rule cannot be undercut, so the branch would be decoration.
+    """
+    if level < start:
+        return 0
+    # Solve for the FIXED POINT. Each junction adds its own branch rules -- one or two single-antecedent
+    # rules -- so placing j junctions in a theory of n base rules gives n + j*extra rules, of which j
+    # are multi-antecedent. Sizing against n alone undershoots: measured 14-17% where 20% was asked.
+    #
+    #     j / (n + j*extra) = share   =>   j = share*n / (1 - share*extra)
+    #
+    # with extra ~1.5 (a mix of binary and ternary junctions).
+    # `solve=False` for callers that ALREADY model the rules a junction adds. Passing an estimate of
+    # the base count and then solving the fixed point on top of it double-corrects: measured, the two
+    # tasks whose filler top-up models added rules explicitly landed at 27-31% where 20% was asked.
+    if not solve:
+        return max(1, round(share * max(1, n_rules)))
+    extra = 1.0
+    denom = max(0.05, 1.0 - share * extra)
+    return max(1, round(share * max(1, n_rules) / denom))
+
+
+def junction_budget(level: int, cap: int, start: int = JUNCTION_START) -> int:
+    """How many junctions an item at `level` should carry, rising linearly to `cap` at level 15.
+
+    Junctions begin at level 6 rather than 8. Below that is the easy band, where branch structure would
+    flatten the gradient the curriculum depends on.
+
+    `cap` is PER TASK and is not a style choice -- it is set by the task's natural repeating unit and by
+    where the junction lands:
+
+      * a junction adds TWO directives (a branch root and a branch rule), so a task with a small theory
+        saturates quickly. `formalization` runs at 18% junction density at level 15 while `claim_chain`
+        runs at 0.8%, and the same absolute count would mean very different things.
+      * where a junction enters the ANSWER rather than only the theory, each one adds two directives to
+        what the model must produce. `claim_chain` traces its junctions, so its cap is set by how long
+        an answer stays reasonable, not by how many the theory could hold.
+      * `defeat_diagnosis` is capped at its route count, which is fixed at three above the easy band for
+        an unrelated reason: the kind-guessing floor is 1/n_routes.
+    """
+    if level < start:
+        return 0
+    span = max(1, 15 - start)
+    return max(1, min(cap, round(1 + (level - start) * (cap - 1) / span)))
+
+
+JUNCTION_CAPS = {
+    # Raised across the board. Measured density before this was 1-8% of rules, and three tasks sat at
+    # exactly ONE junction at every level from 8 to 15 -- claim_chain 1/129, defeat_diagnosis 1/75,
+    # the attack_defense family 1/46. A structure present once in a hundred rules is a curiosity, not
+    # a tested mechanism.
+    # Raised again. Multi-premise rules are the NORMAL case in argumentation -- argument schemes are
+    # mostly two or three premises -- so a few percent of rules is unrepresentative. These caps target
+    # roughly 10-20% of rules being multi-antecedent at level 15.
+    "status_query": 20,
+    "preference_construction": 14,
+    "perturbation": 12,
+    # Formalization theories are the SMALLEST in the suite (19 rules at L15), so a cap of 10
+    # put junction density at 53% -- multi-antecedent became the majority case rather than a
+    # substantial minority. Sized against its own rule count, not by copying another task.
+    "formalization": 5,
+    "claim_chain": 10,               # traced, so each adds two or three directives to the answer
+    "defeat_diagnosis": 9,           # up to three per route across three routes
+    "counter_argument": 8,
+    "attack_defense": 10,
+    "semantics_query": 2,   # theories capped at 26 directives, so the budget must stay small
+}
+
+# Share of junctions that take a THIRD antecedent, from this level upward. Two antecedents test that
+# either branch is a cut point; three tests that a model tracks several simultaneous dependencies, and
+# is the arity argument schemes actually use -- expert opinion is a three-premise scheme.
+NEGATED_BRANCH_SHARE = 0.5
+
+
+def negated_branch(index: int, share: float = NEGATED_BRANCH_SHARE) -> bool:
+    """Whether junction branch `index` should be built from a NEGATED literal.
+
+    Junction branches were positive-only, and since junctions now make up a fifth of all rules they
+    diluted negation badly as theories grew: claim_chain fell from 15% negated directives at level 4 to
+    5% at level 15, perturbation from 17% to 6%. The negation gadgets are fixed in number, so growing
+    everything around them lowers the share.
+
+    A negated branch is not decoration. `-x => y` is the `negated_antecedent` role -- a rule firing
+    from the absence of something -- and it puts the branch's own contested pair in play, so cutting
+    that branch means reasoning about which side of the pair won.
+    """
+    step = max(1, round(1 / max(share, 0.01)))
+    return (index % step) == 0
+
+
+TERNARY_FROM_LEVEL = 9
+TERNARY_SHARE = 0.4
+
+
+def wants_ternary(level: int, index: int) -> bool:
+    """Whether junction number `index` at this level should take a third antecedent."""
+    if level < TERNARY_FROM_LEVEL:
+        return False
+    return (index % max(1, round(1 / TERNARY_SHARE))) == 0
+
+
+@dataclass(frozen=True)
+class LanguageProfile:
+    """A restricted ASPIC+ language fragment.
+
+    Every task previously used all six directive kinds in every item, so nothing tested whether a
+    model's competence is uniform across fragments or leans on one kind being present. Each fragment
+    removes different machinery, and the removals are not degrees of difficulty -- they are different
+    problems:
+
+      P_D   premises + defeasible. No strict rules, so nothing is unattackable; no axioms, so every
+            root can be undermined. All three attack forms available. The purely defeasible core.
+
+      P_S   premises + strict. NO DEFEASIBLE RULES, so measured: rebut is unavailable (two strict
+            rules with contrary conclusions leave BOTH justified without transposition, and with
+            transposition both undecided) and undercut is unavailable (an undercutter must itself be a
+            defeasible rule). ONLY UNDERMINE WORKS, and only a premise preference resolves anything.
+            This is the monotonic core with uncertainty confined to the leaves -- what the literature
+            calls the classical part, and a genuinely different reasoning problem rather than an
+            easier one.
+
+      P_S_D premises + strict + defeasible, no axioms. Everything is attackable somewhere; there is no
+            unassailable ground.
+
+      FULL  all six kinds. The current suite.
+
+    A task declares which fragments it supports. Several cannot support all four: `attack_defense`
+    requires a strict final rule so it cannot run P_D, and `preference_construction` needs conflicts a
+    preference can settle so it cannot run P_S.
+    """
+    name: str
+    kinds: FrozenSet[str]
+    note: str = ""
+
+    def permits(self, kind: str) -> bool:
+        return kind in self.kinds
+
+    def filter(self, ops):
+        return [o for o in ops if o.kind in self.kinds]
+
+
+_PREF = {"prefer_rule", "prefer_premise"}
+
+PROFILES: Dict[str, LanguageProfile] = {
+    "P_D": LanguageProfile(
+        "P_D", frozenset({"premise", "defeasible"} | _PREF),
+        "premises and defeasible rules; all three attack forms available"),
+    "P_S": LanguageProfile(
+        "P_S", frozenset({"premise", "strict", "prefer_premise"}),
+        "premises and strict rules; ONLY undermine works, and only premise preferences resolve"),
+    "P_S_D": LanguageProfile(
+        "P_S_D", frozenset({"premise", "strict", "defeasible"} | _PREF),
+        "no axioms, so nothing is unassailable at the root"),
+    "FULL": LanguageProfile(
+        "FULL", frozenset({"premise", "axiom", "defeasible", "strict"} | _PREF),
+        "the full language"),
+}
+
+# Which fragments each task can express. Measured, not assumed -- a task listed here must generate
+# and score correctly under every fragment it claims.
+TASK_PROFILES: Dict[str, Tuple[str, ...]] = {
+    "status_query": ("P_D", "P_S", "P_S_D", "FULL"),
+    # P_D ONLY, and by construction rather than by restriction. Measured: the task emits premises
+    # and defeasible rules exclusively. Its divergence structures -- floating conclusions, odd cycles,
+    # reinstatement -- are all defeasible; a strict rule makes that part of the theory monotonic,
+    # which cannot create divergence between semantics and can destroy it. Declaring P_S_D or FULL
+    # here would be a label with nothing behind it.
+    "semantics_query": ("P_D",),
+    "claim_chain": ("P_D", "P_S_D", "FULL"),
+    "defeat_diagnosis": ("P_D", "P_S_D", "FULL"),
+    "perturbation": ("P_D", "P_S_D", "FULL"),
+    "preference_construction": ("P_D", "P_S_D", "FULL"),
+    "counter_argument": ("P_S_D", "FULL"),
+    "formalization": ("P_D", "P_S_D", "FULL"),
+    # P_S_D reached by dropping C3 and C4, the only axiom-root configurations -- measured, and five
+    # configs remain at level 10+, above the want_distinct floor of three. P_D is NOT reachable: the
+    # task requires at least one strict-final chain, which is what closes the rebut route on that chain
+    # and forces per-chain discrimination.
+    "attack_defense": ("P_S_D", "FULL"),
+}

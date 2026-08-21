@@ -8,9 +8,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
+from core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
 from core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
                           NEGATED_AXIOM, NEGATED_LITERAL, NEGATED_PREMISE, REBUT_RULE,
                           STRICT_EXCLUSION, STRICT_FROM_NEGATION,
+                          JUNCTION_DEFEASIBLE, JUNCTION_STRICT,
                      NEW_TOPIC, OBJECTION_CONNECTIVES, OPENERS, PREFER_PREMISE, PREFER_RULE,
                      PREMISE, RULE_ANAPHORA, RULE_REFERENCE, STRICT, UNDERCUT)
 
@@ -135,7 +137,8 @@ class _Cycler:
         return pool.pop()
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          profile: str = "FULL") -> Optional[FItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
     lo = 3 + int((level - 1) * (40 - 3) / 14)
@@ -151,6 +154,9 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
     ridx = [0]
     typed: List[Tuple[str, object]] = []
     n_neg = [0]
+    j_budget = junction_budget(level, JUNCTION_CAPS["formalization"])
+    j_used = [0]
+    prof = PROFILES[profile]
 
     sentences.append(cyc.pick(OPENERS))
     for u in range(n_units):
@@ -158,11 +164,45 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
         # A NEGATION unit, every third from level 3. Before this the prose carried no negated
         # literal a model had to write: zero negated premises, zero rebuts. The only negation was the
         # word "not" inside an undercut template.
+        # a JUNCTION unit from level 8: two premises feed one rule, and the prose must make the
+        # conjunction explicit so the model writes both antecedents.
+        if j_used[0] < j_budget:
+            j1, j2, jr = next(it), next(it), next(it)
+            use_strict_j = (u % 8 == 5) and prof.permits("strict")
+            ops.append(Operation(kind="premise", content=j1))
+            ops.append(Operation(kind="premise", content=j2))
+            sentences.append(_sentence(cyc.pick(PREMISE).format(p=j1), rng, at_start=True))
+            sentences.append(_sentence(cyc.pick(PREMISE).format(p=j2), rng))
+            ridx[0] += 1
+            ops.append(Operation(kind="strict" if use_strict_j else "defeasible",
+                                 name=f"q_{ridx[0]}", antecedents=(j1, j2), consequent=jr))
+            sentences.append(_sentence(
+                cyc.pick(JUNCTION_STRICT if use_strict_j else JUNCTION_DEFEASIBLE).format(
+                    p=j1, q=j2, r=_lit_phrase(jr, rng, cyc)), rng,
+                prefix=cyc.pick(FORWARD_CONNECTIVES)))
+            typed.append(("strict" if use_strict_j else "defeasible", ops[-1]))
+            if jr not in queried:
+                queried.append(jr)
+            j_used[0] += 1
+            continue
+
         neg_unit = level >= 3 and u % 3 == 2
         if neg_unit:
             # cycle the four negation kinds in order, so the axiom-of-impossibility appears as often
             # as the others. Indexing on `u` alone gave it only every twelfth unit.
-            kind = n_neg[0] % 5
+            # The five negation kinds are not all expressible in every fragment: kinds 0 and 4 need
+            # an axiom (impossibility), 3 and 4 need a strict rule. Rather than emit a forbidden kind
+            # and filter it away -- which would silently delete the MECHANISM, not just the directive --
+            # the cycle is restricted to the kinds the fragment can actually express.
+            _avail = [1, 2]
+            if prof.permits("axiom"):
+                _avail.append(0)
+            if prof.permits("strict"):
+                _avail.append(3)
+            if prof.permits("axiom") and prof.permits("strict"):
+                _avail.append(4)
+            _avail.sort()
+            kind = _avail[n_neg[0] % len(_avail)]
             n_neg[0] += 1
             if kind == 0:
                 # axiom of IMPOSSIBILITY, contradicted by an ordinary premise that loses outright
@@ -263,7 +303,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
             sentences.append(cyc.pick(NEW_TOPIC))
 
         if test_root:
-            use_axiom = rng.random() < 0.5
+            use_axiom = prof.permits("axiom") and rng.random() < 0.5
             root_kind = "axiom" if use_axiom else "premise"
             ops.append(Operation(kind=root_kind, content=a))
             sentences.append(_sentence(
@@ -276,7 +316,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                 cyc.pick(DEFEASIBLE).format(p=a, q=_lit_phrase(b, rng, cyc)), rng,
                 prefix=cyc.pick(FORWARD_CONNECTIVES)))
         else:
-            use_strict = rng.random() < 0.5
+            use_strict = prof.permits("strict") and rng.random() < 0.5
             ops.append(Operation(kind="premise", content=a))
             sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
             ridx[0] += 1
@@ -453,9 +493,10 @@ def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
+              profile: str = "FULL",
               tries: int = 16) -> Optional[FItem]:
     for k in range(tries):
-        it = build(level, seed * 89 + k, ordering)
+        it = build(level, seed * 89 + k, ordering, profile=profile)
         if it is not None:
             return it
     return None

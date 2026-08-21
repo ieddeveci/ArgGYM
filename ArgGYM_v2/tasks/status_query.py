@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
 from core.invariants import randomize_rule_names, split_atoms_and_rules
+from core.curriculum import junction_budget, JUNCTION_CAPS, junctions_for, PROFILES
 
 TASK = "status_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -90,13 +91,21 @@ def _tower(ops: List[Operation], names, ridx: List[int], target_lit: str, height
         prev = nm
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
-    rng = random.Random(stable_seed(seed, level, ordering, "sq"))
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          profile: str = "FULL") -> Optional[SQItem]:
+    rng = random.Random(stable_seed(seed, level, ordering, "sq", profile))
+    prof = PROFILES[profile]
     n_query = max(3, round(3 + (level - 1) * (40 - 3) / 14))
     n_group = max(3, round(n_query / 1.6))
     max_tower = 0 if level < 5 else min(1 + (level - 5) // 4, 3)
+    # JUNCTIONS from level 8. Cutting either branch kills the conclusion, so a claim above a junction
+    # can be overruled by a defeat on a branch that never mentions it.
+    # Sized from the EXPECTED rule count so the share is constant across the curriculum.
+    # A level-scaled budget gave 3% at level 5 and 21% at level 15 from the same machinery.
+    j_budget = junctions_for(level, max(1, n_group * 3))
+    j_used = [0]
 
-    names = _names(stable_seed(seed, level, ordering, "nm"), 40 + n_group * 12)
+    names = _names(stable_seed(seed, (level, ordering, "nm") * 3), 40 + n_group * 12)
     it = iter(names)
     ops: List[Operation] = []
     ridx = [0]
@@ -105,6 +114,46 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
     for g in range(n_group):
         want = STATUSES[g % 3]
         root, mid = next(it), next(it)
+
+        if j_used[0] < j_budget and prof.permits("defeasible"):
+            # a junction whose SECOND branch is dead, so the conclusion is overruled even though
+            # nothing attacks it and its first branch is healthy
+            b1, b2, jt = next(it), next(it), next(it)
+            ops.append(Operation(kind="premise", content=b1))
+            ops.append(Operation(kind="premise", content=b2))
+            ops.append(Operation(kind="premise", content="-" + b2))
+            ops.append(Operation(kind="prefer_premise", stronger="-" + b2, weaker=b2))
+            ridx[0] += 1
+            s1 = f"r_{ridx[0]}"
+            l1 = next(it)
+            ops.append(Operation(kind="defeasible", name=s1, antecedents=(b1,), consequent=l1))
+            ridx[0] += 1
+            s2 = f"r_{ridx[0]}"
+            l2 = next(it)
+            ops.append(Operation(kind="defeasible", name=s2, antecedents=(b2,), consequent=l2))
+            ridx[0] += 1
+            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                 antecedents=(l1, l2), consequent=jt))
+            planned.append((jt, "OVERRULED"))
+            planned.append((l1, "JUSTIFIED"))
+            j_used[0] += 1
+            continue
+
+        if not prof.permits("defeasible"):
+            # P_S: no defeasible rules, so neither undercut nor rebut is available. The only lever is
+            # a premise preference on the root, which is why this fragment is a different problem
+            # rather than an easier one.
+            ops.append(Operation(kind="premise", content=root))
+            ridx[0] += 1
+            ops.append(Operation(kind="strict", name=f"r_{ridx[0]}",
+                                 antecedents=(root,), consequent=mid))
+            if want != "JUSTIFIED":
+                ops.append(Operation(kind="premise", content="-" + root))
+                if want == "OVERRULED":
+                    ops.append(Operation(kind="prefer_premise",
+                                         stronger="-" + root, weaker=root))
+            planned.append((mid, want))
+            continue
 
         if want == "JUSTIFIED":
             ops.append(Operation(kind="premise", content=root))
@@ -159,16 +208,20 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
                 ops.append(Operation(kind="prefer_rule", stronger=atk, weaker=sup))
         planned.append((mid, want))
 
-        if g % 4 == 1:
+        # The axiom root and the strict step are gated SEPARATELY. Tying them together meant P_S_D,
+        # which forbids axioms but permits strict rules, produced no strict rules at all and was
+        # indistinguishable from P_D.
+        if g % 4 == 1 and prof.permits("strict"):
             a2, b2 = next(it), next(it)
-            ops.append(Operation(kind="axiom", content=a2))
+            ops.append(Operation(kind="axiom" if prof.permits("axiom") else "premise",
+                                 content=a2))
             ridx[0] += 1
             ops.append(Operation(kind="strict", name=f"r_{ridx[0]}", antecedents=(a2,),
                                  consequent=b2))
             if max_tower and rng.random() < 0.7:
                 _tower(ops, it, ridx, b2, 2 * rng.randint(1, max_tower))
             planned.append((b2, "JUSTIFIED"))
-        if g % 5 == 2:
+        if g % 5 == 2 and prof.permits("prefer_premise"):
             c1, c2 = next(it), next(it)
             ops.append(Operation(kind="premise", content=c1))
             ops.append(Operation(kind="premise", content="-" + c1))
@@ -180,6 +233,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
                 _tower(ops, it, ridx, c2, 2 * rng.randint(1, max_tower))
             planned.append((c2, "JUSTIFIED"))
 
+    ops = prof.filter(ops)
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
     atoms, rnames = split_atoms_and_rules(base)
@@ -235,6 +289,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SQItem]:
             "n_items": len(base), "target_n_query": n_query,
             "status_counts": dict(counts),
             "modal_share": round(max(counts.values()) / len(gold), 4),
+            "profile": profile,
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
             "n_axioms": len([o for o in base if o.kind == "axiom"]),
             "n_strict": len([o for o in base if o.kind == "strict"]),
@@ -293,9 +348,9 @@ def score(answer_text: str, item: SQItem) -> Dict:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              tries: int = 16) -> Optional[SQItem]:
+              profile: str = "FULL", tries: int = 24) -> Optional[SQItem]:
     for k in range(tries):
-        it = build(level, seed * 97 + k, ordering)
+        it = build(level, seed * 97 + k, ordering, profile)
         if it is not None:
             return it
     return None

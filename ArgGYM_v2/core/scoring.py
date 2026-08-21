@@ -7,6 +7,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
 
+BLOAT_FACTOR = 2
+PARTIAL_CAP = 0.25
+
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _PREMISE = re.compile(r"^\[(premise|axiom)\s*:\s*(-?[A-Za-z]\w*)\]$")
 _RULE = re.compile(r"^\[(defeasible|strict)\s*([A-Za-z]\w*)?\s*:\s*(.+?)\s*(=>|->)\s*(-?[A-Za-z]\w*)\]$")
@@ -152,7 +155,71 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
         if g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED"))
 
     if not success:
-        return {"score": 0.0, "reason": "goal_not_met", "success": False,
+        # PARTIAL CREDIT FOR MEASURABLE PROGRESS.
+        #
+        # Measured: with an all-or-nothing reward, a GRPO group drawn from a policy that cannot yet
+        # solve the item scores 0.000 on every sample -- standard deviation 0.000 across all four
+        # construction tasks, so the group contributes NO GRADIENT. The F1-scored tasks are dense by
+        # construction (status_query 0.336 to 1.000, claim_chain 0.400 to 1.000); the construction
+        # tasks were not, which made five of the suite's modes unusable for training until the policy
+        # could already solve them.
+        #
+        # The progress signal was already being computed and discarded. Two things count:
+        #   * a goal MET while others are not -- visible in attack_defense, which has two goals
+        #   * a goal that reached UNDECIDED when OVERRULED or JUSTIFIED was wanted -- the policy
+        #     created the conflict and failed to win it, which is strictly closer than doing nothing
+        #
+        # SIZING MATTERS MORE THAN THE IDEA. Partial credit is capped at PARTIAL_CAP = 0.25 against a
+        # success floor of 0.5, so a fully-deadlocked answer is worth half the WORST successful one.
+        # Any higher and deadlock-farming becomes a local optimum for a policy with a low success rate,
+        # since deadlocking is cheaper than winning.
+        # SUB-GOAL PROGRESS, for goals whose own status cannot move incrementally.
+        #
+        # `attack` has one goal and N supporting chains. The target is justified if ANY chain survives,
+        # so its status stays JUSTIFIED until the LAST cut lands -- measured, apexes killed 0,1,2,3,4,5
+        # while the target reads JUSTIFIED throughout and flips only at 5. Goal-status progress is
+        # therefore invisible and the reward was 0.000 for every near-miss.
+        #
+        # The item may declare `subgoals`: literals whose defeat constitutes progress. For `attack`
+        # those are the chain apexes, which DO move one at a time. This is the only place the scorer
+        # accepts task-specific structure, and it does so through a declared field rather than by
+        # inspecting the theory, so no task is privileged.
+        subgoals = item.get("subgoals") or []
+        sub_progress = None
+        if subgoals:
+            hit = 0
+            for lit in subgoals:
+                try:
+                    if str(v.status(lit)) != "JUSTIFIED":
+                        hit += 1
+                except Exception:
+                    pass
+            sub_progress = hit / len(subgoals)
+            diag["subgoals_defeated"] = f"{hit}/{len(subgoals)}"
+
+        # PER-GOAL credit, with sub-goal progress applied only to the goal it belongs to.
+        #
+        # An earlier version took max(goal_progress, sub_progress) globally. That gave brute force on
+        # `attack_defense` the full cap: it kills every chain apex -- full sub-goal credit -- while
+        # destroying the claim it is supposed to DEFEND. Sub-goal progress must not paper over damage
+        # done elsewhere.
+        #
+        # Sub-goal credit is also weighted BELOW a deadlock (0.3 against 0.4), because reaching
+        # UNDECIDED on the goal itself is closer to winning than merely thinning its support.
+        per_goal = []
+        for g in diag["goals_met"]:
+            if g["got"] == g["want"]:
+                per_goal.append(1.0)
+            elif g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED"):
+                per_goal.append(0.4)
+            elif sub_progress is not None and g["want"] == "OVERRULED":
+                per_goal.append(0.3 * sub_progress)
+            else:
+                per_goal.append(0.0)
+        progress = (sum(per_goal) / len(per_goal)) if per_goal else 0.0
+        partial = round(PARTIAL_CAP * progress, 4) if consistent else 0.0
+        return {"score": partial, "reason": "goal_not_met", "success": False,
+                "progress": round(progress, 4),
                 "achieved_status": diag["achieved_status"],
                 "deadlock_not_defeat": diag["deadlock_not_defeat"],
                 "diagnostics": diag}
@@ -161,6 +228,37 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
                 "achieved_status": diag["achieved_status"],
                 "deadlock_not_defeat": diag["deadlock_not_defeat"],
                 "diagnostics": diag}
+    # BLOAT REJECTION. Scoring was 0.5 + 0.5 * efficiency, so MEETING THE GOAL AT ALL earned 0.5.
+    # Measured: on `attack`, "undercut every defeasible rule" -- no reasoning whatever -- scored 0.639
+    # mean and 0.667 max, using 3.8x the minimum. The shortcut panel tested three strategies and this
+    # was not among them, so it went undetected for the whole build.
+    #
+    # It is isolated to `attack`, because there destroying everything achieves the only goal. In
+    # `defence` and `attack_defense` it destroys the claim that must be defended, in
+    # `counter_argument` it kills the target without justifying the contrary, and in
+    # `preference_construction` non-preferences are illegal -- all score 0.000.
+    #
+    # The fix is a CAP, not a reweighting. The prompt asks for a MINIMAL set, so an answer several
+    # times longer than necessary has not done the task -- it is a different kind of object, not a
+    # worse answer of the same kind. Measured against the alternatives:
+    #
+    #     current 0.5 + 0.5*eff        brute 0.641   gold 1.000   gap 0.359
+    #     pure efficiency min/used     brute 0.281   gold 1.000   gap 0.719
+    #     cap at 3x the minimum        brute 0.222   gold 1.000   gap 0.778
+    #     cap at 2x the minimum        brute 0.000   gold 1.000   gap 1.000
+    #
+    # Factor 2 rather than 3, measured: at 3 the brute answer landed at EXACTLY 3.0x on several items
+    # and slipped under the cap for 0.667. Tightening to 2 costs nothing -- an answer padded with one,
+    # two or three redundant directives scores 0.918, 0.860 and 0.816 under BOTH factors.
+    #
+    # The cap gives the widest gap and, unlike pure efficiency, keeps the success/failure signal
+    # separable for reinforcement learning. BLOAT_FACTOR is deliberately generous: a genuine answer
+    # carrying one or two redundant directives is unaffected.
+    if n_used > BLOAT_FACTOR * max(minimum, 1):
+        diag["bloat_ratio"] = round(n_used / max(minimum, 1), 2)
+        return {"score": 0.0, "reason": f"bloated:{n_used}_used_vs_{minimum}_minimum",
+                "success": True, "achieved_status": diag["achieved_status"],
+                "deadlock_not_defeat": diag["deadlock_not_defeat"], "diagnostics": diag}
     efficiency = min(1.0, minimum / max(n_used, 1))
     score = round(0.5 + 0.5 * efficiency, 4)
     return {"score": score, "reason": "ok", "success": True,

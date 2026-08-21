@@ -19,6 +19,22 @@ _PERMITTED = (
 )
 _FORMAT = ("Answer format: one directive per line, between [answer] and [/answer].")
 
+# MINIMAL PROMPTS ARE THE DEFAULT.
+#
+# A benchmark item should carry the QUESTION and nothing else. Explanations of the notation -- what a
+# negated rule name means, which additions are legal, how the DSL is written -- belong in a separate
+# context document that a researcher supplies or withholds deliberately, because whether the model
+# knows the notation is a different variable from whether it can reason.
+#
+# This is not hypothetical. Measured on one perturbation item: adding a single sentence explaining that
+# a negated rule name disables that rule moved RECALL from 0.480 to 0.880, while precision barely
+# moved (0.857 to 0.815). Almost the entire earlier failure was notation, not reasoning -- and without
+# the split it would have been read as a reasoning result.
+#
+# What stays in the prompt: the theory, the semantics, the ordering, the question, and the bare answer
+# format needed to parse a response at all. What moves out: everything explanatory.
+INCLUDE_NOTATION = False
+
 _STATUS_WORD = {"JUSTIFIED": "justified", "OVERRULED": "overruled", "UNDECIDED": "undecided"}
 
 
@@ -29,7 +45,8 @@ def _goal_line(claim: str, current: str, want: str) -> str:
             f"What is the minimal set of directives that makes {claim} {tgt}?")
 
 
-def render(theory_text: str, ordering: str, goals: Sequence[Dict]) -> str:
+def render(theory_text: str, ordering: str, goals: Sequence[Dict],
+           include_notation: Optional[bool] = None) -> str:
     head = (f"The following is a defeasible argumentation theory, evaluated under {SEMANTICS} "
             f"with {ORDERING_NAME.get(ordering, ordering)}.")
     parts: List[str] = [head, "", theory_text, ""]
@@ -44,5 +61,7 @@ def render(theory_text: str, ordering: str, goals: Sequence[Dict]) -> str:
                           for g in goals)
         parts.append("What is the minimal set of directives that simultaneously makes "
                      f"{wants}?")
-    parts += ["", _PERMITTED, "", _FORMAT]
+    if INCLUDE_NOTATION if include_notation is None else include_notation:
+        parts += ["", _PERMITTED]
+    parts += ["", _FORMAT]
     return "\n".join(parts)

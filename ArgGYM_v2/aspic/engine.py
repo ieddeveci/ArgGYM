@@ -19,6 +19,7 @@ from py_arg.aspic_classes.orderings.argument_orderings.weakest_link_ordering imp
 from py_arg.algorithms.semantics.get_grounded_extension import get_grounded_extension
 from py_arg.algorithms.semantics.get_preferred_extensions import get_preferred_extensions
 from py_arg.algorithms.semantics.get_stable_extensions import get_stable_extensions
+from py_arg.algorithms.semantics.get_eager_extension import get_eager_extension
 
 ORDERINGS = {
     "last_link_elitist": LastLinkElitistOrdering,
@@ -247,6 +248,22 @@ class ASPICFramework:
 
     def stable_extensions(self) -> "List[Set]":
         return [set(ext) for ext in get_stable_extensions(self.af)]
+
+    def eager_extension(self) -> "Set":
+        """The eager extension: the largest admissible set inside every semi-stable extension.
+
+        UNIQUE, like grounded, so it yields a determinate per-claim status without the credulous
+        versus sceptical distinction. It is also LESS SCEPTICAL than grounded -- it accepts floating
+        conclusions, which grounded leaves undecided -- so the two disagree exactly where the
+        interesting cases are.
+
+        It is NOT free, though: eager is computed FROM the semi-stable extensions, so it inherits
+        their enumeration cost. Grounded is polynomial; eager is not."""
+        exts = get_eager_extension(self.af)
+        if not exts:
+            return set()
+        first = exts[0] if isinstance(exts, list) else exts
+        return set(first)
 
     def argument_labels(self) -> Dict[object, str]:
         af = self.af

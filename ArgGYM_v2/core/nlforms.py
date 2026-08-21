@@ -269,3 +269,33 @@ STRICT_FROM_NEGATION: List[str] = [
 ]
 
 INVENTORY["strict_from_negation"] = STRICT_FROM_NEGATION
+
+
+# ---------------------------------------------------------------------------
+# JUNCTIONS -- rules with two antecedents.
+#
+# Modgil and Prakken write defeasible rules with a set of antecedents, and the conjunctive case is the
+# normal one in argument schemes: a scheme's premises jointly license its conclusion, and knocking out
+# any one of them defeats the argument. Every rule in this suite was single-antecedent until this was
+# added, so nothing exercised the case where a conclusion has two independent supports and either can
+# be cut.
+# ---------------------------------------------------------------------------
+
+JUNCTION_DEFEASIBLE: List[str] = [
+    "taken together, {p} and {q} support {r}",
+    "{p} and {q} jointly give reason to accept {r}",
+    "given both {p} and {q}, {r} may be presumed",
+    "{p} in combination with {q} creates a presumption in favour of {r}",
+    "where {p} and {q} both hold, {r} normally follows",
+    "{r} rests on {p} and {q} together, and needs both",
+]
+
+JUNCTION_STRICT: List[str] = [
+    "{p} and {q} together entail {r}",
+    "there is no case in which {p} and {q} hold and {r} does not",
+    "{p} and {q} jointly guarantee {r}",
+    "taken together, {p} and {q} settle {r} conclusively",
+]
+
+INVENTORY["junction_defeasible"] = JUNCTION_DEFEASIBLE
+INVENTORY["junction_strict"] = JUNCTION_STRICT

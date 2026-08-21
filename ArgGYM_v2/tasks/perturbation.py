@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
+from core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
+from core.curriculum import negated_branch
 from core.invariants import randomize_rule_names, language_enrichment
 
 TASK = "perturbation"
@@ -97,7 +99,8 @@ class PerturbItem:
                 + "\n[/answer]")
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PerturbItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          profile: str = "FULL") -> Optional[PerturbItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pert"))
     n_comp = max(2, min(2 + (level * 7 + 5) // 15, 9))
     depth = max(2, min(2 + (level * 5) // 15, 7))
@@ -110,7 +113,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PerturbI
     depth = max(lo_depth, min(depth, 7))
     n_alt = max(1, n_comp // 3)
 
-    names = _names(stable_seed(seed, level, ordering, "nm"), 8 + n_comp * (depth + 4))
+    names = _names(stable_seed(seed, level, ordering, "nm"), (8 + n_comp * (depth + 4) * 3))
     it = iter(names)
     src = next(it)
     ops: List[Operation] = [Operation(kind="premise", content=src)]
@@ -118,20 +121,57 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PerturbI
     ridx = 0
 
     n_axiom = max(0, n_comp // 4)
+    # Estimate includes the enrichment and perturbation rules, not just the component
+    # chains -- sizing on chains alone undershot at 11%.
+    j_budget = junctions_for(level, max(1, n_comp * depth + n_pert + 6))
     for ci in range(n_comp):
         root = next(it)
         is_ax = ci < n_axiom
-        ops.append(Operation(kind="axiom" if is_ax else "premise", content=root))
+        ops.append(Operation(
+            kind="axiom" if (is_ax and PROFILES[profile].permits("axiom")) else "premise",
+            content=root))
         cur = root
         chain: List[Tuple[str, str, bool]] = []
-        strict_at = (depth // 2) if (depth >= 3 and ci % 3 == 0) else -1
+        strict_at = ((depth // 2) if (depth >= 3 and ci % 3 == 0
+                                     and PROFILES[profile].permits("strict")) else -1)
+        # a JUNCTION step from level 8, on every third component. Cutting either branch changes
+        # everything above it, so a perturbation on the branch propagates to claims that never
+        # mention it -- a cascade a linear chain cannot produce.
+        # Depth gate lowered from 4 to 2 and MULTIPLE points per component. Requiring depth >= 4 gave
+        # 0% at level 5, where components are shallow, and one point per component capped the share at
+        # about 11% however large the budget was.
+        _pts = set()
+        if depth >= 2 and ci < j_budget:
+            _pts.add(min(depth - 1, depth // 2 + 1))
+            if j_budget > n_comp and depth >= 4:
+                _pts.add(max(1, depth // 3))
+        junction_at = -1
+        if junction_at == strict_at:
+            junction_at = -1
         for j in range(depth):
             ridx += 1
             nm = f"d{ridx}"
             nxt = next(it)
             strict = (j == strict_at)
-            ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
-                                 antecedents=(cur,), consequent=nxt))
+            if j in _pts:
+                broot = next(it)
+                # a share of branches fire from a NEGATED root. Junctions are a fifth of all rules
+                # now, so positive-only branches diluted negation from 17% to 6% as theories grew.
+                _bsrc = ("-" + broot) if negated_branch(ci) else broot
+                ops.append(Operation(kind="premise", content=_bsrc))
+                ridx += 1
+                bnm = f"d{ridx}"
+                blit = next(it)
+                ops.append(Operation(kind="defeasible", name=bnm, antecedents=(_bsrc,),
+                                     consequent=blit))
+                chain.append((bnm, blit, False))
+                ridx += 1
+                nm = f"d{ridx}"
+                ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur, blit),
+                                     consequent=nxt))
+            else:
+                ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
+                                     antecedents=(cur,), consequent=nxt))
             chain.append((nm, nxt, strict))
             cur = nxt
         comps.append({"root": root, "chain": chain, "alt": False, "held": False,
@@ -180,6 +220,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PerturbI
         c["alt_from"] = mid_idx
 
     _lx, _ = language_enrichment(it, [900], prefix="lx")
+    _lx = PROFILES[profile].filter(_lx)
     ops = list(ops) + _lx
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for _c in comps:
@@ -362,10 +403,10 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
             "exact_match": pred == gold, "diagnostics": diag}
 
 
-def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              tries: int = 12) -> Optional[PerturbItem]:
+def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
+              tries: int = 40) -> Optional[PerturbItem]:
     for k in range(tries):
-        it = build(level, seed * 41 + k, ordering)
+        it = build(level, seed * 41 + k, ordering, profile)
         if it is not None:
             return it
     return None

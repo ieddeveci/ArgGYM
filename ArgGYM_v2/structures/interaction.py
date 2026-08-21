@@ -55,7 +55,8 @@ class MixedItem:
 def build_mixed(names: Sequence[str], ordering: str = LAST_LINK,
                 n_attackers: int = 2, extra_attack_routes: int = 1,
                 shared: bool = True, depth: int = 2,
-                shared_depth: int = 1) -> Optional[MixedItem]:
+                shared_depth: int = 1, junction: bool = False,
+                n_junctions: int = 1, ternary: bool = False) -> Optional[MixedItem]:
     it = iter(names)
     root = next(it)
     shared_node = next(it)
@@ -65,10 +66,31 @@ def build_mixed(names: Sequence[str], ordering: str = LAST_LINK,
     ops: List[Operation] = [Operation(kind="premise", content=root)]
     cur = root
     shared_rule = None
+    # A JUNCTION on the shared stem. The stem already feeds BOTH targets, so a second branch means an
+    # attack aimed at the branch propagates to the claim that must be defended as well as the one that
+    # must be attacked -- the interference this task is built around, one step further back.
+    # Junction points across the shared stem, from the item budget. One point gave a single
+    # multi-antecedent rule in a 41-rule theory, about 2%.
+    j_points = set()
+    if junction and max(1, shared_depth) >= 1:
+        for k in range(max(1, n_junctions)):
+            j_points.add(k % max(1, shared_depth))
+    junction_at = -1
     for i in range(max(1, shared_depth)):
         nxt = shared_node if i == max(1, shared_depth) - 1 else next(it)
         nm = f"k{i}"
-        ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur,), consequent=nxt))
+        if i in j_points:
+            extra = []
+            for _e in range(2 if ternary else 1):
+                broot = next(it); blit = next(it)
+                ops.append(Operation(kind="premise", content=broot))
+                ops.append(Operation(kind="defeasible", name=f"{nm}b{_e}",
+                                     antecedents=(broot,), consequent=blit))
+                extra.append(blit)
+            ops.append(Operation(kind="defeasible", name=nm,
+                                 antecedents=tuple([cur] + extra), consequent=nxt))
+        else:
+            ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur,), consequent=nxt))
         shared_rule = nm
         cur = nxt
 

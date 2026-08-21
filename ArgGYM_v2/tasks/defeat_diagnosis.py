@@ -8,6 +8,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
+from core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
+                            junctions_for)
+from core.curriculum import negated_branch
 from core.invariants import randomize_rule_names, split_atoms_and_rules
 
 TASK = "defeat_diagnosis"
@@ -74,16 +77,24 @@ class DDItem:
     metadata: Dict = field(default_factory=dict)
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[DDItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          profile: str = "FULL") -> Optional[DDItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "dd"))
     n_routes = 1 if level <= EASY_LEVELS else 3
     depth = max(2, min(2 + level // 3, 7))
     tower = 0 if level < 5 else min(1 + (level - 5) // 4, 3)
+    # JUNCTIONS from level 8: a diagnosed route passes through a two-branch step, so the failure can
+    # sit on a branch the claim never mentions.
+    use_junction = level >= 8
     n_filler = max(0, min(2 + level * 2, 30))
     n_inert = 0 if level < 4 else min(1 + (level - 4) // 5, 3)
 
     names = _names(stable_seed(seed, level, ordering, "nm"),
-                   40 + n_routes * (depth + 8) + n_filler * 2 + tower * 4)
+                   # Junctions consume two extra names each (a branch root and a branch
+                   # literal), and filler junctions can take a third. Sized for the worst
+                   # case rather than the average, since exhaustion surfaces as a bare
+                   # StopIteration far from the allocation.
+                   40 + n_routes * (depth + 12) + n_filler * 8 + tower * 4)
     it = iter(names)
     claim = next(it)
     ops: List[Operation] = []
@@ -94,10 +105,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[DDItem]:
     rng.shuffle(kinds)
     kind_seq = kinds[:n_routes]
 
+    # Junctions on as many routes as the budget allows, not just the last one. A single junction in a
+    # 75-rule theory is a curiosity; the budget is per item and spread across routes.
+    # Base junctions on diagnosed routes stay modest; the filler top-up carries the share.
+    j_budget = min(3, junction_budget(level, JUNCTION_CAPS["defeat_diagnosis"]))
+    j_routes = set(range(min(j_budget, n_routes))) if use_junction else set()
+    junction_at_route = -1
     for k in range(n_routes):
         kind = kind_seq[k]
-        use_axiom = (level >= 4 and kind != UNDERMINE and k % 2 == 0)
-        strict_at = (depth // 2 + 1) if (level >= 6 and depth >= 3) else -1
+        use_axiom = (level >= 4 and kind != UNDERMINE and k % 2 == 0
+                     and PROFILES[profile].permits("axiom"))
+        strict_at = ((depth // 2 + 1) if (level >= 6 and depth >= 3
+                                        and PROFILES[profile].permits("strict")) else -1)
         if kind == UNDERCUT and strict_at == depth // 2:
             strict_at = -1
         use_neg_root = (level >= 5 and not use_axiom and k % 2 == 1
@@ -113,13 +132,47 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[DDItem]:
         cur = root
         rules: List[str] = []
         lits: List[str] = []
+        # Up to TWO junction points per route. Routes are fixed at three above the easy band -- for
+        # the kind-guessing floor -- so one junction per route caps the item at three however large the
+        # theory grows. A second point per route lifts the ceiling to six without touching the route
+        # count.
+        j_here = set()
+        if depth >= 3 and k in j_routes:
+            j_here.add(depth // 2)
+            if j_budget > n_routes and depth >= 5:
+                j_here.add(max(1, depth // 4))
+        junction_at = -1
         for j in range(depth):
             ridx[0] += 1
             nm = f"r_{ridx[0]}"
             nxt = claim if j == depth - 1 else next(it)
             is_strict = (j == strict_at and j != depth - 1)
-            ops.append(Operation(kind="strict" if is_strict else "defeasible", name=nm,
-                                 antecedents=(cur,), consequent=nxt))
+            if j in j_here and not is_strict:
+                n_extra = 2 if wants_ternary(level, k) else 1
+                # a second branch into this step. Its own root is healthy, so the branch is a live part
+                # of the route rather than a decoration, and the route can also be broken there.
+                extra = []
+                for _e in range(n_extra):
+                    broot = next(it)
+                    # a share of branches fire from a NEGATED root -- junctions are a fifth of all
+                    # rules, so positive-only branches diluted negation as theories grew
+                    _bsrc = ("-" + broot) if negated_branch(k) else broot
+                    ops.append(Operation(kind="premise", content=_bsrc))
+                    ridx[0] += 1
+                    bnm = f"r_{ridx[0]}"
+                    blit = next(it)
+                    ops.append(Operation(kind="defeasible", name=bnm, antecedents=(_bsrc,),
+                                         consequent=blit))
+                    rules.append(bnm)
+                    lits.append(blit)
+                    extra.append(blit)
+                ridx[0] += 1
+                nm = f"r_{ridx[0]}"
+                ops.append(Operation(kind="defeasible", name=nm,
+                                     antecedents=tuple([cur] + extra), consequent=nxt))
+            else:
+                ops.append(Operation(kind="strict" if is_strict else "defeasible", name=nm,
+                                     antecedents=(cur,), consequent=nxt))
             rules.append(nm)
             lits.append(nxt)
             cur = nxt
@@ -168,29 +221,66 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[DDItem]:
                           "axiom_rooted": use_axiom, "has_strict": strict_at >= 0,
                           "negated_root": use_neg_root})
 
+    prof = PROFILES[profile]
     for _ in range(n_inert):
+        # INERT DECOYS: an axiom cannot be undermined and a strict rule cannot be undercut, so an
+        # attack aimed at either does nothing. Both substrates are removed by the restricted fragments,
+        # so a substitute is needed rather than a silent leak -- an ordinary premise WON by a
+        # preference is equally immune in practice, since the losing side is already overruled.
         ax = next(it)
-        ops.append(Operation(kind="axiom", content=ax))
+        if prof.permits("axiom"):
+            ops.append(Operation(kind="axiom", content=ax))
+        else:
+            ops.append(Operation(kind="premise", content=ax))
+            ops.append(Operation(kind="premise", content="-" + ax))
+            ops.append(Operation(kind="prefer_premise", stronger=ax, weaker="-" + ax))
         mid = next(it)
         ridx[0] += 1
         rmid = f"r_{ridx[0]}"
         ops.append(Operation(kind="defeasible", name=rmid, antecedents=(ax,), consequent=mid))
         ridx[0] += 1
         rstrict = f"r_{ridx[0]}"
-        ops.append(Operation(kind="strict", name=rstrict, antecedents=(mid,),
-                             consequent=next(it)))
+        ops.append(Operation(kind="strict" if prof.permits("strict") else "defeasible",
+                             name=rstrict, antecedents=(mid,), consequent=next(it)))
         q = next(it)
         ops.append(Operation(kind="premise", content=q))
         ridx[0] += 1
         ops.append(Operation(kind="defeasible", name=f"w_{ridx[0]}", antecedents=(q,),
                              consequent="-" + rstrict))
 
-    for _ in range(n_filler):
+    # FILLER carries junctions to the target share. The diagnosed ROUTES are capped by the route
+    # count, which is fixed at three above the easy band for the kind-guessing floor, so density has
+    # to come from elsewhere. Filler is theory-only capacity and costs nothing in the answer.
+    _base = sum(1 for o in ops if o.kind == "defeasible")
+    _have = sum(1 for o in ops if o.kind == "defeasible" and len(o.antecedents or ()) > 1)
+    _fill_j = n_filler
+    for _try in range(0, n_filler + 1):
+        if (_have + _try) >= junctions_for(level, _base + n_filler + _try * 2, solve=False):
+            _fill_j = _try
+            break
+    for _fi in range(n_filler):
         a, b = next(it), next(it)
         ops.append(Operation(kind="premise", content=a))
         ridx[0] += 1
-        ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}", antecedents=(a,),
-                             consequent=b))
+        if _fi < _fill_j:
+            _ex = []
+            for _e in range(2 if (level >= 9 and _fi % 2 == 0) else 1):
+                br, bl = next(it), next(it)
+                # FILLER branches use the filler index, not the route index. Reusing `k` --
+                # constant across the filler loop -- negated either all of them or none,
+                # which pushed the negated share to 44%.
+                _bsrc = ("-" + br) if negated_branch(_fi * 2 + _e) else br
+                ops.append(Operation(kind="premise", content=_bsrc))
+                ridx[0] += 1
+                ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                     antecedents=(_bsrc,), consequent=bl))
+                _ex.append(bl)
+            ridx[0] += 1
+            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                 antecedents=tuple([a] + _ex), consequent=b))
+        else:
+            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}", antecedents=(a,),
+                                 consequent=b))
 
     ops, rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for d in diagnoses:
@@ -207,6 +297,29 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[DDItem]:
     st = status(base, claim, ordering)
     if st not in ("OVERRULED", "UNDECIDED"):
         return None
+
+    # VERIFY EVERY survives_because IS LOAD-BEARING, in the builder rather than only in the gate.
+    #
+    # The definition is "the rule that attacks that defeater and is itself defeated", and it is
+    # engine-checkable: removing ITS defeater must change the claim's status. The builder assigned the
+    # field structurally and left the check to the gate, which meant a structural change could produce
+    # items the gate then rejected in bulk -- adding a second junction per route did exactly that,
+    # because a route with several junctions can be broken at more than one point, so removing one
+    # defeater no longer restores the claim.
+    #
+    # Verifying here turns that from a gate failure into a rejected seed, which is what every other
+    # generated property in the suite does.
+    for d in diagnoses:
+        sb = d.get("survives_because")
+        if not sb:
+            continue
+        pruned = [o for o in base
+                  if not (o.kind in ("defeasible", "strict") and o.consequent == "-" + sb)]
+        if len(pruned) == len(base):
+            d["survives_because"] = None
+            continue
+        if status(pruned, claim, ordering) == st:
+            return None
 
     lines = [f"status: {st.lower()}"]
     for d in diagnoses:
@@ -237,8 +350,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[DDItem]:
 def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
     on = "the last-link strength ordering" if ordering == LAST_LINK \
         else "the weakest-link strength ordering"
-    extra = ("   ...; survives_because: <rule>   -- append this where the defeater is itself "
-             "attacked by a rule that is defeated\n" if want_survival else "")
+    extra = "   ...; survives_because: <rule>\n" if want_survival else ""
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is not justified.\n"
@@ -247,10 +359,11 @@ def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) 
             "   first line: `status: overruled` or `status: undecided`\n"
             "   then one line per failure point, as\n"
             "   `defeated_at: <target>; defeater: <defeater>; "
-            "kind: undermine|undercut|rebut`\n"
-            "   where <target> is the CLAIM attacked for undermine and rebut, "
-            "and the RULE switched off for undercut, and <defeater> is the rule or "
-            "asserted premise doing the attacking\n" + extra)
+            "kind: undermine|undercut|rebut`\n" + extra)
+    # The FIELD SEMANTICS -- that <target> is the claim for undermine and rebut but the rule for
+    # undercut, and what survives_because means -- live in docs/NOTATION.md, not here. An item states
+    # the shape it wants parsed and nothing more; whether the model knows the convention is a variable
+    # the researcher controls by supplying that document or withholding it.
 
 
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
@@ -341,10 +454,10 @@ def score(answer_text: str, item: DDItem) -> Dict:
             "diagnostics": diag}
 
 
-def make_item(level: int, seed: int, ordering: str = LAST_LINK,
+def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 14) -> Optional[DDItem]:
     for k in range(tries):
-        it = build(level, seed * 83 + k, ordering)
+        it = build(level, seed * 83 + k, ordering, profile)
         if it is not None:
             return it
     return None
