@@ -57,6 +57,12 @@ TASKS = (
     "status_query", "formalization", "defeat_diagnosis", "claim_chain",
     "perturbation", "attack", "defence", "attack_defense",
     "preference_construction", "counter_argument", "counter_argument_strict",
+    # Added with origin/main. Every other task asks about grounded semantics
+    # only; this one also asks about preferred, stable and eager, so it is the
+    # first thing here that tests whether a model tracks which semantics it is
+    # being asked about. Roughly 35 minutes of build time, dominated by L15 at
+    # ~43s an item.
+    "semantics_query",
 )
 
 LEVELS = (3, 6, 9, 12, 15)
