@@ -90,13 +90,7 @@ for m in "${MODELS[@]}"; do
       continue
     fi
 
-    run_dir=$("$PY" - "$m" "$lvl" "$RUN_TAG" <<'EOF'
-import sys, datetime, pathlib
-m, lvl = sys.argv[1], sys.argv[2]
-ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-print(pathlib.Path("outputs/runs") / f"{ts}__{m}__L{int(lvl):02d}__{sys.argv[3]}")
-EOF
-)
+    run_dir=$("$PY" "$REPO/evals/resolve_run_dir.py" "$m" "$lvl" "$RUN_TAG")
 
     echo "--- eval $m L$lvl -> $run_dir"
     if "$PY" -m evals.runner \
