@@ -14,7 +14,8 @@ from structures.defence import (build_defence, verify_minimum as verify_defence_
                      verify_minimum_decomposed as verify_defence_decomposed)
 from structures.interaction import build_mixed, check_interference, solve_mixed
 from core.prompting import render
-from core.curriculum import ATTACK, DEFENCE, MIXED, spec_for
+from core.curriculum import PROFILES, ATTACK, DEFENCE, MIXED, spec_for
+from core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
 from core.scoring import score_item
 
 TASK = "attack_defense"
@@ -50,7 +51,21 @@ class Item:
     def as_score_input(self) -> Dict:
         return {"base_ops": self.base_ops, "ordering": self.ordering,
                 "goals": [{"claim": g["claim"], "want": g["want"]} for g in self.goals],
-                "min_directives": self.min_directives}
+                "min_directives": self.min_directives,
+                "subgoals": self.subgoals}
+
+    @property
+    def subgoals(self) -> List[str]:
+        out = []
+        for g in self.goals:
+            if g.get("want") != "OVERRULED":
+                continue
+            for o in self.base_ops:
+                if o.kind in ("defeasible", "strict") and o.consequent == g["claim"]:
+                    for a in (o.antecedents or ()):
+                        if a not in out:
+                            out.append(a)
+        return out
 
 
 def _ops_ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
@@ -91,7 +106,8 @@ def _atoms_and_rules(ops: Sequence[Operation]) -> Tuple[set, set]:
     return atoms, rules
 
 
-def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
+def build_attack_item(level: int, seed: int, ordering: str,
+                      profile: str = "FULL") -> Optional[Item]:
     import random
     sp = spec_for(level, ordering, variant=seed % 5)
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
@@ -100,7 +116,10 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
 
     pool = ["C2"] if level <= 3 else (["C2", "C4"] if level <= 6 else
                                       ["C2", "C4", "C7"] if level <= 9 else
-                                      ["C2", "C4", "C6", "C7"])
+                                      ["C2", "C4", "C6", "C7", "C8", "C9"])
+    prof = PROFILES[profile]
+    if not prof.permits("axiom"):
+        pool = [c for c in pool if c not in ("C3", "C4")] or ["C2"]
     picks = [pool[i % len(pool)] for i in range(n)]
     rng.shuffle(picks)
     want_distinct = 1 if level <= 3 else (2 if level <= 9 else 3)
@@ -126,7 +145,8 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
             decoy_srcs.append(d)
     chains = []
     ridx = 0
-    for cname in picks:
+    j_budget = junctions_for(level, max(1, n * depth))
+    for ci, cname in enumerate(picks):
         cs = CONFIGS[cname]
         root = next(it)
         mids = [next(it) for _ in range(depth + 2)]
@@ -134,15 +154,21 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
         for _ in range(depth + 2):
             ridx += 1
             rn.append(f"d{ridx}")
+        per_chain = max(0, j_budget // max(1, len(picks)))
+        if j_budget and per_chain == 0 and ci < j_budget:
+            per_chain = 1
         if cname == "C7":
             k = max(1, min(depth - 1, 2))
-            ch = cs.builder(root, mids, target, rn, depth, k)
+            ch = cs.builder(root, mids, target, rn, depth, k,
+                            n_junctions=per_chain, ternary=wants_ternary(level, ci))
         else:
-            ch = cs.builder(root, mids, target, rn, depth)
-        if not ch.rules[-1].get("strict"):
-            return None
+            ch = cs.builder(root, mids, target, rn, depth,
+                            n_junctions=per_chain, ternary=wants_ternary(level, ci))
+        pass
         chains.append(ch)
         ops.extend(ch.to_ops())
+    if not any(c.rules[-1].get("strict") for c in chains):
+        return None
     for j in range(n_decoy_strict):
         dr, dm, dc = next(it), next(it), next(it)
         ridx += 1
@@ -153,6 +179,7 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
 
     _lx, _ = language_enrichment(
         iter(_names(stable_seed(seed, level, ordering, "lx"), 40)), [900], prefix="lx")
+    _lx = PROFILES[profile].filter(_lx)
     ops = list(ops) + _lx
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for _c in chains:
@@ -200,6 +227,9 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
                 metadata={
                     "n_chains": n, "chain_depth": depth, "configs": picks,
                     "distinct_configs": len(set(picks)),
+                    "n_chain_rules": sum(len(c.rules) for c in chains),
+                    "n_theory_rules": sum(1 for o in base
+                                          if o.kind in ("defeasible", "strict")),
                     "n_rules": sum(len(c.rules) for c in chains),
                     "min_moves": mn["required_moves"],
                     "rejected_moves": mn["rejected_moves"],
@@ -213,7 +243,7 @@ def build_attack_item(level: int, seed: int, ordering: str) -> Optional[Item]:
                     "per_chain_cost": [reasoning_cost(c, ordering)["cost"] for c in chains],
                     "per_chain_admits": [sorted(CONFIGS[c].admits(ordering)) for c in picks],
                     "n_decoy_strict": n_decoy_strict,
-                    "shuffled_presentation": True,
+                    "shuffled_presentation": True, "profile": profile,
                     "survival": survival,
                     "contested_premises": decoy_srcs,
                     "clean_premise_available": True,
@@ -249,11 +279,14 @@ def _defence_knobs(level: int) -> tuple:
     return _DEFENCE_KNOBS[max(1, min(15, level))]
 
 
-def build_defence_item(level: int, seed: int, ordering: str) -> Optional[Item]:
+def build_defence_item(level: int, seed: int, ordering: str,
+                       profile: str = "FULL") -> Optional[Item]:
     n, n_strict, sup, atk_d = _defence_knobs(level)
     n_decoy = 0 if level < 6 else min(2, 1 + (level - 6) // 5)
     names = _names(stable_seed(seed, level, ordering, "def"), 60 + n * 8 + n_decoy * 6)
-    d = build_defence(n, ordering, names, support_depth=sup,
+    d = build_defence(n, ordering, names, support_depth=sup, junction=(level >= 6),
+                      n_junctions=junctions_for(level, max(1, n * 4)),
+                      ternary=wants_ternary(level, 0),
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
                       attacker_depth=atk_d)
     if d is None:
@@ -269,6 +302,7 @@ def build_defence_item(level: int, seed: int, ordering: str) -> Optional[Item]:
         extra.append(Operation(kind="strict", name=f"sd{j}b", antecedents=(b2,), consequent=c2))
     _lx, _ = language_enrichment(
         iter(_names(stable_seed(seed, level, ordering, "lx"), 40)), [900], prefix="lx")
+    _lx = PROFILES[profile].filter(_lx)
     extra = list(extra) + _lx
     _allops, _rmap = randomize_rule_names(list(d.all_ops()) + extra,
                                           stable_seed(seed, level, ordering, "drn"))
@@ -303,7 +337,7 @@ def build_defence_item(level: int, seed: int, ordering: str) -> Optional[Item]:
                 metadata={
                     "n_attackers": n, "n_strict_attackers": n_strict, "n_decoys": n_decoy,
                     "support_depth": sup, "attacker_depth": atk_d,
-                    "n_decoy_strict": n_ds, "shuffled_presentation": True,
+                    "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
                     "minimality_proven": mn.get("lower_bound_proven", mn.get("proven", True)),
                     "minimality_method": mn.get("method", "per_attacker_lower_bound"),
                     "min_moves": mn["witness_moves"],
@@ -317,13 +351,16 @@ def build_defence_item(level: int, seed: int, ordering: str) -> Optional[Item]:
     return item
 
 
-def build_mixed_item(level: int, seed: int, ordering: str) -> Optional[Item]:
+def build_mixed_item(level: int, seed: int, ordering: str,
+                     profile: str = "FULL") -> Optional[Item]:
     n_atk = max(2, min(4, 2 + level // 5))
     names = _names(stable_seed(seed, level, ordering, "mix"), 120)
     depth = max(2, min(5, 2 + level // 4))
     stem = max(1, min(4, 1 + level // 5))
     m = build_mixed(names, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
-                    depth=depth, shared_depth=stem)
+                    depth=depth, shared_depth=stem, junction=(level >= 6),
+                    n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
+                    ternary=wants_ternary(level, 0))
     if m is None:
         return None
     inter = check_interference(m)
@@ -343,6 +380,7 @@ def build_mixed_item(level: int, seed: int, ordering: str) -> Optional[Item]:
         extra.append(Operation(kind="strict", name=f"ms{j}b", antecedents=(b2,), consequent=c2))
     _lx, _ = language_enrichment(
         iter(_names(stable_seed(seed, level, ordering, "lx"), 40)), [900], prefix="lx")
+    _lx = PROFILES[profile].filter(_lx)
     extra = list(extra) + _lx
     _allops, _rmap = randomize_rule_names(list(m.all_ops()) + extra,
                                           stable_seed(seed, level, ordering, "mrn"))
@@ -373,7 +411,7 @@ def build_mixed_item(level: int, seed: int, ordering: str) -> Optional[Item]:
                     "minimality_method": "interaction_all_necessary",
                     "n_attackers": n_atk, "shared_node": m.shared_node,
                     "branch_depth": depth, "stem_depth": stem,
-                    "n_decoy_strict": n_ds, "shuffled_presentation": True,
+                    "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
                     "minimality_proven": sol.get("all_necessary", False),
                     "minimality_method": "interaction_all_necessary",
                     "interferes": inter["interferes"],
@@ -391,14 +429,15 @@ MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: 
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              mode: Optional[str] = None, tries: int = 8) -> Optional[Item]:
+              mode: Optional[str] = None, profile: str = "FULL",
+              tries: int = 12) -> Optional[Item]:
     if mode is None:
         mode = spec_for(level, ordering, variant=seed % 5).mode
     fn = MODE_BUILDERS.get(mode)
     if fn is None:
         return None
     for k in range(tries):
-        it = fn(level, seed * 31 + k, ordering)
+        it = fn(level, seed * 31 + k, ordering, profile)
         if it is not None:
             return it
     return None

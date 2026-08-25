@@ -58,7 +58,9 @@ class DefenceItem:
 
 def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
                   support_depth: int = 2, n_strict_attackers: int = 0,
-                  n_decoys: int = 0, attacker_depth: int = 2) -> Optional[DefenceItem]:
+                  n_decoys: int = 0, attacker_depth: int = 2,
+                  junction: bool = False, n_junctions: int = 1,
+                  ternary: bool = False) -> Optional[DefenceItem]:
     it = iter(names)
     tgt = next(it)
     root = next(it)
@@ -66,18 +68,38 @@ def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
 
     support: List[str] = []
     cur = root
+    j_points = set()
+    if junction and support_depth >= 3:
+        step = max(1, support_depth // (n_junctions + 1))
+        j_points = {min(support_depth - 2, step * (i + 1)) for i in range(n_junctions)}
+    junction_at = -1
     for i in range(max(1, support_depth)):
         nxt = tgt if i == support_depth - 1 else next(it)
         rn = f"s{i+1}"
-        ops.append(Operation(kind="defeasible", name=rn, antecedents=(cur,), consequent=nxt))
+        if i in j_points:
+            extra = []
+            for _e in range(2 if ternary else 1):
+                broot = next(it)
+                blit = next(it)
+                ops.append(Operation(kind="premise", content=broot))
+                ops.append(Operation(kind="defeasible", name=f"{rn}b{_e}",
+                                     antecedents=(broot,), consequent=blit))
+                support.append(f"{rn}b{_e}")
+                extra.append(blit)
+            ops.append(Operation(kind="defeasible", name=rn,
+                                 antecedents=tuple([cur] + extra), consequent=nxt))
+        else:
+            ops.append(Operation(kind="defeasible", name=rn, antecedents=(cur,), consequent=nxt))
         support.append(rn)
         cur = nxt
 
     attackers: List[Attacker] = []
     ad = max(2, attacker_depth)
+    atk_junctions = max(0, n_junctions - len(j_points))
     for a in range(n_attackers):
         ar = next(it)
         ops.append(Operation(kind="premise", content=ar))
+        _use_j = a < atk_junctions
         strict = a < n_strict_attackers
         cur = ar
         rules: List[str] = []
@@ -88,8 +110,21 @@ def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
             if first_mid is None:
                 first_mid = nxt
             nm = f"x{a+1}" if last else f"x{a+1}_{q}"
-            ops.append(Operation(kind="strict" if (last and strict) else "defeasible", name=nm,
-                                 antecedents=(cur,), consequent=nxt))
+            _is_strict = last and strict
+            if _use_j and not _is_strict and q == 0:
+                extra = []
+                for _e in range(2 if ternary else 1):
+                    broot = next(it); blit = next(it)
+                    ops.append(Operation(kind="premise", content=broot))
+                    ops.append(Operation(kind="defeasible", name=f"{nm}b{_e}",
+                                         antecedents=(broot,), consequent=blit))
+                    rules.append(f"{nm}b{_e}")
+                    extra.append(blit)
+                ops.append(Operation(kind="defeasible", name=nm,
+                                     antecedents=tuple([cur] + extra), consequent=nxt))
+            else:
+                ops.append(Operation(kind="strict" if _is_strict else "defeasible", name=nm,
+                                     antecedents=(cur,), consequent=nxt))
             rules.append(nm)
             cur = nxt
         attackers.append(Attacker(name=f"x{a+1}", root=ar, mid=first_mid, via_strict=strict,

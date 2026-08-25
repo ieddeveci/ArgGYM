@@ -7,6 +7,17 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
 
+# Partial credit for an answer that moves the theory toward its goals without
+# reaching them, and the threshold above which an over-long answer counts as
+# bloated. Both from origin/main.
+BLOAT_FACTOR = 2
+PARTIAL_CAP = 0.25
+
+# origin/main reads the FIRST [answer] block. Kept the last-block reader: a
+# reasoning model routinely drafts an answer mid-chain-of-thought and then
+# revises it, so the first block is the draft it already abandoned. Scoring that
+# marks the model wrong on work it had corrected, and does so selectively for
+# the models that think longest -- which is the population under comparison.
 _ANSWER_OPEN = re.compile(r"\[\s*answer\s*\]", re.I)
 _ANSWER_CLOSE = re.compile(r"\[\s*/\s*answer\s*\]", re.I)
 
@@ -14,11 +25,8 @@ _ANSWER_CLOSE = re.compile(r"\[\s*/\s*answer\s*\]", re.I)
 def answer_region(text: Optional[str]) -> Optional[str]:
     """The content of the FINAL complete [answer]...[/answer] region.
 
-    The last region, not the first: a reasoning model routinely drafts an answer
-    mid-chain-of-thought and then revises it, and what it submits is the
-    revision. Scoring the abandoned draft would report the model as wrong on
-    work it had already corrected. Returns None when no complete region exists,
-    which the callers report as a format failure rather than a wrong answer.
+    Returns None when no complete region exists, which the callers report as a
+    format failure rather than a wrong answer.
     """
     s = text or ""
     for m in reversed(list(_ANSWER_OPEN.finditer(s))):
@@ -172,7 +180,33 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
         if g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED"))
 
     if not success:
-        return {"score": 0.0, "reason": "goal_not_met", "success": False,
+        subgoals = item.get("subgoals") or []
+        sub_progress = None
+        if subgoals:
+            hit = 0
+            for lit in subgoals:
+                try:
+                    if str(v.status(lit)) != "JUSTIFIED":
+                        hit += 1
+                except Exception:
+                    pass
+            sub_progress = hit / len(subgoals)
+            diag["subgoals_defeated"] = f"{hit}/{len(subgoals)}"
+
+        per_goal = []
+        for g in diag["goals_met"]:
+            if g["got"] == g["want"]:
+                per_goal.append(1.0)
+            elif g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED"):
+                per_goal.append(0.4)
+            elif sub_progress is not None and g["want"] == "OVERRULED":
+                per_goal.append(0.3 * sub_progress)
+            else:
+                per_goal.append(0.0)
+        progress = (sum(per_goal) / len(per_goal)) if per_goal else 0.0
+        partial = round(PARTIAL_CAP * progress, 4) if consistent else 0.0
+        return {"score": partial, "reason": "goal_not_met", "success": False,
+                "progress": round(progress, 4),
                 "achieved_status": diag["achieved_status"],
                 "deadlock_not_defeat": diag["deadlock_not_defeat"],
                 "diagnostics": diag}
@@ -181,6 +215,11 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
                 "achieved_status": diag["achieved_status"],
                 "deadlock_not_defeat": diag["deadlock_not_defeat"],
                 "diagnostics": diag}
+    if n_used > BLOAT_FACTOR * max(minimum, 1):
+        diag["bloat_ratio"] = round(n_used / max(minimum, 1), 2)
+        return {"score": 0.0, "reason": f"bloated:{n_used}_used_vs_{minimum}_minimum",
+                "success": True, "achieved_status": diag["achieved_status"],
+                "deadlock_not_defeat": diag["deadlock_not_defeat"], "diagnostics": diag}
     efficiency = min(1.0, minimum / max(n_used, 1))
     score = round(0.5 + 0.5 * efficiency, 4)
     return {"score": score, "reason": "ok", "success": True,

@@ -28,6 +28,7 @@ _EXPORTABLE = {
     "defence": "attackdef",
     "attack_defense": "attackdef",
     "perturbation": "perturb",
+    "semantics_query": "semquery",
 }
 
 _ATTACKDEF_MODES = {"attack": "attack", "defence": "defence",
@@ -105,6 +106,14 @@ def _export_row(task: str, lv: int, o: str, s: int):
         return it, formalize.score(it.reference, it)["score"], \
             [{"claim": l, "want": it.gold_status[l]} for l in it.queried], \
             it.metadata["n_directives"]
+    if task == "semantics_query":
+        from tasks import semantics_query as semquery
+        it = semquery.make_item(lv, s, o)
+        if it is None:
+            return None
+        return it, semquery.score(it.reference, it)["score"], \
+            [{"claim": f"{c} under {sm}", "want": it.gold[(c, sm)]} for c, sm in it.queries], \
+            it.metadata["n_queries"]
     if task == "status_query":
         it = statusquery.make_item(lv, s, o)
         if it is None:
@@ -146,5 +155,3 @@ def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1)) ->
             f.write(json.dumps(r, default=str) + "\n")
     print(f"wrote {len(rows)} items ({manifest['n_valid']} valid) -> {path}")
     print(f"taskset_hash {manifest['taskset_hash']}")
-
-

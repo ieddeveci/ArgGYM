@@ -8,9 +8,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
+from core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
 from core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
                           NEGATED_AXIOM, NEGATED_LITERAL, NEGATED_PREMISE, REBUT_RULE,
                           STRICT_EXCLUSION, STRICT_FROM_NEGATION,
+                          JUNCTION_DEFEASIBLE, JUNCTION_STRICT,
                      NEW_TOPIC, OBJECTION_CONNECTIVES, OPENERS, PREFER_PREMISE, PREFER_RULE,
                      PREMISE, RULE_ANAPHORA, RULE_REFERENCE, STRICT, UNDERCUT)
 
@@ -92,12 +94,6 @@ def _sentence(text: str, rng: random.Random, prefix: str = "",
 
 
 def _plain_neg(lit: str) -> str:
-    """A negated literal rendered plainly, for positions inside a larger clause.
-
-    The varied forms are clauses -- "p fails", "it is not the case that p" -- and substituting one into
-    a rule template gives "it is not the case that bm3 ordinarily yields ek3", which reads as denying
-    the whole rule rather than as a rule firing from not-bm3. In antecedent and rule-reference position
-    the negation must scope over the literal only."""
     return f"not {lit[1:]}" if lit.startswith("-") else lit
 
 
@@ -108,12 +104,6 @@ def _lit_phrase(lit: str, rng, cyc=None) -> str:
 
 
 def _rule_ref(o: Operation, rng, cyc=None) -> str:
-    """A rule described as a noun phrase, e.g. "the step from p to q".
-
-    A negated consequent is rendered plainly as "not q" here, NOT through the varied negated-literal
-    forms. Those forms are clauses -- "q fails", "q does not hold" -- and embedding a clause inside a
-    noun phrase produces "the move from ml7 to no4 fails", which reads as a sentence about the move
-    failing rather than a reference to it."""
     def plain(lit):
         return f"not {lit[1:]}" if lit.startswith("-") else lit
     tmpl = cyc.pick(RULE_REFERENCE) if cyc else rng.choice(RULE_REFERENCE)
@@ -135,18 +125,8 @@ class _Cycler:
         return pool.pop()
 
 
-# Singular noun phrases for a conjunctive antecedent, so the rule templates keep
-# subject-verb agreement. Each must be read as requiring BOTH conjuncts -- these
-# are the only surface forms in which the benchmark expresses `a AND c`.
-_CONJ_PHRASES = [
-    "{a} together with {c}",
-    "the combination of {a} and {c}",
-    "{a} in conjunction with {c}",
-    "the presence of both {a} and {c}",
-]
-
-
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          profile: str = "FULL") -> Optional[FItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
     lo = 3 + int((level - 1) * (40 - 3) / 14)
@@ -162,21 +142,46 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
     ridx = [0]
     typed: List[Tuple[str, object]] = []
     n_neg = [0]
+    j_budget = junction_budget(level, JUNCTION_CAPS["formalization"])
+    j_used = [0]
+    prof = PROFILES[profile]
 
     sentences.append(cyc.pick(OPENERS))
     for u in range(n_units):
         a, b, c = next(it), next(it), next(it)
-        # A NEGATION unit, every third from level 3. Before this the prose carried no negated
-        # literal a model had to write: zero negated premises, zero rebuts. The only negation was the
-        # word "not" inside an undercut template.
+        if j_used[0] < j_budget:
+            j1, j2, jr = next(it), next(it), next(it)
+            use_strict_j = (u % 8 == 5) and prof.permits("strict")
+            ops.append(Operation(kind="premise", content=j1))
+            ops.append(Operation(kind="premise", content=j2))
+            sentences.append(_sentence(cyc.pick(PREMISE).format(p=j1), rng, at_start=True))
+            sentences.append(_sentence(cyc.pick(PREMISE).format(p=j2), rng))
+            ridx[0] += 1
+            ops.append(Operation(kind="strict" if use_strict_j else "defeasible",
+                                 name=f"q_{ridx[0]}", antecedents=(j1, j2), consequent=jr))
+            sentences.append(_sentence(
+                cyc.pick(JUNCTION_STRICT if use_strict_j else JUNCTION_DEFEASIBLE).format(
+                    p=j1, q=j2, r=_lit_phrase(jr, rng, cyc)), rng,
+                prefix=cyc.pick(FORWARD_CONNECTIVES)))
+            typed.append(("strict" if use_strict_j else "defeasible", ops[-1]))
+            if jr not in queried:
+                queried.append(jr)
+            j_used[0] += 1
+            continue
+
         neg_unit = level >= 3 and u % 3 == 2
         if neg_unit:
-            # cycle the four negation kinds in order, so the axiom-of-impossibility appears as often
-            # as the others. Indexing on `u` alone gave it only every twelfth unit.
-            kind = n_neg[0] % 5
+            _avail = [1, 2]
+            if prof.permits("axiom"):
+                _avail.append(0)
+            if prof.permits("strict"):
+                _avail.append(3)
+            if prof.permits("axiom") and prof.permits("strict"):
+                _avail.append(4)
+            _avail.sort()
+            kind = _avail[n_neg[0] % len(_avail)]
             n_neg[0] += 1
             if kind == 0:
-                # axiom of IMPOSSIBILITY, contradicted by an ordinary premise that loses outright
                 ops.append(Operation(kind="axiom", content="-" + a))
                 sentences.append(_sentence(cyc.pick(NEGATED_AXIOM).format(p=a), rng, at_start=True))
                 ops.append(Operation(kind="premise", content=a))
@@ -189,7 +194,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                                                 q=_lit_phrase(b, rng, cyc)), rng,
                     prefix=cyc.pick(FORWARD_CONNECTIVES)))
             elif kind == 1:
-                # a fallible DENIAL, decided by a premise preference
                 ops.append(Operation(kind="premise", content=a))
                 ops.append(Operation(kind="premise", content="-" + a))
                 ops.append(Operation(kind="prefer_premise", stronger="-" + a, weaker=a))
@@ -205,7 +209,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                                                 q=_lit_phrase(b, rng, cyc)), rng,
                     prefix=cyc.pick(FORWARD_CONNECTIVES)))
             elif kind == 2:
-                # a REBUT: two rules, one concluding b and one concluding -b, resolved by preference
                 ops.append(Operation(kind="premise", content=a))
                 ops.append(Operation(kind="premise", content=c))
                 sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
@@ -226,9 +229,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                 sentences.append(_sentence(cyc.pick(PREFER_RULE).format(
                     R1=_rule_ref(ops[-3], rng, cyc), R2=_rule_ref(ops[-2], rng, cyc)), rng))
             elif kind == 4:
-                # an IMPOSSIBILITY AXIOM feeding a STRICT step: the conclusion is unassailable, and an
-                # attacker aimed at it is overruled. The same shape with a defeasible step would fall to
-                # an undercut, which is the type decision this unit tests.
                 ops.append(Operation(kind="axiom", content="-" + a))
                 sentences.append(_sentence(cyc.pick(NEGATED_AXIOM).format(p=a), rng, at_start=True))
                 ridx[0] += 1
@@ -245,7 +245,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                 sentences.append(_sentence(cyc.pick(REBUT_RULE).format(p=c, q=b), rng,
                                            prefix=cyc.pick(OBJECTION_CONNECTIVES)))
             else:
-                # a strict EXCLUSION: p rules out q, and something else argues for q
                 ops.append(Operation(kind="premise", content=a))
                 ops.append(Operation(kind="premise", content=c))
                 sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
@@ -264,39 +263,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                 queried.append(b)
             continue
 
-        # A CONJUNCTION unit, every fourth from level 4. `a AND b => c` has always
-        # been in the DSL, the parser has always accepted it and the engine has
-        # always evaluated it -- but no generator ever emitted one, so every
-        # formalization item was solvable by a model that believes a rule takes
-        # exactly one antecedent. Nothing in the benchmark could tell that model
-        # apart from a correct one.
-        if level >= 4 and u % 4 == 1:
-            if u > 0:
-                sentences.append(cyc.pick(NEW_TOPIC))
-            ops.append(Operation(kind="premise", content=a))
-            sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
-            ops.append(Operation(kind="premise", content=c))
-            sentences.append(_sentence(cyc.pick(PREMISE).format(p=c), rng))
-            ridx[0] += 1
-            rule_op = Operation(kind="defeasible", name=f"q_{ridx[0]}",
-                                antecedents=(a, c), consequent=b)
-            ops.append(rule_op)
-            # The rule forms carry a single antecedent slot and are written for a
-            # singular subject ("{p} creates a presumption..."), so the
-            # conjunction goes in as a singular noun phrase. Plain "a and c"
-            # would read "a and c creates", putting a grammar error in front of
-            # the model on exactly the items testing a construct it has never
-            # seen -- a confound between parsing conjunction and parsing bad
-            # English.
-            sentences.append(_sentence(
-                cyc.pick(DEFEASIBLE).format(p=rng.choice(_CONJ_PHRASES).format(a=a, c=c),
-                                            q=_lit_phrase(b, rng, cyc)),
-                rng, prefix=cyc.pick(FORWARD_CONNECTIVES)))
-            typed.append(("defeasible", rule_op))
-            if b not in queried:
-                queried.append(b)
-            continue
-
         test_root = (u % 2 == 0)
 
         second_route = u > 0 and queried and rng.random() < 0.4
@@ -307,7 +273,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
             sentences.append(cyc.pick(NEW_TOPIC))
 
         if test_root:
-            use_axiom = rng.random() < 0.5
+            use_axiom = prof.permits("axiom") and rng.random() < 0.5
             root_kind = "axiom" if use_axiom else "premise"
             ops.append(Operation(kind=root_kind, content=a))
             sentences.append(_sentence(
@@ -320,7 +286,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[FItem]:
                 cyc.pick(DEFEASIBLE).format(p=a, q=_lit_phrase(b, rng, cyc)), rng,
                 prefix=cyc.pick(FORWARD_CONNECTIVES)))
         else:
-            use_strict = rng.random() < 0.5
+            use_strict = prof.permits("strict") and rng.random() < 0.5
             ops.append(Operation(kind="premise", content=a))
             sentences.append(_sentence(cyc.pick(PREMISE).format(p=a), rng, at_start=True))
             ridx[0] += 1
@@ -499,9 +465,10 @@ def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
+              profile: str = "FULL",
               tries: int = 16) -> Optional[FItem]:
     for k in range(tries):
-        it = build(level, seed * 89 + k, ordering)
+        it = build(level, seed * 89 + k, ordering, profile=profile)
         if it is not None:
             return it
     return None

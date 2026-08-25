@@ -13,6 +13,7 @@ from tasks import claim_chain as claimchain
 from tasks import defeat_diagnosis as defeatdiag
 from tasks import formalization as formalize
 from tasks import status_query as statusquery
+from tasks import semantics_query as semquery
 from core.scoring import score_item
 from core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK, describe, spec_for
 
@@ -27,8 +28,11 @@ CLAIMCHAIN = "claim_chain"
 DEFEATDIAG = "defeat_diagnosis"
 FORMALIZE = "formalization"
 STATUSQUERY = "status_query"
+SEMQUERY = "semantics_query"
 
 MODES = [
+    (SEMQUERY, "Semantics query",
+     "State the status of each claim under the semantics named beside it."),
     (STATUSQUERY, "Status query",
      "State the status of each named claim."),
     (FORMALIZE, "Formalization",
@@ -289,6 +293,29 @@ def api_generate():
     level = max(1, min(15, int(b.get("level", 8))))
     ordering = b.get("ordering", LAST_LINK)
     seed = int(b.get("seed", 1))
+    if mode == SEMQUERY:
+        try:
+            sq = semquery.make_item(level, seed, ordering)
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
+        if sq is None:
+            return jsonify({"ok": False, "error": "no item for this cell; try another seed"})
+        token = uuid.uuid4().hex
+        ITEMS[token] = ("semquery", sq)
+        ref = semquery.score(sq.reference, sq)
+        return jsonify({"ok": True, "token": token, "task": semquery.TASK, "mode": SEMQUERY,
+                        "level": sq.level, "ordering": sq.ordering, "prompt": sq.prompt,
+                        "reference": sq.reference, "ref_score": ref["score"],
+                        "min_directives": sq.metadata["n_queries"],
+                        "goals": [{"claim": f"{c} under {s}", "current": "-",
+                                   "want": sq.gold[(c, s)]} for c, s in sq.queries],
+                        "meta": sq.metadata,
+                        "spec": f"L{sq.level} semantics_query {sq.ordering.split('_')[0]}-link | "
+                                f"{sq.metadata['n_queries']} queries over "
+                                f"{len(sq.metadata['semantics'])} semantics | "
+                                f"{sq.metadata['n_items']} directives, "
+                                f"{sq.metadata['n_diverging_claims']} diverging claims"})
     if mode == STATUSQUERY:
         try:
             sq = statusquery.make_item(level, seed, ordering)
@@ -415,12 +442,14 @@ def api_generate():
         token = uuid.uuid4().hex
         ITEMS[token] = ("counterarg", cit)
         ref = score_item(cit.reference, counterarg.as_score_input(cit))
-        return jsonify({"ok": True, "token": token, "task": counterarg.TASK, "mode": mode,
+        return jsonify({"ok": True, "token": token, "task": counterarg.TASK, "mode": FORMALIZE,
                         "level": cit.level, "ordering": cit.ordering, "prompt": cit.prompt,
                         "reference": cit.reference, "ref_score": ref["score"],
                         "min_directives": cit.min_directives,
                         "goals": [{"claim": "-" + cit.target, "current": "not justified",
-                                   "want": "JUSTIFIED"}],
+                                   "want": "JUSTIFIED"},
+                                  {"claim": cit.target, "current": "justified",
+                                   "want": "OVERRULED"}],
                         "meta": cit.metadata,
                         "spec": f"L{cit.level} counter_argument {cit.ordering.split('_')[0]}-link | "
                                 f"{cit.metadata['n_chains']} chains "
@@ -521,6 +550,8 @@ def api_grade():
             res = defeatdiag.score(b.get("answer", ""), it)
         elif kind == "formalize":
             res = formalize.score(b.get("answer", ""), it)
+        elif kind == "semquery":
+            res = semquery.score(b.get("answer", ""), it)
         elif kind == "statusquery":
             res = statusquery.score(b.get("answer", ""), it)
         else:

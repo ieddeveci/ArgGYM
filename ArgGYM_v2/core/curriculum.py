@@ -165,3 +165,98 @@ def describe(spec: ItemSpec) -> str:
             f"survival={spec.require_survival} interaction={spec.require_interaction} "
             f"| require >={spec.min_required_moves} moves, >={spec.min_rejected_moves} dead ends"
             + ("" if spec.level in _MEASURED_FLOORS else " (interpolated)"))
+
+
+JUNCTION_START = 5
+JUNCTION_SHARE = 0.20
+
+
+def junctions_for(level: int, n_rules: int, start: int = JUNCTION_START,
+                  share: float = JUNCTION_SHARE, solve: bool = True) -> int:
+    if level < start:
+        return 0
+    if not solve:
+        return max(1, round(share * max(1, n_rules)))
+    extra = 1.0
+    denom = max(0.05, 1.0 - share * extra)
+    return max(1, round(share * max(1, n_rules) / denom))
+
+
+def junction_budget(level: int, cap: int, start: int = JUNCTION_START) -> int:
+    if level < start:
+        return 0
+    span = max(1, 15 - start)
+    return max(1, min(cap, round(1 + (level - start) * (cap - 1) / span)))
+
+
+JUNCTION_CAPS = {
+    "status_query": 20,
+    "preference_construction": 14,
+    "perturbation": 12,
+    "formalization": 5,
+    "claim_chain": 10,
+    "defeat_diagnosis": 9,
+    "counter_argument": 8,
+    "attack_defense": 10,
+    "semantics_query": 2,
+}
+
+NEGATED_BRANCH_SHARE = 0.5
+
+
+def negated_branch(index: int, share: float = NEGATED_BRANCH_SHARE) -> bool:
+    step = max(1, round(1 / max(share, 0.01)))
+    return (index % step) == 0
+
+
+TERNARY_FROM_LEVEL = 9
+TERNARY_SHARE = 0.4
+
+
+def wants_ternary(level: int, index: int) -> bool:
+    if level < TERNARY_FROM_LEVEL:
+        return False
+    return (index % max(1, round(1 / TERNARY_SHARE))) == 0
+
+
+@dataclass(frozen=True)
+class LanguageProfile:
+    name: str
+    kinds: FrozenSet[str]
+    note: str = ""
+
+    def permits(self, kind: str) -> bool:
+        return kind in self.kinds
+
+    def filter(self, ops):
+        return [o for o in ops if o.kind in self.kinds]
+
+
+_PREF = {"prefer_rule", "prefer_premise"}
+
+PROFILES: Dict[str, LanguageProfile] = {
+    "P_D": LanguageProfile(
+        "P_D", frozenset({"premise", "defeasible"} | _PREF),
+        "premises and defeasible rules; all three attack forms available"),
+    "P_S": LanguageProfile(
+        "P_S", frozenset({"premise", "strict", "prefer_premise"}),
+        "premises and strict rules; ONLY undermine works, and only premise preferences resolve"),
+    "P_S_D": LanguageProfile(
+        "P_S_D", frozenset({"premise", "strict", "defeasible"} | _PREF),
+        "no axioms, so nothing is unassailable at the root"),
+    "FULL": LanguageProfile(
+        "FULL", frozenset({"premise", "axiom", "defeasible", "strict"} | _PREF),
+        "the full language"),
+}
+
+TASK_PROFILES: Dict[str, Tuple[str, ...]] = {
+    "status_query": ("P_D", "P_S", "P_S_D", "FULL"),
+    "semantics_query": ("P_D",),
+    "claim_chain": ("P_D", "P_S_D", "FULL"),
+    "defeat_diagnosis": ("P_D", "P_S_D", "FULL"),
+    "perturbation": ("P_D", "P_S_D", "FULL"),
+    "preference_construction": ("P_D", "P_S_D", "FULL"),
+    "counter_argument": ("P_S_D", "FULL"),
+    "formalization": ("P_D", "P_S_D", "FULL"),
+    "attack_defense": ("P_S_D", "FULL"),
+}

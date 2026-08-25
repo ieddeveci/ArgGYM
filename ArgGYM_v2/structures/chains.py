@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from aspic.engine import Operation
+from core.curriculum import negated_branch
 from aspic.api import ASPICVerifier
 
 LAST_LINK = "last_link_elitist"
@@ -59,34 +60,61 @@ def _mk(root, root_axiom, mids, target, specs, extra=None, config="") -> Chain:
 
 def _chain_of(root: str, root_axiom: bool, target: str, depth: int,
               rule_names: Sequence[str], strict_at: Sequence[int], config: str,
-              mid_names: Sequence[str]) -> Chain:
+              mid_names: Sequence[str], n_junctions: int = 0,
+              ternary: bool = False) -> Chain:
     assert depth >= 1
     mids = list(mid_names[:max(0, depth - 1)])
     seq = [root] + mids + [target]
+    strict_set = set(strict_at)
     rules = []
     for i in range(depth):
         rules.append({"name": rule_names[i], "ants": [seq[i]], "cons": seq[i + 1],
-                      "strict": i in set(strict_at)})
+                      "strict": i in strict_set})
+
+    extra: List[Operation] = []
+    if n_junctions > 0:
+        eligible = [i for i in range(depth) if i not in strict_set]
+        step = max(1, len(eligible) // (n_junctions + 1)) if eligible else 1
+        picks = [eligible[min(len(eligible) - 1, step * (k + 1) - 1)]
+                 for k in range(n_junctions)] if eligible else []
+        for k, i in enumerate(sorted(set(picks))):
+            n_extra = 2 if (ternary and k % 2 == 0) else 1
+            for e in range(n_extra):
+                broot = f"{root}_jr{i}{e}"
+                if negated_branch(i * 2 + e):
+                    broot = "-" + broot
+                blit = f"{root}_jl{i}{e}"
+                brule = f"{rule_names[i]}j{i}{e}"
+                extra.append(Operation(kind="premise", content=broot))
+                extra.append(Operation(kind="defeasible", name=brule,
+                                       antecedents=(broot,), consequent=blit))
+                rules[i]["ants"].append(blit)
+
     return Chain(root=root, root_is_axiom=root_axiom, mids=mids, target=target,
-                 rules=rules, extra_ops=[], config=config)
+                 rules=rules, extra_ops=extra, config=config)
 
 
-def build_c1(root, mids, target, rn, depth=2) -> Chain:
-    return _chain_of(root, False, target, depth, rn, (), "C1", mids)
+def build_c1(root, mids, target, rn, depth=2,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
+    return _chain_of(root, False, target, depth, rn, (), "C1", mids, n_junctions=n_junctions, ternary=ternary)
 
 
-def build_c2(root, mids, target, rn, depth=2) -> Chain:
-    return _chain_of(root, False, target, max(2, depth), max(2, depth) and rn,
-                     (max(2, depth) - 1,), "C2", mids)
-
-
-def build_c3(root, mids, target, rn, depth=2) -> Chain:
-    return _chain_of(root, True, target, depth, rn, (), "C3", mids)
-
-
-def build_c4(root, mids, target, rn, depth=2) -> Chain:
+def build_c2(root, mids, target, rn, depth=2,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
     d = max(2, depth)
-    return _chain_of(root, True, target, d, rn, (d - 1,), "C4", mids)
+    return _chain_of(root, False, target, d, rn, (d - 1,), "C2", mids,
+                     n_junctions=n_junctions, ternary=ternary)
+
+
+def build_c3(root, mids, target, rn, depth=2,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
+    return _chain_of(root, True, target, depth, rn, (), "C3", mids, n_junctions=n_junctions, ternary=ternary)
+
+
+def build_c4(root, mids, target, rn, depth=2,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
+    d = max(2, depth)
+    return _chain_of(root, True, target, d, rn, (d - 1,), "C4", mids, n_junctions=n_junctions, ternary=ternary)
 
 
 def build_c5(root, mids, target, rn, rival_premise, rival_rule,
@@ -108,19 +136,44 @@ def build_c5(root, mids, target, rn, rival_premise, rival_rule,
     return ch
 
 
-def build_c7(root, mids, target, rn, depth=4, n_defeasible=2) -> Chain:
+def build_c7(root, mids, target, rn, depth=4, n_defeasible=2,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
     d = max(2, depth)
     k = max(1, min(n_defeasible, d))
     step = d / k
     pos = sorted({min(d - 1, int(i * step)) for i in range(k)})
     strict_at = tuple(i for i in range(d) if i not in set(pos))
-    ch = _chain_of(root, False, target, d, rn, strict_at, "C7", mids)
+    ch = _chain_of(root, False, target, d, rn, strict_at, "C7", mids, n_junctions=n_junctions, ternary=ternary)
     return ch
 
 
-def build_c6(root, mids, target, rn, depth=3) -> Chain:
+def build_c9(root, mids, target, rn, depth=3,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
+    d = max(3, depth)
+    mid_strict = (d // 2,) if d >= 3 else ()
+    return _chain_of(root, False, target, d, rn, mid_strict, "C9", mids, n_junctions=n_junctions, ternary=ternary)
+
+
+def build_c8(root, mids, target, rn, depth=3,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
+    d = max(3, depth)
+    ch = _chain_of(root, False, target, d, rn, (d - 1,), "C8", mids, n_junctions=n_junctions, ternary=ternary)
+    broot = f"{root}_b"
+    blit = f"{mids[0]}_b" if mids else f"{target}_b"
+    brule = f"{rn[0]}b"
+    at = min(d // 2, d - 2)
+    ch.rules[at]["ants"] = [ch.rules[at]["ants"][0], blit]
+    ch.extra_ops.extend([
+        Operation(kind="premise", content=broot),
+        Operation(kind="defeasible", name=brule, antecedents=(broot,), consequent=blit),
+    ])
+    return ch
+
+
+def build_c6(root, mids, target, rn, depth=3,
+             n_junctions: int = 0, ternary: bool = False) -> Chain:
     d = max(2, depth)
-    return _chain_of(root, False, target, d, rn, tuple(range(1, d)), "C6", mids)
+    return _chain_of(root, False, target, d, rn, tuple(range(1, d)), "C6", mids, n_junctions=n_junctions, ternary=ternary)
 
 
 @dataclass(frozen=True)
@@ -181,6 +234,22 @@ CONFIGS: Dict[str, ConfigSpec] = {
                       WEAKEST_LINK: (frozenset({UNDERMINE, UNDERCUT_MID}),
                                      frozenset({REBUT, FLIP_PREF}))},
                      "scarce: k defeasible rules scattered among d, interpolating C1..C6"),
+
+    "C9": ConfigSpec("C9", build_c9, 2, 3,
+                     {LAST_LINK:    (frozenset({UNDERMINE, UNDERCUT_MID, REBUT}),
+                                     frozenset({FLIP_PREF})),
+                      WEAKEST_LINK: (frozenset({UNDERMINE, UNDERCUT_MID, REBUT}),
+                                     frozenset({FLIP_PREF}))},
+                     "defeasible final rule, so the target is rebuttable here; a mid-chain strict "
+                     "rule keeps the cut point a choice rather than a formula"),
+
+    "C8": ConfigSpec("C8", build_c8, 2, 3,
+                     {LAST_LINK:    (frozenset({UNDERMINE, UNDERCUT_MID}),
+                                     frozenset({REBUT, FLIP_PREF})),
+                      WEAKEST_LINK: (frozenset({UNDERMINE, UNDERCUT_MID}),
+                                     frozenset({REBUT, FLIP_PREF}))},
+                     "junction: two branches feed one step, so the chain has TWO roots to undermine "
+                     "and an extra rule to undercut; rebut blocked by the strict final rule"),
 
     "C6": ConfigSpec("C6", build_c6, 2, 3,
                      {LAST_LINK:    (frozenset({UNDERMINE, UNDERCUT_MID}),

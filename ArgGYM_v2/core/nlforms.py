@@ -198,18 +198,6 @@ RULE_ANAPHORA: List[str] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# NEGATION-CARRYING CONSTRUCTS
-#
-# An audit found `formalization` prose carried almost no negation: zero negated premises, zero rebuts,
-# zero negated antecedents. The only negation was the word "not" inside an undercut template, so a model
-# never had to WRITE a negated literal at all.
-#
-# The four forms below all verified against the engine before being added.
-# ---------------------------------------------------------------------------
-
-# [axiom: -p] -- an axiom of IMPOSSIBILITY. Verified: it makes p unsatisfiable, and an ordinary premise
-# later asserting p is OVERRULED with no preference required. An axiom beats an assertion outright.
 NEGATED_AXIOM: List[str] = [
     "it is impossible that {p}",
     "{p} cannot hold under any circumstances",
@@ -219,8 +207,6 @@ NEGATED_AXIOM: List[str] = [
     "the falsity of {p} is not open to argument",
 ]
 
-# [premise: -p] -- a FALLIBLE denial. Verified: against an assertion of p this deadlocks unless a
-# premise preference decides it, which is the contrast with the axiom above.
 NEGATED_PREMISE: List[str] = [
     "{p} is denied",
     "we take it that {p} does not hold",
@@ -229,8 +215,6 @@ NEGATED_PREMISE: List[str] = [
     "there is reason to think {p} fails",
 ]
 
-# [defeasible r: p => -q] -- a REBUT, an attack on a conclusion rather than on an inference.
-# Modgil and Prakken classify this as an attack "on the conclusions of defeasible inferences".
 REBUT_RULE: List[str] = [
     "{p} is a reason against {q}",
     "{p} counts against {q}",
@@ -239,7 +223,6 @@ REBUT_RULE: List[str] = [
     "{p} raises a presumption that {q} is false",
 ]
 
-# [strict r: p -> -q] -- an exclusion. Strict, so it cannot be undercut and wins outright.
 STRICT_EXCLUSION: List[str] = [
     "{p} rules out {q}",
     "{p} excludes {q} entirely",
@@ -253,13 +236,6 @@ INVENTORY["rebut_rule"] = REBUT_RULE
 INVENTORY["strict_exclusion"] = STRICT_EXCLUSION
 
 
-# [strict r: -p -> q] -- a rule firing FROM a negated literal, strictly.
-#
-# Verified, and the contrast with the defeasible version is the point: with the same negated antecedent,
-# an undercut aimed at the step defeats the conclusion when the step is defeasible and does NOTHING when
-# it is strict. Combined with an impossibility axiom the result is unassailable -- not undermineable at
-# the root, not undercuttable at the step, and not rebuttable at the conclusion, since ASPIC+ forbids
-# rebutting a strictly derived conclusion.
 STRICT_FROM_NEGATION: List[str] = [
     "if {p} does not hold then necessarily {q}",
     "the absence of {p} guarantees {q}",
@@ -269,3 +245,23 @@ STRICT_FROM_NEGATION: List[str] = [
 ]
 
 INVENTORY["strict_from_negation"] = STRICT_FROM_NEGATION
+
+
+JUNCTION_DEFEASIBLE: List[str] = [
+    "taken together, {p} and {q} support {r}",
+    "{p} and {q} jointly give reason to accept {r}",
+    "given both {p} and {q}, {r} may be presumed",
+    "{p} in combination with {q} creates a presumption in favour of {r}",
+    "where {p} and {q} both hold, {r} normally follows",
+    "{r} rests on {p} and {q} together, and needs both",
+]
+
+JUNCTION_STRICT: List[str] = [
+    "{p} and {q} together entail {r}",
+    "there is no case in which {p} and {q} hold and {r} does not",
+    "{p} and {q} jointly guarantee {r}",
+    "taken together, {p} and {q} settle {r} conclusively",
+]
+
+INVENTORY["junction_defeasible"] = JUNCTION_DEFEASIBLE
+INVENTORY["junction_strict"] = JUNCTION_STRICT

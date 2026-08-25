@@ -256,3 +256,48 @@ def minimal_subset_exact(candidates, holds, max_calls=20000):
     if not proven and calls[0] <= max_calls:
         proven = True
     return best, proven, calls[0]
+
+
+def transpose_rule(op):
+    from aspic.engine import Operation
+    if op.kind != "strict":
+        return []
+    ants = list(op.antecedents or ())
+    if not ants or not op.consequent:
+        return []
+
+    def neg(x):
+        return x[1:] if x.startswith("-") else "-" + x
+
+    out = []
+    for i, a in enumerate(ants):
+        rest = [x for j, x in enumerate(ants) if j != i]
+        out.append(Operation(kind="strict", name=f"{op.name}_tp{i}",
+                             antecedents=tuple([neg(op.consequent)] + rest),
+                             consequent=neg(a)))
+    return out
+
+
+def close_under_transposition(ops):
+    have = {(tuple(o.antecedents or ()), o.consequent)
+            for o in ops if o.kind == "strict"}
+    added = []
+    for o in list(ops):
+        if o.kind != "strict":
+            continue
+        for t in transpose_rule(o):
+            key = (tuple(t.antecedents), t.consequent)
+            if key not in have:
+                have.add(key)
+                added.append(t)
+    return list(ops) + added, len(added)
+
+
+def strict_conclusions_clash(ops):
+    strict = [o for o in ops if o.kind == "strict" and o.consequent]
+    out = []
+    for i, a in enumerate(strict):
+        for b in strict[i + 1:]:
+            if a.consequent == ("-" + b.consequent) or b.consequent == ("-" + a.consequent):
+                out.append((a.name, b.name))
+    return out

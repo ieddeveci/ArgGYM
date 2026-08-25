@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from aspic.engine import Operation
 from aspic.api import ASPICVerifier
+from core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
+from core.curriculum import negated_branch
 from core.invariants import (randomize_rule_names, language_enrichment,
                             minimal_subset_exact)
 
@@ -86,7 +88,8 @@ class PCItem:
                 "allow_strict": False, "preferences_only": True}
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PCItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          profile: str = "FULL") -> Optional[PCItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pc"))
     n_claims = max(1, min(1 + (level * 8) // 15, 8))
     n_conf = max(n_claims + 1, min(n_claims + 1 + (level * 5) // 15, 10))
@@ -118,6 +121,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PCItem]:
     conflicts: List[Dict] = []
     ridx = 0
 
+    j_budget = junctions_for(level, max(1, n_conf * (depth + 2) + 4))
     for ci in range(n_conf):
         pro_root, con_root = next(it), next(it)
         ops.append(Operation(kind="premise", content=pro_root))
@@ -125,11 +129,33 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PCItem]:
         node = next(it)
         cur = pro_root
         pro_rules: List[str] = []
+        _pts = set()
+        if depth >= 2 and ci < j_budget:
+            _pts.add(min(depth // 2, depth - 1))
+            if j_budget > n_conf and depth >= 3:
+                _pts.add(0)
+        junction_at = -1
         for j in range(depth):
             ridx += 1
             nm = f"d{ridx}"
             nxt = node if j == depth - 1 else next(it)
-            ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur,), consequent=nxt))
+            if j in _pts:
+                broot = next(it)
+                _bsrc = ("-" + broot) if negated_branch(ci) else broot
+                ops.append(Operation(kind="premise", content=_bsrc))
+                ridx += 1
+                bnm = f"d{ridx}"
+                blit = next(it)
+                ops.append(Operation(kind="defeasible", name=bnm, antecedents=(_bsrc,),
+                                     consequent=blit))
+                pro_rules.append(bnm)
+                ridx += 1
+                nm = f"d{ridx}"
+                ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur, blit),
+                                     consequent=nxt))
+            else:
+                ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur,),
+                                     consequent=nxt))
             pro_rules.append(nm)
             cur = nxt
         ridx += 1
@@ -161,6 +187,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[PCItem]:
             resolved.append(c)
 
     _lx, _ = language_enrichment(it, [900], prefix="lx")
+    _lx = PROFILES[profile].filter(_lx)
     ops = list(ops) + _lx
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for _c in conflicts:
@@ -278,18 +305,16 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
                       for g in goals)
     verb = "makes" if len(goals) == 1 else "simultaneously makes"
     lines += ["", f"What is the minimal set of preference directives that {verb} {wants}?", "",
-              "Permitted additions: preference directives only, written exactly in these forms:",
-              "   [prefer_rule: <rule> > <rule>]",
-              "   [prefer_premise: <literal> > <literal>]",
-              "No new rules or premises may be added.",
-              "", "Answer format: one directive per line, between [answer] and [/answer]."]
+              "Permitted additions: preference directives only. "
+              "No new rules or premises may be added.", "",
+              "Answer format: one directive per line, between [answer] and [/answer]."]
     return "\n".join(lines)
 
 
-def make_item(level: int, seed: int, ordering: str = LAST_LINK,
+def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 14) -> Optional[PCItem]:
     for k in range(tries):
-        it = build(level, seed * 61 + k, ordering)
+        it = build(level, seed * 61 + k, ordering, profile)
         if it is not None:
             return it
     return None
