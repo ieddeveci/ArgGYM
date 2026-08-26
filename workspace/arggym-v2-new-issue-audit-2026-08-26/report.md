@@ -3,28 +3,28 @@
 - Audit date: 2026-08-26
 - Owner snapshot: fresh clone of `main` at `1fdc9db03ddcc415abd82bef0f230ab31b8a6892`
 - Scope: generation, export, prompt/scorer agreement, leakage, reproducibility, and benchmark validity
-- GitHub action: none; no finding below was posted
+- GitHub action: eight issues and two comments published; see [posted-issues.md](posted-issues.md)
 
 ## Outcome
 
-I found eight standalone issue candidates that are not covered by the current GitHub ledger. Five affect benchmark installation, composition, or scoring. Three concern leakage, specification, or generation cost. I also found two concrete v2 failures that belong on existing issues #19 and #12 instead of becoming new issues.
+I found and published eight standalone issues that were not covered by the GitHub ledger. Five affect benchmark installation, composition, or scoring. Three concern leakage, specification, or generation cost. I also posted two concrete v2 failures to existing issues #19 and #12 instead of creating duplicates.
 
 | ID | Severity | Finding | Disposition |
 |---|---|---|---|
-| N1 | High | A clean v2 install is impossible from its requirements file | New issue |
-| N2 | High | `export-all` omits four of the twelve modes exposed by the inspector | New issue; carried forward from the earlier audit's unfiled finding |
-| N3 | High | Export silently drops failed grid cells and produces an unbalanced taskset | New issue |
-| N4 | High | `claim_chain` gives full credit when the required line is reversed | New issue |
-| N5 | Medium | `counter_argument` rule names identify every injected noise component | New issue |
-| N6 | Medium | `semantics_query` repeatedly recomputes extension sets and can exceed 30 seconds for one official cell | New issue |
-| N7 | Medium | Construction tasks run a second uncapped exponential subset search | New issue |
-| N8 | Medium | The documented meaning of `overruled` contradicts the engine on undercuts | New issue |
-| E1 | High | Scorers accept a rule keyword paired with the wrong arrow | Add to #19 |
-| E2 | High | `formalization` gives full credit after reversing a gold preference | Add to #12 |
+| N1 | High | A clean v2 install is impossible from its requirements file | Published as [#22](https://github.com/ieddeveci/ArgGYM/issues/22) |
+| N2 | High | `export-all` omits four of the twelve modes exposed by the inspector | Published as [#23](https://github.com/ieddeveci/ArgGYM/issues/23) |
+| N3 | High | Export silently drops failed grid cells and produces an unbalanced taskset | Published as [#24](https://github.com/ieddeveci/ArgGYM/issues/24) |
+| N4 | High | `claim_chain` gives full credit when the required line is reversed | Published as [#25](https://github.com/ieddeveci/ArgGYM/issues/25) |
+| N5 | Medium | `counter_argument` rule names identify every injected noise component | Published as [#26](https://github.com/ieddeveci/ArgGYM/issues/26) |
+| N6 | Medium | `semantics_query` repeatedly recomputes extension sets and can exceed 30 seconds for one official cell | Published as [#27](https://github.com/ieddeveci/ArgGYM/issues/27) |
+| N7 | Medium | Construction tasks run a second uncapped exponential subset search | Published as [#28](https://github.com/ieddeveci/ArgGYM/issues/28) |
+| N8 | Medium | The documented meaning of `overruled` contradicts the engine on undercuts | Published as [#29](https://github.com/ieddeveci/ArgGYM/issues/29) |
+| E1 | High | Scorers accept a rule keyword paired with the wrong arrow | Added to [#19](https://github.com/ieddeveci/ArgGYM/issues/19#issuecomment-5429232065) |
+| E2 | High | `formalization` gives full credit after reversing a gold preference | Added to [#12](https://github.com/ieddeveci/ArgGYM/issues/12#issuecomment-5429232326) |
 
 The fast behavioral probes are reproducible with [probes.py](probes.py). Raw commands, outputs, and limits are in [evidence.md](evidence.md).
 
-## Standalone issue candidates
+## Published standalone issues
 
 ### N1 — A clean v2 install is impossible
 
@@ -154,4 +154,4 @@ Issue #12 already records the absence of negative controls and warns that the ol
 - The repository contains no v2 tests or installed `validation/` package, so there was no project test suite to run. This is already covered by #12.
 - I stopped the full `export-all` sweep because high-level extension and minimality searches were consuming minutes. Candidate timings were measured while another repository evaluation process was active, so treat the exact seconds as environment-specific; the timeouts and repeated-work code paths are the evidence.
 - I did not complete all 20 cells for `counter_argument`, `counter_argument_strict`, `preference_construction`, or `semantics_query`.
-- I did not change source code in the clone or post to GitHub.
+- I did not change source code in the clone.

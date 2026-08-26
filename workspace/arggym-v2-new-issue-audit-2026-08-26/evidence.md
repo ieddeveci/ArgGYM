@@ -14,7 +14,7 @@ The clone is at `workspace/arggym-v2-new-issue-audit-2026-08-26/repo` and remain
 
 ## Existing-issue check
 
-The current GitHub ledger contains 19 issues. Titles, bodies, and repository-wide issue comments were searched for the candidate topics. No issue or comment covered the install failure, export omissions, missing grid cells, claim-chain order, fixed `lx_` noise names, generation time, or the status-definition conflict.
+The pre-publication GitHub ledger contained 19 issues. Titles, bodies, and repository-wide issue comments were searched for the candidate topics. No issue or comment covered the install failure, export omissions, missing grid cells, claim-chain order, fixed `lx_` noise names, generation time, or the status-definition conflict.
 
 Two findings overlap existing scopes:
 
