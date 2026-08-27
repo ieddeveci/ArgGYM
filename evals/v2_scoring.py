@@ -41,13 +41,19 @@ def _v2():
     import core.scoring as scoring
     from tasks import (attack_defense, claim_chain, counter_argument,
                        defeat_diagnosis, formalization, perturbation,
-                       preference_construction, status_query)
+                       preference_construction, semantics_query, status_query)
     return {
         "scoring": scoring, "attack_defense": attack_defense,
         "claim_chain": claim_chain, "counter_argument": counter_argument,
         "defeat_diagnosis": defeat_diagnosis, "formalization": formalization,
         "perturbation": perturbation,
         "preference_construction": preference_construction,
+        # Every task added to evals/v2_taskset.py's TASKS must also be
+        # registered here, or _rebuild raises KeyError and score_sample turns
+        # every item of that task into a flat 0.0 -- indistinguishable from a
+        # model that answered everything wrong. semantics_query scored exactly
+        # 0.000 across all 40 items of the first v4 cell for that reason.
+        "semantics_query": semantics_query,
         "status_query": status_query,
     }
 
