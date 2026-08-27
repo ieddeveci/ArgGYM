@@ -11,17 +11,17 @@ and the live issue ledger through issue 29 on 2026-08-27.
 
 | Finding | Legitimate? | Owner main | Overlap | Disposition |
 |---|---|---|---|---|
-| A1: shared preference conflicts never run | Yes, with narrower impact wording | Still present | None | New issue candidate |
-| A2: defence L12 and L15 are identical | Yes | Still present | None | Combine with A3 |
-| A3: defence L6-to-L9 bundles several changes | Yes; one score is wrong and causality is unproven | Still present | None | One issue with A2 |
-| A4: strict counter-argument L3 is harder than L6 | Yes; quoted scores belong to one model | Still present | None | New issue candidate |
+| A1: shared preference conflicts never run | Yes, with narrower impact wording | Still present | None | Published as #30 |
+| A2: defence L12 and L15 are identical | Yes | Still present | None | Published with A3 as #31 |
+| A3: defence L6-to-L9 bundles several changes | Yes; one score is wrong and causality is unproven | Still present | None | Published with A2 as #31 |
+| A4: strict counter-argument L3 is harder than L6 | Yes; quoted scores belong to one model | Still present | None | Published as #32 |
 | A5: no conjunction coverage | Valid for the pilot | Fixed on owner main | None | Do not file |
 | B1: sampling keys were silently dropped | Valid for the local harness; impact partly overstated | Harness absent from owner main; local fix exists | None | Do not file upstream |
 | B2: high error rate was treated as server death | Valid for the local v2 harness and recorded incident | Harness absent from owner main; v2 path fixed locally | None | Do not file upstream |
 | C1: weakest-link efficiency has low sensitivity | Useful limitation, not an invariant | Applies to the branch-fixed taskset | None | Report caveat only |
 | C2: sampler penalty is a control, not a benchmark fix | Supported, with vendor-config wording corrected | No code defect | None | Report caveat only |
 
-## The three current-main issue candidates
+## The three current-main issues
 
 ### 1. The shared-conflict branch misses every evaluated level
 
@@ -116,4 +116,8 @@ The broad matches are adjacent but distinct:
 - [#12](https://github.com/ieddeveci/ArgGYM/issues/12) is a broad older tracking
   issue and does not describe these defects.
 
-Nothing was posted or changed on GitHub during this audit.
+After the audit, the user approved publication. The findings were posted as
+[#30](https://github.com/ieddeveci/ArgGYM/issues/30),
+[#31](https://github.com/ieddeveci/ArgGYM/issues/31), and
+[#32](https://github.com/ieddeveci/ArgGYM/issues/32) on 2026-08-27. No existing
+issue needed a comment or body update because none contained the same finding.

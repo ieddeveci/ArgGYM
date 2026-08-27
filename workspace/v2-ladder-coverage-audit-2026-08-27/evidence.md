@@ -184,4 +184,5 @@ findings.
 - I did not run a causal ablation separating strictness, attacker count, and
   depth for the Gemma drop. The generator defect is established; its share of
   that model effect is not.
-- I did not publish, comment on, close, or reopen any GitHub issue.
+- Publication happened only after this audit was complete and the user approved
+  it. See `posted-issues.md` for the resulting issue ledger.
