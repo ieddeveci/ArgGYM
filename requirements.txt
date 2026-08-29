@@ -1,7 +1,0 @@
-python-argumentation==2.0.2
-pandas
-openpyxl
-matplotlib
-flask                      
-
-

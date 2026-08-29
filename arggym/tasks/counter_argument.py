@@ -1,0 +1,364 @@
+from __future__ import annotations
+
+import hashlib
+import random
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
+from arggym.core.curriculum import negated_branch
+from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
+                        randomize_rule_names, remap_text, language_enrichment)
+
+TASK = "counter_argument"
+LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
+EASY_LEVELS = 4
+_L = "abcdefghijklmnopqrstuvwxy"
+
+
+def stable_seed(*parts) -> int:
+    return int(hashlib.blake2b("|".join(map(str, parts)).encode(), digest_size=8).hexdigest(), 16)
+
+
+def _names(seed: int, n: int) -> List[str]:
+    rng = random.Random(seed)
+    pool = [f"{a}{b}{d}" for a in _L[:12] for b in _L[12:] for d in range(10)]
+    rng.shuffle(pool)
+    return pool[:n]
+
+
+def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
+    facts = [o for o in ops if o.kind in ("premise", "axiom")]
+    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
+    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
+    if shuffle_seed is not None:
+        rng = random.Random(shuffle_seed)
+        rng.shuffle(facts)
+        rng.shuffle(rules)
+    return facts + rules + prefs
+
+
+def render_ops(ops: Sequence[Operation]) -> str:
+    out = []
+    for o in ops:
+        if o.kind in ("premise", "axiom"):
+            out.append(f"[{o.kind}: {o.content}]")
+        elif o.kind in ("defeasible", "strict"):
+            arrow = "=>" if o.kind == "defeasible" else "->"
+            out.append(f"[{o.kind} {o.name}: {' AND '.join(o.antecedents)} {arrow} {o.consequent}]")
+        else:
+            out.append(f"[{o.kind}: {o.stronger} > {o.weaker}]")
+    return "\n".join(out)
+
+
+def status(ops: Sequence[Operation], lit: str, ordering: str) -> str:
+    try:
+        return str(ASPICVerifier.from_operations(list(ops), ordering=ordering).status(lit))
+    except Exception:
+        return "ERR"
+
+
+@dataclass
+class CAItem:
+    prompt: str
+    theory_text: str
+    base_ops: List[Operation]
+    target: str
+    ordering: str
+    level: int
+    reference: str
+    min_directives: int
+    seed_lit: str
+    metadata: Dict = field(default_factory=dict)
+
+
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          allow_strict: bool = False) -> Optional[CAItem]:
+    rng = random.Random(stable_seed(seed, level, ordering, "ca"))
+    n_chain = max(1, min(1 + (level * 5) // 15, 6))
+    depth = max(2, min(2 + (level * 3) // 15, 5))
+    n_strict = 0 if level < 3 else min(n_chain, 1 + (level - 3) // 4)
+    n_axiom_strict = 0
+    use_decoy = level >= 9 and n_strict < n_chain
+    contested = level >= 8 or allow_strict
+    mid_target = level >= 6 and (seed % 2 == 1)
+
+    names = _names(stable_seed(seed, level, ordering, "nm"), 20 + n_chain * (depth + 5))
+    it = iter(names)
+    apex = next(it)
+    seed_lit = next(it)
+    ops: List[Operation] = [Operation(kind="premise", content=seed_lit)]
+
+    if contested:
+        for _ in range(2):
+            c = next(it)
+            ops.append(Operation(kind="premise", content=c))
+            ops.append(Operation(kind="premise", content="-" + c))
+            ops.append(Operation(kind="prefer_premise", stronger="-" + c, weaker=c))
+
+    chains: List[Dict] = []
+    ridx = 0
+    strict_flags = [i < n_strict for i in range(n_chain)]
+    rng.shuffle(strict_flags)
+    junction = next(it) if (mid_target and depth >= 3 and n_chain >= 2) else None
+    j_budget = junctions_for(level, max(1, n_chain * depth))
+    for ci in range(n_chain):
+        root = next(it)
+        ax_strict = ci < n_axiom_strict
+        ops.append(Operation(kind="axiom" if ax_strict else "premise", content=root))
+        cur = root
+        rules: List[Tuple[str, str, bool]] = []
+        for j in range(depth):
+            ridx += 1
+            nm = f"d{ridx}"
+            last = j == depth - 1
+            if last:
+                nxt = apex
+            elif junction is not None and j == depth // 2 - 1:
+                nxt = junction
+            else:
+                nxt = next(it)
+            strict = ax_strict or (last and strict_flags[ci])
+            _per = max(0, j_budget // max(1, n_chain))
+            if j_budget and _per == 0 and ci < j_budget:
+                _per = 1
+            _jpts = set()
+            if _per and depth >= 2:
+                _stepj = max(1, (depth - 1) // (_per + 1))
+                _jpts = {min(depth - 2, _stepj * (z + 1)) for z in range(_per)}
+            if (not strict and not last and j in _jpts):
+                _extra = []
+                for _e in range(2 if wants_ternary(level, ci) else 1):
+                    broot = next(it)
+                    _bsrc = ("-" + broot) if negated_branch(ci) else broot
+                    ops.append(Operation(kind="premise", content=_bsrc))
+                    ridx += 1
+                    bnm = f"d{ridx}"
+                    blit = next(it)
+                    ops.append(Operation(kind="defeasible", name=bnm, antecedents=(_bsrc,),
+                                         consequent=blit))
+                    rules.append((bnm, blit, False))
+                    _extra.append(blit)
+                ridx += 1
+                nm = f"d{ridx}"
+                ops.append(Operation(kind="defeasible", name=nm,
+                                     antecedents=tuple([cur] + _extra), consequent=nxt))
+            else:
+                ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
+                                     antecedents=(cur,), consequent=nxt))
+            rules.append((nm, nxt, strict))
+            cur = nxt
+        chains.append({"root": root, "rules": rules, "strict_final": strict_flags[ci]})
+
+    if mid_target and depth >= 3 and n_chain >= 2:
+        idx = depth // 2 - 1
+        cand = junction if junction is not None else chains[0]["rules"][idx][1]
+        supporters = [c for c in chains
+                      if any(r[1] == cand for r in c["rules"])]
+        if len(supporters) < n_chain:
+            target = apex
+            target_chains = chains
+            target_rule_idx = None
+        else:
+            target = cand
+            target_chains = supporters
+            target_rule_idx = idx
+    else:
+        target = apex
+        target_chains = chains
+        target_rule_idx = None
+
+    _lx, _ = language_enrichment(
+        iter(_names(stable_seed(seed, level, ordering, 'lx'), 40)), [900], prefix='lx')
+    ops = list(ops) + _lx
+    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+
+    atoms = {a.lstrip("-") for o in base for a in
+             (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])
+              + ([o.content] if o.content else []))}
+    rnames = {o.name for o in base if o.kind in ("defeasible", "strict") and o.name}
+    if atoms & rnames:
+        return None
+    if any(o.kind in ("premise", "axiom") and o.content == target for o in base):
+        return None
+    if status(base, target, ordering) != "JUSTIFIED":
+        return None
+    if status(base, "-" + target, ordering) == "JUSTIFIED":
+        return None
+
+    decoy_rule = None
+    decoy_root = None
+    if use_decoy:
+        droot = next(it)
+        decoy_root = droot
+        ops.append(Operation(kind="premise", content=droot))
+        ridx += 1
+        decoy_rule = f"d{ridx}"
+        ops.append(Operation(kind="defeasible", name=decoy_rule, antecedents=(droot,),
+                             consequent="-" + target))
+        cand = [c for c in target_chains
+                if not (c["rules"][target_rule_idx if target_rule_idx is not None else -1][2])]
+        killer = (cand[0]["rules"][target_rule_idx if target_rule_idx is not None else -1]
+                  if cand else None)
+        if killer is None:
+            decoy_rule = None
+        else:
+            ops.append(Operation(kind="prefer_rule", stronger=killer[0], weaker=decoy_rule))
+        base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+        if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
+            return None
+
+    pairs: List[Tuple[Operation, str]] = []
+
+    def add(op: Operation, line: str) -> None:
+        if line not in {l for _o, l in pairs}:
+            pairs.append((op, line))
+
+    if decoy_rule:
+        idx = target_rule_idx if target_rule_idx is not None else -1
+        killer = next((c["rules"][idx] for c in target_chains if not c["rules"][idx][2]), None)
+        if killer is None:
+            return None
+        add(Operation(kind="defeasible", name="z0", antecedents=(seed_lit,),
+                      consequent="-" + killer[0]),
+            f"[defeasible z0: {seed_lit} => -{killer[0]}]")
+        for ci, c in enumerate(target_chains):
+            rl = c["rules"][idx]
+            if rl[0] == killer[0]:
+                continue
+            if rl[2]:
+                first = c["rules"][0]
+                add(Operation(kind="defeasible", name=f"z{ci+1}", antecedents=(seed_lit,),
+                              consequent="-" + first[0]),
+                    f"[defeasible z{ci+1}: {seed_lit} => -{first[0]}]")
+            else:
+                add(Operation(kind="prefer_rule", stronger=decoy_rule, weaker=rl[0]),
+                    f"[prefer_rule: {decoy_rule} > {rl[0]}]")
+                if ordering == WEAKEST_LINK:
+                    for rr in (c["rules"][:idx + 1] if idx >= 0 else c["rules"]):
+                        if not rr[2]:
+                            add(Operation(kind="prefer_rule", stronger=decoy_rule,
+                                          weaker=rr[0]),
+                                f"[prefer_rule: {decoy_rule} > {rr[0]}]")
+                    add(Operation(kind="prefer_premise", stronger=decoy_root,
+                                  weaker=c["root"]),
+                        f"[prefer_premise: {decoy_root} > {c['root']}]")
+    else:
+        add(Operation(kind="defeasible", name="w", antecedents=(seed_lit,),
+                      consequent="-" + target),
+            f"[defeasible w: {seed_lit} => -{target}]")
+        for ci, c in enumerate(target_chains):
+            rules_upto = (c["rules"][:target_rule_idx + 1] if target_rule_idx is not None
+                          else c["rules"])
+            final = rules_upto[-1]
+            if final[2]:
+                first = c["rules"][0]
+                add(Operation(kind="defeasible", name=f"z{ci}", antecedents=(seed_lit,),
+                              consequent="-" + first[0]),
+                    f"[defeasible z{ci}: {seed_lit} => -{first[0]}]")
+                continue
+            if ordering == LAST_LINK:
+                add(Operation(kind="prefer_rule", stronger="w", weaker=final[0]),
+                    f"[prefer_rule: w > {final[0]}]")
+            else:
+                add(Operation(kind="prefer_premise", stronger=seed_lit, weaker=c["root"]),
+                    f"[prefer_premise: {seed_lit} > {c['root']}]")
+                for rl in rules_upto:
+                    if not rl[2]:
+                        add(Operation(kind="prefer_rule", stronger="w", weaker=rl[0]),
+                            f"[prefer_rule: w > {rl[0]}]")
+
+    ref_ops, lines = dedupe_parallel(pairs)
+
+    def holds(ops_subset) -> bool:
+        p2 = [o for o in ops_subset if o.kind not in ("prefer_rule", "prefer_premise")]
+        f2 = [o for o in ops_subset if o.kind in ("prefer_rule", "prefer_premise")]
+        try:
+            v = ASPICVerifier.from_operations(base + p2 + f2, ordering=ordering)
+            return (str(v.status("-" + target)) == "JUSTIFIED"
+                    and str(v.status(target)) == "OVERRULED"
+                    and v.is_consistent())
+        except Exception:
+            return False
+
+    best, _proven, _calls = minimal_subset_exact(ref_ops, holds, max_calls=40000)
+    if best is None:
+        return None
+    keep = {id(o) for o in best}
+    pairs = [(o, l) for o, l in zip(ref_ops, lines) if id(o) in keep]
+    ref_ops, lines = dedupe_parallel(pairs)
+    if not ref_ops or not holds(ref_ops):
+        return None
+    irredundant = assert_irredundant(ref_ops, holds)
+
+    bank: List[Tuple[List[Operation], List[str]]] = []
+    if allow_strict:
+        bank.append(([Operation(kind="strict", name="cs", antecedents=(seed_lit,),
+                                consequent="-" + target)],
+                     [f"[strict cs: {seed_lit} -> -{target}]"]))
+    for c in target_chains:
+        idx2 = target_rule_idx if target_rule_idx is not None else -1
+        rl = c["rules"][idx2]
+        if not rl[2]:
+            bank.append(([Operation(kind="defeasible", name="cw", antecedents=(seed_lit,),
+                                    consequent="-" + target),
+                          Operation(kind="prefer_rule", stronger="cw", weaker=rl[0])],
+                         [f"[defeasible cw: {seed_lit} => -{target}]",
+                          f"[prefer_rule: cw > {rl[0]}]"]))
+    for cand_ops, cand_lines in bank:
+        if len(cand_lines) >= len(lines):
+            continue
+        if holds(cand_ops):
+            ref_ops, lines = cand_ops, cand_lines
+            break
+
+    prompt = _render_prompt(render_ops(base), target, ordering, allow_strict)
+    return CAItem(
+        prompt=prompt, theory_text=render_ops(base), base_ops=base, target=target,
+        ordering=ordering, level=level,
+        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        min_directives=len(lines), seed_lit=seed_lit,
+        metadata={
+            "allow_strict": allow_strict, "n_axiom_strict_chains": n_axiom_strict,
+            "n_chains": n_chain, "chain_depth": depth,
+            "n_strict_final": sum(1 for c in chains if c["strict_final"]),
+            "mid_chain_target": target_rule_idx is not None,
+            "decoy_present": bool(decoy_rule), "contested_seed": contested,
+            "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
+            "n_atoms": len(atoms),
+            "reference_directives": len(lines),
+            "strategy": "revive_decoy" if decoy_rule else "build",
+            "reference_irredundant": irredundant, "minimality_proven": _proven,
+            "min_within_reference": len(lines),
+        })
+
+
+def _render_prompt(theory: str, target: str, ordering: str,
+                   allow_strict: bool = False) -> str:
+    on = "the last-link strength ordering" if ordering == LAST_LINK \
+        else "the weakest-link strength ordering"
+    return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
+            f"with {on}.\n\n{theory}\n\n"
+            f"The claim {target} is currently justified.\n"
+            f"What is the minimal set of directives that makes -{target} justified "
+            f"and {target} overruled?\n\n"
+            "Answer format: one directive per line, between [answer] and [/answer].")
+
+
+def as_score_input(it: "CAItem") -> Dict:
+    return {"base_ops": it.base_ops, "ordering": it.ordering,
+            "goals": [{"claim": "-" + it.target, "want": "JUSTIFIED"},
+                      {"claim": it.target, "want": "OVERRULED"}],
+            "min_directives": it.min_directives,
+            "allow_strict": it.metadata.get("allow_strict", False)}
+
+
+def make_item(level: int, seed: int, ordering: str = LAST_LINK,
+              tries: int = 14, allow_strict: bool = False) -> Optional[CAItem]:
+    for k in range(tries):
+        it = build(level, seed * 53 + k, ordering, allow_strict)
+        if it is not None:
+            return it
+    return None
