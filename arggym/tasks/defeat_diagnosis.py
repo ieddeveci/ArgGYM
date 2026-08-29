@@ -6,12 +6,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
-from core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
                             junctions_for)
-from core.curriculum import negated_branch
-from core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.curriculum import negated_branch
+from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"

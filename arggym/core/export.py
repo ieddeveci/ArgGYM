@@ -5,10 +5,8 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from aspic.engine import Operation
-from core.scoring import score_item
+from arggym.aspic.engine import Operation
+from arggym.core.scoring import score_item
 
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
@@ -26,8 +24,8 @@ _EXPORTABLE = {
 
 
 def _export_row(task: str, lv: int, o: str, s: int):
-    from tasks import preference_construction as prefcon
-    from tasks import (counter_argument as counterarg, claim_chain as claimchain,
+    from arggym.tasks import preference_construction as prefcon
+    from arggym.tasks import (counter_argument as counterarg, claim_chain as claimchain,
                        defeat_diagnosis as defeatdiag, formalization as formalize,
                        status_query as statusquery)
     if task == "preference_construction":
@@ -63,7 +61,7 @@ def _export_row(task: str, lv: int, o: str, s: int):
             [{"claim": l, "want": it.gold_status[l]} for l in it.queried], \
             it.metadata["n_directives"]
     if task == "semantics_query":
-        from tasks import semantics_query as semquery
+        from arggym.tasks import semantics_query as semquery
         it = semquery.make_item(lv, s, o)
         if it is None:
             return None
@@ -105,6 +103,9 @@ def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1)) ->
                 "pythonhashseed": os.environ.get("PYTHONHASHSEED", "<unset>"),
                 "minimum_caveat": ("min_directives is minimal among the candidate directives the "
                                    "generator produced, not proven globally minimal")}
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     with open(path, "w") as f:
         f.write(json.dumps({"__manifest__": manifest}) + "\n")
         for r in rows:

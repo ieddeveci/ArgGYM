@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
 
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 

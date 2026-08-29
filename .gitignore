@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+data/
+*.egg-info/
+
+.claude/
+.codex/
+.cursor/
+
+# Miscellaneous
+tmp/
+workspace/
+dist/

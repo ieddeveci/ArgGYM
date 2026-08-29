@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from core.curriculum import negated_branch
-from aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
+from arggym.core.curriculum import negated_branch
+from arggym.aspic.api import ASPICVerifier
 
 LAST_LINK = "last_link_elitist"
 WEAKEST_LINK = "weakest_link_elitist"

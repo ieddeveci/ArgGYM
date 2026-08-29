@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Iterable
 
-from aspic.engine import (
+from arggym.aspic.engine import (
     ASPICFramework,
     Operation,
     contrary,
@@ -14,7 +14,7 @@ from aspic.engine import (
     UNSATISFIABLE,
     describe_operation,
 )
-from aspic.dsl import parse_dsl
+from arggym.aspic.dsl import parse_dsl
 
 VALID_STATUSES = {JUSTIFIED, OVERRULED, UNDECIDED, UNSATISFIABLE}
 

@@ -4,8 +4,8 @@ import itertools
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
 
 
 @dataclass(frozen=True)

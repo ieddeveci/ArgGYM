@@ -6,11 +6,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
-from core.curriculum import (junction_budget, JUNCTION_CAPS, PROFILES, wants_ternary,
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.curriculum import (junction_budget, JUNCTION_CAPS, PROFILES, wants_ternary,
                             junctions_for, negated_branch)
-from core.invariants import (split_atoms_and_rules, randomize_rule_names, negation_gadget,
+from arggym.core.invariants import (split_atoms_and_rules, randomize_rule_names, negation_gadget,
                         language_enrichment)
 
 TASK = "claim_chain"

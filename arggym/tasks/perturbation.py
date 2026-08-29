@@ -6,11 +6,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
-from core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
-from core.curriculum import negated_branch
-from core.invariants import randomize_rule_names, language_enrichment
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
+from arggym.core.curriculum import negated_branch
+from arggym.core.invariants import randomize_rule_names, language_enrichment
 
 TASK = "perturbation"
 HELD_FRAC = 0.35

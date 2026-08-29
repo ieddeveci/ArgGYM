@@ -5,17 +5,17 @@ import uuid
 
 from flask import Flask, jsonify, render_template_string, request
 
-from tasks.attack_defense import make_item, TASK
-from tasks import perturbation as perturb
-from tasks import counter_argument as counterarg
-from tasks import preference_construction as prefcon
-from tasks import claim_chain as claimchain
-from tasks import defeat_diagnosis as defeatdiag
-from tasks import formalization as formalize
-from tasks import status_query as statusquery
-from tasks import semantics_query as semquery
-from core.scoring import score_item
-from core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK, describe, spec_for
+from arggym.tasks.attack_defense import make_item, TASK
+from arggym.tasks import perturbation as perturb
+from arggym.tasks import counter_argument as counterarg
+from arggym.tasks import preference_construction as prefcon
+from arggym.tasks import claim_chain as claimchain
+from arggym.tasks import defeat_diagnosis as defeatdiag
+from arggym.tasks import formalization as formalize
+from arggym.tasks import status_query as statusquery
+from arggym.tasks import semantics_query as semquery
+from arggym.core.scoring import score_item
+from arggym.core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK, describe, spec_for
 
 app = Flask(__name__)
 ITEMS = {}
@@ -58,7 +58,7 @@ MODES = [
 ]
 
 def build_graph(base_ops, ordering, highlight=None):
-    from aspic.api import ASPICVerifier
+    from arggym.aspic.api import ASPICVerifier
     try:
         v = ASPICVerifier.from_operations(list(base_ops), ordering=ordering)
         sm = {k: str(x) for k, x in v.status_map().items()}

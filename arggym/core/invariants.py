@@ -47,7 +47,7 @@ def assert_irredundant(chosen: Sequence[T], holds: Callable[[List[T]], bool]) ->
 def strategy_candidates(base_ops, goal_claim: str, goal_status: str, ordering: str,
                         seed_lits: Sequence[str], rule_names: Sequence[str],
                         premises: Sequence[str]):
-    from aspic.engine import Operation
+    from arggym.aspic.engine import Operation
     out = []
     tgt = goal_claim.lstrip("-")
     for s in seed_lits:
@@ -146,7 +146,7 @@ def negation_coverage(ops) -> dict:
 
 
 def negation_gadget(names_iter, ridx, prefix="ng", winner_feeds=True):
-    from aspic.engine import Operation
+    from arggym.aspic.engine import Operation
     base = next(names_iter)
     ops = [Operation(kind="premise", content=base),
            Operation(kind="premise", content="-" + base),
@@ -160,7 +160,7 @@ def negation_gadget(names_iter, ridx, prefix="ng", winner_feeds=True):
 
 
 def language_enrichment(names_iter, ridx, prefix="lx", contested_lit=None):
-    from aspic.engine import Operation
+    from arggym.aspic.engine import Operation
     ops = []
     produced = []
 
@@ -259,7 +259,7 @@ def minimal_subset_exact(candidates, holds, max_calls=20000):
 
 
 def transpose_rule(op):
-    from aspic.engine import Operation
+    from arggym.aspic.engine import Operation
     if op.kind != "strict":
         return []
     ants = list(op.antecedents or ())

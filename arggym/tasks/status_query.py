@@ -7,10 +7,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
-from core.invariants import randomize_rule_names, split_atoms_and_rules
-from core.curriculum import junction_budget, JUNCTION_CAPS, junctions_for, PROFILES
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, junctions_for, PROFILES
 
 TASK = "status_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"

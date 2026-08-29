@@ -5,11 +5,11 @@ import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
-from core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
-from core.curriculum import negated_branch
-from core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
+from arggym.core.curriculum import negated_branch
+from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
                         randomize_rule_names, remap_text, language_enrichment)
 
 TASK = "counter_argument"

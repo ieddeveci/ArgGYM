@@ -6,10 +6,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from aspic.engine import Operation
-from aspic.api import ASPICVerifier
-from core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
-from core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
+from arggym.aspic.engine import Operation
+from arggym.aspic.api import ASPICVerifier
+from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
+from arggym.core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
                           NEGATED_AXIOM, NEGATED_LITERAL, NEGATED_PREMISE, REBUT_RULE,
                           STRICT_EXCLUSION, STRICT_FROM_NEGATION,
                           JUNCTION_DEFEASIBLE, JUNCTION_STRICT,
