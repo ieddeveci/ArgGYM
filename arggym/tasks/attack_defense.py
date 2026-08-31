@@ -26,6 +26,11 @@ def stable_seed(*parts) -> int:
     return int(hashlib.blake2b("|".join(map(str, parts)).encode(), digest_size=8).hexdigest(), 16)
 
 
+# One pool is drawn per item and every consumer reads from the same iterator,
+# so a pool must cover the whole item. The largest item draws well under 200.
+_POOL = 400
+
+
 def _names(seed: int, n: int) -> List[str]:
     import random
     rng = random.Random(seed)
@@ -126,8 +131,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
     if len(set(picks)) < min(want_distinct, len(pool)):
         return None
 
-    names = _names(stable_seed(seed, level, ordering, "atk"), 12 + n * (depth + 4))
-    it = iter(names)
+    it = iter(_names(stable_seed(seed, level, ordering, "atk"), _POOL))
     target = next(it)
     src = next(it)
     ops: List[Operation] = [Operation(kind="premise", content=src)]
@@ -177,8 +181,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
         ridx += 1
         ops.append(Operation(kind="strict", name=f"d{ridx}", antecedents=(dm,), consequent=dc))
 
-    _lx, _ = language_enrichment(
-        iter(_names(stable_seed(seed, level, ordering, "lx"), 40)), [900], prefix="lx")
+    _lx, _ = language_enrichment(it, [900], prefix="lx")
     _lx = PROFILES[profile].filter(_lx)
     ops = list(ops) + _lx
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
@@ -258,10 +261,10 @@ def build_defence_item(level: int, seed: int, ordering: str,
     n = max(2, min(5, 2 + level // 4))
     n_strict = 1 if level >= 7 else 0
     n_decoy = 0 if level < 6 else min(2, 1 + (level - 6) // 5)
-    names = _names(stable_seed(seed, level, ordering, "def"), 60 + n * 8 + n_decoy * 6)
+    it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     sup = max(2, min(5, 2 + level // 4))
     atk_d = max(2, min(5, 2 + level // 4))
-    d = build_defence(n, ordering, names, support_depth=sup, junction=(level >= 6),
+    d = build_defence(n, ordering, it, support_depth=sup, junction=(level >= 6),
                       n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
                       ternary=wants_ternary(level, 0),
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
@@ -270,15 +273,12 @@ def build_defence_item(level: int, seed: int, ordering: str,
         return None
     extra: List[Operation] = []
     n_ds = 0 if level < 4 else min(1 + (level - 4) // 4, 3)
-    dn = _names(stable_seed(seed, level, ordering, "dstrict"), n_ds * 3 + 2)
-    dit = iter(dn)
     for j in range(n_ds):
-        a, b2, c2 = next(dit), next(dit), next(dit)
+        a, b2, c2 = next(it), next(it), next(it)
         extra.append(Operation(kind="premise", content=a))
         extra.append(Operation(kind="defeasible", name=f"sd{j}a", antecedents=(a,), consequent=b2))
         extra.append(Operation(kind="strict", name=f"sd{j}b", antecedents=(b2,), consequent=c2))
-    _lx, _ = language_enrichment(
-        iter(_names(stable_seed(seed, level, ordering, "lx"), 40)), [900], prefix="lx")
+    _lx, _ = language_enrichment(it, [900], prefix="lx")
     _lx = PROFILES[profile].filter(_lx)
     extra = list(extra) + _lx
     _allops, _rmap = randomize_rule_names(list(d.all_ops()) + extra,
@@ -331,10 +331,10 @@ def build_defence_item(level: int, seed: int, ordering: str,
 def build_mixed_item(level: int, seed: int, ordering: str,
                      profile: str = "FULL") -> Optional[Item]:
     n_atk = max(2, min(4, 2 + level // 5))
-    names = _names(stable_seed(seed, level, ordering, "mix"), 120)
+    it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
     stem = max(1, min(4, 1 + level // 5))
-    m = build_mixed(names, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
+    m = build_mixed(it, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
                     depth=depth, shared_depth=stem, junction=(level >= 6),
                     n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
                     ternary=wants_ternary(level, 0))
@@ -348,15 +348,12 @@ def build_mixed_item(level: int, seed: int, ordering: str,
         return None
     extra: List[Operation] = []
     n_ds = 0 if level < 4 else min(1 + (level - 4) // 4, 3)
-    dn = _names(stable_seed(seed, level, ordering, "mstrict"), n_ds * 3 + 2)
-    dit = iter(dn)
     for j in range(n_ds):
-        a, b2, c2 = next(dit), next(dit), next(dit)
+        a, b2, c2 = next(it), next(it), next(it)
         extra.append(Operation(kind="premise", content=a))
         extra.append(Operation(kind="defeasible", name=f"ms{j}a", antecedents=(a,), consequent=b2))
         extra.append(Operation(kind="strict", name=f"ms{j}b", antecedents=(b2,), consequent=c2))
-    _lx, _ = language_enrichment(
-        iter(_names(stable_seed(seed, level, ordering, "lx"), 40)), [900], prefix="lx")
+    _lx, _ = language_enrichment(it, [900], prefix="lx")
     _lx = PROFILES[profile].filter(_lx)
     extra = list(extra) + _lx
     _allops, _rmap = randomize_rule_names(list(m.all_ops()) + extra,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
@@ -56,7 +56,7 @@ class DefenceItem:
         return "\n".join(out)
 
 
-def build_defence(n_attackers: int, ordering: str, names: Sequence[str],
+def build_defence(n_attackers: int, ordering: str, names: Iterable[str],
                   support_depth: int = 2, n_strict_attackers: int = 0,
                   n_decoys: int = 0, attacker_depth: int = 2,
                   junction: bool = False, n_junctions: int = 1,
