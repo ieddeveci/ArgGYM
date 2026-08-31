@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
@@ -52,7 +52,7 @@ class MixedItem:
         return "\n".join(out)
 
 
-def build_mixed(names: Sequence[str], ordering: str = LAST_LINK,
+def build_mixed(names: Iterable[str], ordering: str = LAST_LINK,
                 n_attackers: int = 2, extra_attack_routes: int = 1,
                 shared: bool = True, depth: int = 2,
                 shared_depth: int = 1, junction: bool = False,
