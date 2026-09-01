@@ -212,27 +212,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     _lx, _ = language_enrichment(it, [900], prefix="lx")
     _lx = PROFILES[profile].filter(_lx)
     ops = list(ops) + _lx
-    ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
-    for _c in comps:
-        _c["chain"] = [(_rmap.get(a, a), b, c2) for (a, b, c2) in _c["chain"]]
-        if _c.get("attacker"):
-            _c["attacker"] = _rmap.get(_c["attacker"], _c["attacker"])
-        if _c.get("held_by_pref"):
-            _a, _b = _c["held_by_pref"]
-            _c["held_by_pref"] = (_rmap.get(_a, _a), _rmap.get(_b, _b))
-    cq_rule = _rmap.get(cq_rule, cq_rule)
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-
-    atoms = {a.lstrip("-") for o in base for a in
-             (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])
-              + ([o.content] if o.content else []))}
-    rules = {o.name for o in base if o.kind in ("defeasible", "strict") and o.name}
-    if atoms & rules:
-        return None
-
-    before = status_map(base, ordering)
-    if not before:
-        return None
 
     pert: List[Operation] = []
     order = list(range(n_comp))
@@ -268,17 +248,39 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     if n_pert >= 2:
         pert.append(Operation(kind="prefer_premise", stronger=cq, weaker="-" + cq))
 
-    _pnames = _names(stable_seed(seed, level, ordering, "pk"), len(pert) + 4)
-    _pi = 0
-    _renamed = []
-    for _o in pert:
-        if _o.kind == "defeasible":
-            _renamed.append(Operation(kind="defeasible", name=_pnames[_pi],
-                                      antecedents=_o.antecedents, consequent=_o.consequent))
-            _pi += 1
-        else:
-            _renamed.append(_o)
-    pert = _renamed
+    # The perturbation's rules are named in the same pass as the theory's, so every rule
+    # in the item draws one name from the rule pool and none from the atom pool.
+    _all, _rmap = randomize_rule_names(base + pert, stable_seed(seed, level, ordering, "rn"))
+    base, pert = _all[:len(base)], _all[len(base):]
+    for _c in comps:
+        _c["chain"] = [(_rmap.get(a, a), b, c2) for (a, b, c2) in _c["chain"]]
+        if _c.get("attacker"):
+            _c["attacker"] = _rmap.get(_c["attacker"], _c["attacker"])
+        if _c.get("held_by_pref"):
+            _a, _b = _c["held_by_pref"]
+            _c["held_by_pref"] = (_rmap.get(_a, _a), _rmap.get(_b, _b))
+    cq_rule = _rmap.get(cq_rule, cq_rule)
+
+    # The atom and rule pools overlap on 240 names, so a collision survives the naming
+    # above and is rejected here. The check covers the perturbation, which is where the
+    # undercutters live: in a rule position a negated rule name is an undercut target,
+    # not an atom, while a premise or axiom content is always a literal.
+    rules = {o.name for o in base + pert
+             if o.kind in ("defeasible", "strict") and o.name}
+    atoms = set()
+    for o in base + pert:
+        if o.content:
+            atoms.add(o.content.lstrip("-"))
+        for a in (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])):
+            if a.startswith("-") and a[1:] in rules:
+                continue
+            atoms.add(a.lstrip("-"))
+    if atoms & rules:
+        return None
+
+    before = status_map(base, ordering)
+    if not before:
+        return None
 
     after = status_map(base + pert, ordering)
     if not after:
