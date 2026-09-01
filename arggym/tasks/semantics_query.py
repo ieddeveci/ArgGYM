@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
+from arggym.aspic.engine import Operation, UNSATISFIABLE
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
@@ -71,43 +71,71 @@ def render_ops(ops: Sequence[Operation]) -> str:
     return "\n".join(out)
 
 
-def status_under(ops: Sequence[Operation], claim: str, semantics: str,
-                 ordering: str) -> Optional[str]:
+@dataclass
+class SemCache:
+    """Each semantics a theory was asked for, enumerated once."""
+    grounded: Optional[Dict[str, str]] = None
+    preferred: Optional[List[set]] = None
+    stable: Optional[List[set]] = None
+    eager: Optional[set] = None
+
+
+def semantics_cache(ops: Sequence[Operation], sems: Sequence[str], ordering: str,
+                    verifier: Optional[ASPICVerifier] = None) -> Optional[SemCache]:
+    """Enumerate every requested semantics once, over the one theory the queries share.
+
+    Returns None on the failures that used to reject an item query by query: the
+    verifier not building, or an enumeration raising.
+    """
     try:
-        v = ASPICVerifier.from_operations(list(ops), ordering=ordering)
+        v = verifier if verifier is not None else ASPICVerifier.from_operations(
+            list(ops), ordering=ordering)
     except Exception:
         return None
+    cache = SemCache()
     try:
-        if semantics == GROUNDED:
-            return str(v.status(claim))
-        if semantics in (SCEPT_PREF, CRED_PREF):
-            exts = v.preferred_conclusions()
-            if not exts:
-                return None
-            if semantics == SCEPT_PREF:
-                if all(claim in e for e in exts):
-                    return "JUSTIFIED"
-                if any(claim in e for e in exts):
-                    return "UNDECIDED"
-                return "OVERRULED"
-            return "JUSTIFIED" if any(claim in e for e in exts) else "OVERRULED"
-        if semantics == EAGER:
-            eager = {str(getattr(x, "conclusion", x)) for x in v.fw.eager_extension()}
-            if claim in eager:
-                return "JUSTIFIED"
-            return "OVERRULED" if ("-" + claim if not claim.startswith("-")
-                                   else claim[1:]) in eager else "UNDECIDED"
-        if semantics == STABLE:
-            exts = v.stable_conclusions()
-            if not exts:
-                return "NO_STABLE_EXTENSION"
+        if GROUNDED in sems:
+            cache.grounded = v.status_map()
+        if SCEPT_PREF in sems or CRED_PREF in sems:
+            cache.preferred = v.preferred_conclusions()
+        if STABLE in sems:
+            cache.stable = v.stable_conclusions()
+        if EAGER in sems:
+            cache.eager = {str(getattr(x, "conclusion", x)) for x in v.fw.eager_extension()}
+    except Exception:
+        return None
+    return cache
+
+
+def status_under(cache: SemCache, claim: str, semantics: str) -> Optional[str]:
+    if semantics == GROUNDED:
+        return cache.grounded.get(claim.strip(), UNSATISFIABLE)
+    if semantics in (SCEPT_PREF, CRED_PREF):
+        exts = cache.preferred
+        if not exts:
+            return None
+        if semantics == SCEPT_PREF:
             if all(claim in e for e in exts):
                 return "JUSTIFIED"
             if any(claim in e for e in exts):
                 return "UNDECIDED"
             return "OVERRULED"
-    except Exception:
-        return None
+        return "JUSTIFIED" if any(claim in e for e in exts) else "OVERRULED"
+    if semantics == EAGER:
+        eager = cache.eager
+        if claim in eager:
+            return "JUSTIFIED"
+        return "OVERRULED" if ("-" + claim if not claim.startswith("-")
+                               else claim[1:]) in eager else "UNDECIDED"
+    if semantics == STABLE:
+        exts = cache.stable
+        if not exts:
+            return "NO_STABLE_EXTENSION"
+        if all(claim in e for e in exts):
+            return "JUSTIFIED"
+        if any(claim in e for e in exts):
+            return "UNDECIDED"
+        return "OVERRULED"
     return None
 
 
@@ -271,6 +299,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     prefs = [o for o in ops if o.kind.startswith("prefer")]
     base = facts + rules + prefs
 
+    _cache_v: Optional[ASPICVerifier] = None
     if EAGER in sems:
         try:
             _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
@@ -293,11 +322,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
                 return None
         except Exception:
             return None
+        _cache_v = _v
 
+    cache = semantics_cache(base, sems, ordering, verifier=_cache_v)
+    if cache is None:
+        return None
     gold: Dict[Tuple[str, str], str] = {}
     for c in candidates:
         for s in sems:
-            st = status_under(base, c, s, ordering)
+            st = status_under(cache, c, s)
             if st is None:
                 return None
             gold[(c, s)] = st
