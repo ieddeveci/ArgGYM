@@ -427,6 +427,8 @@ def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
             return (o.kind, o.content)
         if o.kind in ("defeasible", "strict"):
             return (o.kind, tuple(sorted(o.antecedents or ())), o.consequent)
+        if o.kind in ("prefer_rule", "prefer_premise"):
+            return (o.kind, o.stronger, o.weaker)
         return (o.kind,)
     import collections
     gset = collections.Counter(key(o) for o in item.reference_ops)
