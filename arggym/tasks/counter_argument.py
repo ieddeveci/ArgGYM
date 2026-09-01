@@ -110,6 +110,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         ops.append(Operation(kind="axiom" if ax_strict else "premise", content=root))
         cur = root
         rules: List[Tuple[str, str, bool]] = []
+        tgt_idx: Optional[int] = None
         for j in range(depth):
             ridx += 1
             nm = f"d{ridx}"
@@ -149,12 +150,14 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
                                      antecedents=(cur,), consequent=nxt))
             rules.append((nm, nxt, strict))
+            if junction is not None and j == depth // 2 - 1:
+                tgt_idx = len(rules) - 1
             cur = nxt
-        chains.append({"root": root, "rules": rules, "strict_final": strict_flags[ci]})
+        chains.append({"root": root, "rules": rules, "strict_final": strict_flags[ci],
+                       "tgt_idx": tgt_idx})
 
     if mid_target and depth >= 3 and n_chain >= 2:
-        idx = depth // 2 - 1
-        cand = junction if junction is not None else chains[0]["rules"][idx][1]
+        cand = junction
         supporters = [c for c in chains
                       if any(r[1] == cand for r in c["rules"])]
         if len(supporters) < n_chain:
@@ -164,11 +167,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         else:
             target = cand
             target_chains = supporters
-            target_rule_idx = idx
+            target_rule_idx = depth // 2 - 1
     else:
         target = apex
         target_chains = chains
         target_rule_idx = None
+
+    def _tgt_idx(c: Dict) -> int:
+        return c["tgt_idx"] if target_rule_idx is not None else -1
+
+    def _upto_tgt(c: Dict) -> List[Tuple[str, str, bool]]:
+        return c["rules"][:c["tgt_idx"] + 1] if target_rule_idx is not None else c["rules"]
 
     _lx, _ = language_enrichment(
         iter(_names(stable_seed(seed, level, ordering, 'lx'), 40)), [900], prefix='lx')
@@ -198,10 +207,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         decoy_rule = f"d{ridx}"
         ops.append(Operation(kind="defeasible", name=decoy_rule, antecedents=(droot,),
                              consequent="-" + target))
-        cand = [c for c in target_chains
-                if not (c["rules"][target_rule_idx if target_rule_idx is not None else -1][2])]
-        killer = (cand[0]["rules"][target_rule_idx if target_rule_idx is not None else -1]
-                  if cand else None)
+        cand = [c for c in target_chains if not c["rules"][_tgt_idx(c)][2]]
+        killer = cand[0]["rules"][_tgt_idx(cand[0])] if cand else None
         if killer is None:
             decoy_rule = None
         else:
@@ -217,15 +224,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             pairs.append((op, line))
 
     if decoy_rule:
-        idx = target_rule_idx if target_rule_idx is not None else -1
-        killer = next((c["rules"][idx] for c in target_chains if not c["rules"][idx][2]), None)
+        killer = next((c["rules"][_tgt_idx(c)] for c in target_chains
+                       if not c["rules"][_tgt_idx(c)][2]), None)
         if killer is None:
             return None
         add(Operation(kind="defeasible", name="z0", antecedents=(seed_lit,),
                       consequent="-" + killer[0]),
             f"[defeasible z0: {seed_lit} => -{killer[0]}]")
         for ci, c in enumerate(target_chains):
-            rl = c["rules"][idx]
+            rl = c["rules"][_tgt_idx(c)]
             if rl[0] == killer[0]:
                 continue
             if rl[2]:
@@ -237,7 +244,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 add(Operation(kind="prefer_rule", stronger=decoy_rule, weaker=rl[0]),
                     f"[prefer_rule: {decoy_rule} > {rl[0]}]")
                 if ordering == WEAKEST_LINK:
-                    for rr in (c["rules"][:idx + 1] if idx >= 0 else c["rules"]):
+                    for rr in _upto_tgt(c):
                         if not rr[2]:
                             add(Operation(kind="prefer_rule", stronger=decoy_rule,
                                           weaker=rr[0]),
@@ -250,8 +257,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                       consequent="-" + target),
             f"[defeasible w: {seed_lit} => -{target}]")
         for ci, c in enumerate(target_chains):
-            rules_upto = (c["rules"][:target_rule_idx + 1] if target_rule_idx is not None
-                          else c["rules"])
+            rules_upto = _upto_tgt(c)
             final = rules_upto[-1]
             if final[2]:
                 first = c["rules"][0]
@@ -299,8 +305,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                                 consequent="-" + target)],
                      [f"[strict cs: {seed_lit} -> -{target}]"]))
     for c in target_chains:
-        idx2 = target_rule_idx if target_rule_idx is not None else -1
-        rl = c["rules"][idx2]
+        rl = c["rules"][_tgt_idx(c)]
         if not rl[2]:
             bank.append(([Operation(kind="defeasible", name="cw", antecedents=(seed_lit,),
                                     consequent="-" + target),
