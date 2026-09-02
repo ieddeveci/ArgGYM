@@ -11,7 +11,7 @@ from arggym.core.pairs import collect, pair_f1
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.invariants import randomize_rule_names
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, junctions_for, PROFILES
 
 TASK = "status_query"
@@ -226,9 +226,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ops = prof.filter(ops)
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-    atoms, rnames = split_atoms_and_rules(base)
-    if atoms & rnames:
-        return None
 
     sm = full_status_map(base, ordering)
     if not sm:

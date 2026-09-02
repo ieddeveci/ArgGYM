@@ -85,13 +85,22 @@ def split_atoms_and_rules(ops) -> Tuple[set, set]:
     return atoms, rules
 
 
+RULE_POOL = [f"{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz" for b in "aeiouy" for c in "0123456789"]
+
+
 def randomize_rule_names(ops, seed: int, prefix: str = ""):
+    """Rename every rule of ``ops`` from ``RULE_POOL``; return (new ops, {old: new}).
+
+    A name already used as an atom in ``ops`` is never handed out, so the renamed
+    theory has no atom/rule collision. Callers need no guard after this call unless
+    they add rules afterwards. If the pool cannot cover the rules, ``ops`` is returned
+    unchanged with an empty mapping.
+    """
     import random as _r
     rng = _r.Random(seed)
     old_names = [o.name for o in ops
                  if o.kind in ("defeasible", "strict") and getattr(o, "name", None)]
-    pool = [f"{prefix}{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz"
-            for b in "aeiouy" for c in "0123456789"]
+    pool = [prefix + p for p in RULE_POOL]
     rng.shuffle(pool)
     taken, _ = split_atoms_and_rules(ops)
     pool = [p for p in pool if p not in taken]

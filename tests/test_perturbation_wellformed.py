@@ -16,6 +16,7 @@ from collections import defaultdict
 
 import pytest
 
+from arggym.core.invariants import split_atoms_and_rules
 from arggym.structures.chains import LAST_LINK, WEAKEST_LINK
 from arggym.tasks import perturbation
 
@@ -33,14 +34,7 @@ def _rules_and_atoms(ops):
     for o in ops:
         if o.kind in ("defeasible", "strict") and o.name:
             bound[o.name].add((tuple(o.antecedents or ()), o.consequent))
-    atoms = set()
-    for o in ops:
-        if o.content:
-            atoms.add(o.content.lstrip("-"))
-        for x in (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])):
-            if x.startswith("-") and x[1:] in bound:
-                continue
-            atoms.add(x.lstrip("-"))
+    atoms, _ = split_atoms_and_rules(ops)
     return bound, atoms
 
 

@@ -10,8 +10,7 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
 from arggym.core.curriculum import negated_branch
 from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
-                        randomize_rule_names, remap_text, language_enrichment,
-                        split_atoms_and_rules)
+                        randomize_rule_names, language_enrichment, split_atoms_and_rules)
 
 TASK = "counter_argument"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -208,20 +207,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             decoy_rule = None
         else:
             ops.append(Operation(kind="prefer_rule", stronger=killer[0], weaker=decoy_rule))
-        base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-        if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
-            return None
 
     # Rename chain, decoy and enrichment rules from one pool so no name shape
-    # tells them apart. The status checks above are name-independent.
+    # tells them apart. The status checks are name-independent, so the decoy
+    # check below runs on the renamed theory.
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for c in chains:
         c["rules"] = [(_rmap.get(nm, nm), lit, st) for nm, lit, st in c["rules"]]
     if decoy_rule is not None:
         decoy_rule = _rmap.get(decoy_rule, decoy_rule)
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-    atoms, rnames = split_atoms_and_rules(base)
-    if atoms & rnames:
+    if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
         return None
 
     pairs: List[Tuple[Operation, str]] = []
@@ -339,7 +335,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "mid_chain_target": target_rule_idx is not None,
             "decoy_present": bool(decoy_rule), "contested_seed": contested,
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
-            "n_atoms": len(atoms),
+            "n_atoms": len(split_atoms_and_rules(base)[0]),
             "reference_directives": len(lines),
             "strategy": "revive_decoy" if decoy_rule else "build",
             "reference_irredundant": irredundant, "minimality_proven": _proven,

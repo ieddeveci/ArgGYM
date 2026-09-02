@@ -1,37 +1,29 @@
 """Rule names never collide with atoms, and counter_argument rule names carry no role.
 
 Issue #34: split_atoms_and_rules built atoms as the complement of the rule names, so
-the guard `atoms & rules` in the task builders could never fire, and randomize_rule_names
-could hand a rule the name of an existing atom. Issue #26: counter_argument named its
-chain rules d1..dN and its enrichment rules lx_9xx, so the prefix told a solver which
-rules were noise and which one was the decoy.
+randomize_rule_names could hand a rule the name of an existing atom. Issue #26:
+counter_argument named its chain rules d1..dN and its enrichment rules lx_9xx, so the
+prefix told a solver which rules were noise and which one was the decoy.
+
+The library definition of a collision is pinned by the two test_split_* cases below,
+and every mode is checked against it. The same property over the whole grid, computed
+without the library, lives in tests/e2e/test_wellformed.py.
 """
 from __future__ import annotations
-
-import re
 
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.invariants import RULE_POOL, randomize_rule_names, split_atoms_and_rules
 from arggym.core.scoring import score_item
-from arggym.tasks import claim_chain, counter_argument, defeat_diagnosis, semantics_query, status_query
+from arggym.tasks import counter_argument
+from tests.e2e.registry import MODES
 
 LAST_LINK, WEAKEST_LINK = counter_argument.LAST_LINK, counter_argument.WEAKEST_LINK
-RULE_POOL = [f"{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz" for b in "aeiouy" for c in "0123456789"]
 
 
 def _collisions(ops):
-    """Independent spelling of the fixed definition, so the test does not trust the library."""
-    rules = {o.name for o in ops if o.kind in ("defeasible", "strict") and o.name}
-    atoms = set()
-    for o in ops:
-        for a in (o.antecedents or ()):
-            atoms.add(a.lstrip("-"))
-        if o.consequent and not (o.consequent.startswith("-") and o.consequent[1:] in rules):
-            atoms.add(o.consequent.lstrip("-"))
-        if o.content:
-            atoms.add(o.content.lstrip("-"))
+    atoms, rules = split_atoms_and_rules(ops)
     return atoms & rules
 
 
@@ -74,18 +66,17 @@ def test_counter_argument_rule_names_carry_no_role(level, ordering):
     assert it is not None
     names = [o.name for o in it.base_ops if o.kind in ("defeasible", "strict")]
     assert names
-    assert not [n for n in names if n.startswith("lx")], names
-    assert not [n for n in names if re.fullmatch(r"d\d+", n)], names
-    if it.metadata["decoy_present"]:
-        shapes = {re.sub(r"\d", "0", re.sub(r"[a-z]", "a", n)) for n in names}
-        assert len(shapes) == 1, f"a name shape singles out a rule: {sorted(shapes)}"
+    assert set(names) <= set(RULE_POOL), f"rule not named from the pool: {sorted(set(names) - set(RULE_POOL))}"
     assert not _collisions(it.base_ops)
     ref = score_item(it.reference, counter_argument.as_score_input(it))
     assert ref["score"] == pytest.approx(1.0), f"gold regrades at {ref['score']}: {ref.get('reason')}"
 
 
-@pytest.mark.parametrize("task", [status_query, claim_chain, defeat_diagnosis, semantics_query])
-def test_guarded_tasks_have_no_atom_rule_collision(task):
-    it = task.make_item(6, 0, LAST_LINK)
-    assert it is not None
-    assert not _collisions(it.base_ops)
+@pytest.mark.parametrize("mode", sorted(MODES))
+def test_no_mode_names_a_rule_after_an_atom(mode):
+    """Every mode, not only the ones that used to carry a guard of their own."""
+    adapter = MODES[mode]
+    item = adapter.make(6, 0, LAST_LINK)
+    assert item is not None, "generation failed"
+    clash = _collisions(adapter.theory_ops(item))
+    assert not clash, f"{mode}: names used as both atom and rule: {sorted(clash)}"

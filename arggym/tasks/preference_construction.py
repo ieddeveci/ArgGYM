@@ -10,7 +10,7 @@ from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
 from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import (randomize_rule_names, language_enrichment, split_atoms_and_rules,
+from arggym.core.invariants import (randomize_rule_names, language_enrichment,
                             minimal_subset_exact)
 
 TASK = "preference_construction"
@@ -182,10 +182,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         _c["pro"] = [_rmap.get(x, x) for x in _c["pro"]]
         _c["con"] = _rmap.get(_c["con"], _c["con"])
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-
-    atoms, rnames = split_atoms_and_rules(base)
-    if atoms & rnames:
-        return None
 
     before = statuses(base, claim_lits, ordering)
     if not before:

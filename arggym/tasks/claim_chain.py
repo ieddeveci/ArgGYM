@@ -10,8 +10,7 @@ from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import (junction_budget, JUNCTION_CAPS, PROFILES, wants_ternary,
                             junctions_for, negated_branch)
-from arggym.core.invariants import (split_atoms_and_rules, randomize_rule_names, negation_gadget,
-                        language_enrichment)
+from arggym.core.invariants import randomize_rule_names, negation_gadget, language_enrichment
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -271,9 +270,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 or (o.kind in ("defeasible", "strict") and o.name in _line_rules)]
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
-    atoms, rnames = split_atoms_and_rules(base)
-    if atoms & rnames:
-        return None
     if status(base, claim, ordering) != "JUSTIFIED":
         return None
 
