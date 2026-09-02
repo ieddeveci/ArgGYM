@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
+from arggym.aspic.engine import ASPICFramework, Operation
 from arggym.aspic.api import ASPICVerifier
 
 BLOAT_FACTOR = 2
@@ -73,8 +73,18 @@ def parse_answer(text: str) -> ParsedAnswer:
 def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
                    allow_strict: bool = False,
                    prefs_only: bool = False) -> Tuple[List[Operation], List[str]]:
+    """Drop directives the docs forbid; return (kept, reasons).
+
+    A rule whose name is already a rule in the base theory, or repeats a name
+    used earlier in the answer, is dropped as ``duplicate_rule_name``: the engine
+    never checks uniqueness (``engine.py:_add_rule``) and ``build`` keys rules by
+    name last-write-wins (``engine.py:196`` ``rule_by_name[n] = d``), so a
+    duplicate silently rebinds every preference on that name. Preferences are
+    not judged here; ``score_item`` lets the engine accept or reject them.
+    """
     ordinary = {o.content for o in base_ops if o.kind == "premise"}
     axioms = {o.content for o in base_ops if o.kind == "axiom"}
+    rule_names = {o.name for o in base_ops if o.kind in ("strict", "defeasible")}
     kept: List[Operation] = []
     reasons: List[str] = []
     for o in ops:
@@ -84,6 +94,11 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
         if prefs_only and o.kind not in ("prefer_rule", "prefer_premise"):
             reasons.append(f"illegal_non_preference:{o.kind}")
             continue
+        if o.kind in ("strict", "defeasible"):
+            if o.name in rule_names:
+                reasons.append(f"duplicate_rule_name:{o.name}")
+                continue
+            rule_names.add(o.name)
         if o.kind in ("premise", "axiom"):
             c = o.content
             if o.kind == "axiom":
@@ -103,10 +118,29 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
     return kept, reasons
 
 
-def _apply(base_ops: Sequence[Operation], added: Sequence[Operation]):
-    plain = [o for o in added if o.kind not in ("prefer_rule", "prefer_premise")]
-    prefs = [o for o in added if o.kind in ("prefer_rule", "prefer_premise")]
-    return list(base_ops) + plain + prefs
+def build_framework(base_ops: Sequence[Operation], kept: Sequence[Operation],
+                    ordering: str) -> Tuple[ASPICFramework, List[str], List[str]]:
+    """Apply base plus kept ops; preferences go last and the engine judges each one.
+
+    ``add_rule_preference`` / ``add_premise_preference`` (``engine.py:123-140``)
+    raise ``ValueError`` before mutating, so a rejected preference leaves the
+    framework as it was. Returns (framework, reasons, details) where ``reasons``
+    holds one ``rejected_preference:{stronger}>{weaker}`` per drop and ``details``
+    the engine's message for it.
+    """
+    plain = [o for o in kept if o.kind not in ("prefer_rule", "prefer_premise")]
+    prefs = [o for o in kept if o.kind in ("prefer_rule", "prefer_premise")]
+    fw = ASPICFramework(ordering=ordering)
+    fw.apply_all(list(base_ops) + plain)
+    reasons: List[str] = []
+    details: List[str] = []
+    for o in prefs:
+        try:
+            fw.apply(o)
+        except ValueError as e:
+            reasons.append(f"rejected_preference:{o.stronger}>{o.weaker}")
+            details.append(str(e))
+    return fw, reasons, details
 
 
 def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
@@ -115,8 +149,8 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     goals: List[Dict] = item["goals"]
     minimum = item.get("min_directives")
 
-    diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [], "goals_met": [],
-                  "n_used": 0, "minimum": minimum}
+    diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [], "rejected_detail": [],
+                  "goals_met": [], "n_used": 0, "minimum": minimum}
 
     p = parse_answer(answer_text)
     diag.update(n_lines=p.n_lines, n_unparseable=p.n_unparseable,
@@ -131,11 +165,25 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     kept, illegal = check_legality(p.ops, base_ops, item.get("allow_strict", False),
                                    item.get("preferences_only", False))
     diag["illegal"] = illegal
+    # Every line the answer wrote costs economy, dropped or not (issue #21).
+    n_used = p.n_lines
+    diag["n_used"] = n_used
     if not kept:
         return {"score": 0.0, "reason": "all_directives_illegal", "diagnostics": diag}
+    # Bloat is judged before the goals, so a bloated answer scores 0.0 whether or not
+    # it is correct; otherwise a wrong answer with the same junk would outscore it.
+    if minimum and n_used > BLOAT_FACTOR * max(minimum, 1):
+        diag["bloat_ratio"] = round(n_used / max(minimum, 1), 2)
+        return {"score": 0.0, "reason": f"bloated:{n_used}_used_vs_{minimum}_minimum",
+                "diagnostics": diag}
 
     try:
-        v = ASPICVerifier.from_operations(_apply(base_ops, kept), ordering=ordering)
+        fw, rejected, detail = build_framework(base_ops, kept, ordering)
+        illegal.extend(rejected)
+        diag["rejected_detail"] = detail
+        if len(rejected) == len(kept):
+            return {"score": 0.0, "reason": "all_directives_illegal", "diagnostics": diag}
+        v = ASPICVerifier(fw, operations_applied=len(base_ops) + len(kept) - len(rejected))
         consistent = v.is_consistent()
     except Exception as e:
         return {"score": 0.0, "reason": f"engine_rejected:{type(e).__name__}", "diagnostics": diag}
@@ -146,8 +194,6 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
         met.append(got == g["want"])
         diag["goals_met"].append({"claim": g["claim"], "want": g["want"], "got": got})
     success = all(met) and consistent
-    n_used = len(kept)
-    diag["n_used"] = n_used
 
     diag["achieved_status"] = {g["claim"]: g["got"] for g in diag["goals_met"]}
     diag["deadlock_not_defeat"] = sum(
@@ -190,11 +236,6 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
                 "achieved_status": diag["achieved_status"],
                 "deadlock_not_defeat": diag["deadlock_not_defeat"],
                 "diagnostics": diag}
-    if n_used > BLOAT_FACTOR * max(minimum, 1):
-        diag["bloat_ratio"] = round(n_used / max(minimum, 1), 2)
-        return {"score": 0.0, "reason": f"bloated:{n_used}_used_vs_{minimum}_minimum",
-                "success": True, "achieved_status": diag["achieved_status"],
-                "deadlock_not_defeat": diag["deadlock_not_defeat"], "diagnostics": diag}
     efficiency = min(1.0, minimum / max(n_used, 1))
     score = round(0.5 + 0.5 * efficiency, 4)
     return {"score": score, "reason": "ok", "success": True,
