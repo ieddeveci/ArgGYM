@@ -73,15 +73,6 @@ def parse_answer(text: str) -> ParsedAnswer:
 def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
                    allow_strict: bool = False,
                    prefs_only: bool = False) -> Tuple[List[Operation], List[str]]:
-    """Drop directives the docs forbid; return (kept, reasons).
-
-    A rule whose name is already a rule in the base theory, or repeats a name
-    used earlier in the answer, is dropped as ``duplicate_rule_name``: the engine
-    never checks uniqueness (``engine.py:_add_rule``) and ``build`` keys rules by
-    name last-write-wins (``engine.py:196`` ``rule_by_name[n] = d``), so a
-    duplicate silently rebinds every preference on that name. Preferences are
-    not judged here; ``score_item`` lets the engine accept or reject them.
-    """
     ordinary = {o.content for o in base_ops if o.kind == "premise"}
     axioms = {o.content for o in base_ops if o.kind == "axiom"}
     rule_names = {o.name for o in base_ops if o.kind in ("strict", "defeasible")}
@@ -120,14 +111,6 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
 
 def build_framework(base_ops: Sequence[Operation], kept: Sequence[Operation],
                     ordering: str) -> Tuple[ASPICFramework, List[str], List[str]]:
-    """Apply base plus kept ops; preferences go last and the engine judges each one.
-
-    ``add_rule_preference`` / ``add_premise_preference`` (``engine.py:123-140``)
-    raise ``ValueError`` before mutating, so a rejected preference leaves the
-    framework as it was. Returns (framework, reasons, details) where ``reasons``
-    holds one ``rejected_preference:{stronger}>{weaker}`` per drop and ``details``
-    the engine's message for it.
-    """
     plain = [o for o in kept if o.kind not in ("prefer_rule", "prefer_premise")]
     prefs = [o for o in kept if o.kind in ("prefer_rule", "prefer_premise")]
     fw = ASPICFramework(ordering=ordering)
@@ -165,13 +148,10 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     kept, illegal = check_legality(p.ops, base_ops, item.get("allow_strict", False),
                                    item.get("preferences_only", False))
     diag["illegal"] = illegal
-    # Every line the answer wrote costs economy, dropped or not (issue #21).
     n_used = p.n_lines
     diag["n_used"] = n_used
     if not kept:
         return {"score": 0.0, "reason": "all_directives_illegal", "diagnostics": diag}
-    # Bloat is judged before the goals, so a bloated answer scores 0.0 whether or not
-    # it is correct; otherwise a wrong answer with the same junk would outscore it.
     if minimum and n_used > BLOAT_FACTOR * max(minimum, 1):
         diag["bloat_ratio"] = round(n_used / max(minimum, 1), 2)
         return {"score": 0.0, "reason": f"bloated:{n_used}_used_vs_{minimum}_minimum",

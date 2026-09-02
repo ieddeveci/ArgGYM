@@ -251,7 +251,7 @@ PROFILES: Dict[str, LanguageProfile] = {
 
 TASK_PROFILES: Dict[str, Tuple[str, ...]] = {
     "status_query": ("P_D", "P_S", "P_S_D", "FULL"),
-    "semantics_query": ("P_D",),
+    "semantics_query": ("P_D", "P_S_D", "FULL"),
     "claim_chain": ("P_D", "P_S_D", "FULL"),
     "defeat_diagnosis": ("P_D", "P_S_D", "FULL"),
     "perturbation": ("P_D", "P_S_D", "FULL"),

@@ -11,6 +11,9 @@ from arggym.core.scoring import score_item
 
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
+ALL_ORDERINGS = ("last_link_elitist", "last_link_democratic",
+                 "weakest_link_elitist", "weakest_link_democratic")
+
 
 _EXPORTABLE = {
     "preference_construction": "prefcon",
@@ -103,20 +106,19 @@ def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1),
         raise SystemExit(f"unknown task {task}; known: {sorted(_EXPORTABLE)}")
     rows, missing = [], []
     for lv in levels:
-        for o in (LAST_LINK, WEAKEST_LINK):
+        for o in ALL_ORDERINGS:
             for s in seeds:
                 got = _export_row(task, lv, o, s)
                 if got is None:
                     missing.append({"level": lv, "ordering": o, "seed": s})
                     continue
                 it, refscore, goals, mind = got
-                # perturbation's reference is a method; every other task stores a string
                 ref = it.reference() if callable(it.reference) else it.reference
                 rows.append({"task": task, "level": lv, "ordering": o, "seed": s,
                              "prompt": it.prompt, "reference": ref,
                              "goals": goals, "min_directives": mind,
                              "metadata": it.metadata, "reference_score": refscore})
-    n_requested = len(levels) * 2 * len(seeds)
+    n_requested = len(levels) * len(ALL_ORDERINGS) * len(seeds)
     if missing and not allow_missing:
         cells = ", ".join(f"(L{m['level']}, {m['ordering']}, seed {m['seed']})" for m in missing)
         raise SystemExit(f"{task}: {len(missing)} of {n_requested} cells returned no item: {cells}; "
@@ -128,7 +130,7 @@ def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1),
     manifest = {"task": task, "taskset_hash": h.hexdigest(), "n_items": len(rows),
                 "n_requested": n_requested, "missing_cells": missing,
                 "n_valid": sum(1 for r in rows if r["reference_score"] >= 0.999),
-                "levels": list(levels), "orderings": [LAST_LINK, WEAKEST_LINK],
+                "levels": list(levels), "orderings": list(ALL_ORDERINGS),
                 "python": sys.version.split()[0],
                 "pythonhashseed": os.environ.get("PYTHONHASHSEED", "<unset>"),
                 "minimum_caveat": ("min_directives is minimal among the candidate directives the "

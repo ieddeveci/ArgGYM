@@ -4,8 +4,10 @@ from typing import Dict, List, Optional, Sequence
 
 SEMANTICS = "grounded semantics"
 ORDERING_NAME = {
-    "last_link_elitist": "the last-link strength ordering",
-    "weakest_link_elitist": "the weakest-link strength ordering",
+    "last_link_elitist": "the last-link elitist strength ordering",
+    "last_link_democratic": "the last-link democratic strength ordering",
+    "weakest_link_elitist": "the weakest-link elitist strength ordering",
+    "weakest_link_democratic": "the weakest-link democratic strength ordering",
 }
 
 _PERMITTED = (

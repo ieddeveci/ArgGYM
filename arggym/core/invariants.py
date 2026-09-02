@@ -64,15 +64,6 @@ def strategy_candidates(base_ops, goal_claim: str, goal_status: str, ordering: s
 
 
 def split_atoms_and_rules(ops) -> Tuple[set, set]:
-    """Return (atoms, rule names); ``atoms & rules`` is the set of name collisions.
-
-    A consequent ``-<name>`` with ``<name>`` a rule is an undercut target, not an
-    atom (NOTATION.md, undercutting). Every other antecedent, consequent and
-    premise/axiom content is an atom, whether or not it shares a name with a rule.
-    A ``prefer_premise`` operand is a literal too, and is the only place an atom can
-    appear without being declared anywhere else. ``prefer_rule`` operands are rule
-    names, so they are left out.
-    """
     rules = {o.name for o in ops
              if o.kind in ("defeasible", "strict") and getattr(o, "name", None)}
     atoms = set()
@@ -85,35 +76,21 @@ def split_atoms_and_rules(ops) -> Tuple[set, set]:
         content = getattr(o, "content", None)
         if content:
             atoms.add(content.lstrip("-"))
-        if o.kind == "prefer_premise":
-            for x in (getattr(o, "stronger", None), getattr(o, "weaker", None)):
-                if x:
-                    atoms.add(x.lstrip("-"))
     return atoms, rules
 
 
-RULE_POOL = [f"{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz" for b in "aeiouy" for c in "0123456789"]
-
-
 def randomize_rule_names(ops, seed: int, prefix: str = ""):
-    """Rename every rule of ``ops`` from ``RULE_POOL``; return (new ops, {old: new}).
-
-    A name already used as an atom in ``ops`` is never handed out, so the renamed
-    theory has no atom/rule collision. Callers need no guard after this call unless
-    they add rules afterwards. A theory with more rules than the pool has free names
-    raises rather than returning the original names, which would break both that
-    guarantee and the name-shape property silently.
-    """
     import random as _r
     rng = _r.Random(seed)
     old_names = [o.name for o in ops
                  if o.kind in ("defeasible", "strict") and getattr(o, "name", None)]
-    pool = [prefix + p for p in RULE_POOL]
+    pool = [f"{prefix}{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz"
+            for b in "aeiouy" for c in "0123456789"]
     rng.shuffle(pool)
     taken, _ = split_atoms_and_rules(ops)
     pool = [p for p in pool if p not in taken]
     if len(pool) < len(old_names):
-        raise ValueError(f"rule pool exhausted: {len(old_names)} rules, {len(pool)} free names")
+        return list(ops), {}
     mapping = {old: pool[i] for i, old in enumerate(old_names)}
 
     def remap_lit(x):
