@@ -73,33 +73,63 @@ def parse_answer(text: str) -> ParsedAnswer:
 def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
                    allow_strict: bool = False,
                    prefs_only: bool = False) -> Tuple[List[Operation], List[str]]:
+    """Drop directives the docs forbid or the engine would reject; return (kept, reasons).
+
+    Preferences are checked against the base theory plus the answer's own kept
+    rules and premises, with the same conditions as ``ASPICFramework``
+    (``engine.py:add_rule_preference`` / ``add_premise_preference``): both names
+    must exist, and be distinct. The engine tests existence before identity, so a
+    self-preference on an unknown name reports as unknown.
+    """
     ordinary = {o.content for o in base_ops if o.kind == "premise"}
     axioms = {o.content for o in base_ops if o.kind == "axiom"}
-    kept: List[Operation] = []
-    reasons: List[str] = []
+    defeasible = {o.name for o in base_ops if o.kind == "defeasible"}
+    verdict: List[Optional[str]] = []  # None = kept, str = reason; prefs decided later
     for o in ops:
         if o.kind == "strict" and not allow_strict:
-            reasons.append(f"illegal_strict_rule:{o.name or '?'}")
+            verdict.append(f"illegal_strict_rule:{o.name or '?'}")
             continue
         if prefs_only and o.kind not in ("prefer_rule", "prefer_premise"):
-            reasons.append(f"illegal_non_preference:{o.kind}")
+            verdict.append(f"illegal_non_preference:{o.kind}")
             continue
         if o.kind in ("premise", "axiom"):
             c = o.content
             if o.kind == "axiom":
-                reasons.append(f"illegal_new_axiom:{c}")
+                verdict.append(f"illegal_new_axiom:{c}")
                 continue
             if not c.startswith("-"):
-                reasons.append(f"illegal_new_premise:{c}")
+                verdict.append(f"illegal_new_premise:{c}")
                 continue
             base = c[1:]
             if base in axioms:
-                reasons.append(f"illegal_undermine_axiom:{c}")
+                verdict.append(f"illegal_undermine_axiom:{c}")
                 continue
             if base not in ordinary:
-                reasons.append(f"illegal_asserted_contrary:{c}")
+                verdict.append(f"illegal_asserted_contrary:{c}")
                 continue
-        kept.append(o)
+        verdict.append(None)
+    for o, v in zip(ops, verdict):
+        if v is None and o.kind == "defeasible":
+            defeasible.add(o.name)
+        elif v is None and o.kind == "premise":
+            ordinary.add(o.content)
+    kept: List[Operation] = []
+    reasons: List[str] = []
+    for o, v in zip(ops, verdict):
+        if v is None and o.kind == "prefer_rule":
+            if o.stronger not in defeasible or o.weaker not in defeasible:
+                v = f"unknown_rule_preference:{o.stronger}>{o.weaker}"
+            elif o.stronger == o.weaker:
+                v = f"self_preference:{o.stronger}"
+        elif v is None and o.kind == "prefer_premise":
+            if o.stronger not in ordinary or o.weaker not in ordinary:
+                v = f"unknown_premise_preference:{o.stronger}>{o.weaker}"
+            elif o.stronger == o.weaker:
+                v = f"self_preference:{o.stronger}"
+        if v is None:
+            kept.append(o)
+        else:
+            reasons.append(v)
     return kept, reasons
 
 
@@ -115,8 +145,8 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     goals: List[Dict] = item["goals"]
     minimum = item.get("min_directives")
 
-    diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [], "goals_met": [],
-                  "n_used": 0, "minimum": minimum}
+    diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [], "n_illegal": 0,
+                  "goals_met": [], "n_used": 0, "minimum": minimum}
 
     p = parse_answer(answer_text)
     diag.update(n_lines=p.n_lines, n_unparseable=p.n_unparseable,
@@ -131,6 +161,10 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     kept, illegal = check_legality(p.ops, base_ops, item.get("allow_strict", False),
                                    item.get("preferences_only", False))
     diag["illegal"] = illegal
+    diag["n_illegal"] = len(illegal)
+    # Every directive the answer wrote costs economy, dropped or not (issue #21).
+    n_used = len(p.ops)
+    diag["n_used"] = n_used
     if not kept:
         return {"score": 0.0, "reason": "all_directives_illegal", "diagnostics": diag}
 
@@ -146,8 +180,6 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
         met.append(got == g["want"])
         diag["goals_met"].append({"claim": g["claim"], "want": g["want"], "got": got})
     success = all(met) and consistent
-    n_used = len(kept)
-    diag["n_used"] = n_used
 
     diag["achieved_status"] = {g["claim"]: g["got"] for g in diag["goals_met"]}
     diag["deadlock_not_defeat"] = sum(
