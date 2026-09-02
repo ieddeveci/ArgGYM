@@ -11,6 +11,9 @@ import pytest
 from arggym.core import export
 
 MISSING = (6, export.WEAKEST_LINK, 1)
+# The grid is levels x orderings x seeds, and export_task defaults to five levels and
+# two seeds. Deriving the count keeps these tests honest when the orderings change.
+N_CELLS = 5 * len(export.ALL_ORDERINGS) * 2
 
 
 class _Fake:
@@ -50,13 +53,14 @@ def test_allow_missing_writes_and_records_the_cell(tmp_path, monkeypatch, capsys
     out = tmp_path / "sq.jsonl"
     export.export_task(str(out), "status_query", allow_missing=True)
     m = _manifest(out)
-    assert m["n_requested"] == 20
-    assert m["n_items"] == 19
+    assert m["n_requested"] == N_CELLS
+    assert m["n_items"] == N_CELLS - 1
     assert m["missing_cells"] == [{"level": 6, "ordering": export.WEAKEST_LINK, "seed": 1}]
     with open(out) as f:
-        assert len(f.readlines()) == 20  # manifest + 19 rows
+        assert len(f.readlines()) == N_CELLS  # manifest + every cell but the missing one
     lines = capsys.readouterr().out.splitlines()
-    wrote = next(i for i, l in enumerate(lines) if l.startswith("wrote 19 items"))
+    wrote = next(i for i, l in enumerate(lines)
+                 if l.startswith(f"wrote {N_CELLS - 1} items"))
     assert "L6" in lines[wrote + 1] and "seed 1" in lines[wrote + 1]
 
 
@@ -66,4 +70,4 @@ def test_complete_grid_has_no_missing_cells(tmp_path, monkeypatch):
     export.export_task(str(out), "status_query")
     m = _manifest(out)
     assert m["missing_cells"] == []
-    assert m["n_requested"] == m["n_items"] == 20
+    assert m["n_requested"] == m["n_items"] == N_CELLS
