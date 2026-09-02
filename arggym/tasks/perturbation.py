@@ -361,8 +361,12 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
         diag["n_lines"] = 1
         return {"score": 0.0, "reason": "predicted_none", "f1": 0.0,
                 "exact_match": False, "diagnostics": diag}
+    contradicted: set = set()
     for claim, stat in _PAIR.findall(body):
-        pred[claim] = stat.upper()
+        stat = stat.upper()
+        if claim in pred and pred[claim] != stat:
+            contradicted.add(claim)
+        pred[claim] = stat
     diag["n_lines"] = len(pred)
     residue = _PAIR.sub(" ", body)
     for tok in residue.split():
@@ -376,8 +380,11 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
     diag["n_predicted"] = len(pred)
 
     gold = item.gold
+    # A claim answered with two different statuses is one prediction that can never match gold.
+    pred = {k: "CONTRADICTED" if k in contradicted else v for k, v in pred.items()}
     tp = sum(1 for k, v in pred.items() if gold.get(k) == v)
     diag["wrong_status"] = sorted(k for k, v in pred.items() if k in gold and gold[k] != v)
+    diag["contradicted"] = sorted(contradicted)[:6]
     diag["false_positives"] = sorted(k for k in pred if k not in gold)
     diag["missed"] = sorted(k for k in gold if k not in pred)
     precision = tp / len(pred)

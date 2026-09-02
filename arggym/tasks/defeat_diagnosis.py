@@ -353,8 +353,10 @@ def score(answer_text: str, item: DDItem) -> Dict:
         return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
                 "diagnostics": diag}
 
-    sm = _STATUS.search(body)
-    status_ok = bool(sm) and sm.group(1).upper() == item.claim_status
+    statuses = {s.upper() for s in _STATUS.findall(body)}
+    # Two different status lines are a hedge, which earns no status credit.
+    diag["status_contradicted"] = len(statuses) > 1
+    status_ok = statuses == {item.claim_status}
     diag["status_correct"] = status_ok
 
     pred = set()

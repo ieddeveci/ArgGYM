@@ -419,14 +419,13 @@ def score(answer_text: str, item: SemItem) -> Dict:
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
-    pred: Dict[Tuple[str, str], str] = {}
-    contradicted: set = set()
+    # Every distinct status given for each (claim, semantics) pair, in the order seen.
+    pred: Dict[Tuple[str, str], List[str]] = {}
     for claim, sem, st in _PAIR.findall(body):
-        key = (claim, sem.strip().lower())
+        stats = pred.setdefault((claim, sem.strip().lower()), [])
         st = st.upper().replace(" ", "_")
-        if key in pred and pred[key] != st:
-            contradicted.add(key)
-        pred[key] = st
+        if st not in stats:
+            stats.append(st)
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
@@ -438,15 +437,17 @@ def score(answer_text: str, item: SemItem) -> Dict:
 
     gold_pairs = {(c, s.lower(), v) for (c, s), v in item.gold.items()}
     # A pair answered with two different statuses is one prediction that can never match gold.
-    pred_pairs = {(c, s, "CONTRADICTED" if (c, s) in contradicted else v)
+    contradicted = {k for k, v in pred.items() if len(v) > 1}
+    pred_pairs = {(c, s, "CONTRADICTED" if (c, s) in contradicted else v[0])
                   for (c, s), v in pred.items()}
     tp = len(gold_pairs & pred_pairs)
     precision = tp / max(len(pred_pairs), 1)
     recall = tp / max(len(gold_pairs), 1)
     f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
-    diag["wrong"] = sorted(f"{c} under {s}: said {v}, is {item.gold[(c, s)]}"
+    diag["wrong"] = sorted(f"{c} under {s}: said {'/'.join(v)}, is {item.gold[(c, s)]}"
                            for (c, s), v in pred.items()
-                           if (c, s) in item.gold and item.gold[(c, s)] != v)[:6]
+                           if (c, s) in item.gold
+                           and ((c, s) in contradicted or item.gold[(c, s)] != v[0]))[:6]
     diag["contradicted"] = sorted(f"{c} under {s}" for c, s in contradicted)[:6]
     diag["n_correct"] = tp
     return {"score": round(f1, 4), "reason": "ok", "f1": round(f1, 4),

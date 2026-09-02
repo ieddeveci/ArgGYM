@@ -305,13 +305,12 @@ def score(answer_text: str, item: SQItem) -> Dict:
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
-    pred: Dict[str, str] = {}
-    contradicted: set = set()
+    # Every distinct status given for each claim, in the order seen.
+    pred: Dict[str, List[str]] = {}
     for claim, stat in _PAIR.findall(body):
-        stat = stat.upper()
-        if claim in pred and pred[claim] != stat:
-            contradicted.add(claim)
-        pred[claim] = stat
+        stats = pred.setdefault(claim, [])
+        if stat.upper() not in stats:
+            stats.append(stat.upper())
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
@@ -326,13 +325,15 @@ def score(answer_text: str, item: SQItem) -> Dict:
 
     gold_pairs = set(item.gold.items())
     # A claim answered with two different statuses is one prediction that can never match gold.
-    pred_pairs = {(k, "CONTRADICTED" if k in contradicted else v) for k, v in pred.items()}
+    contradicted = {k for k, v in pred.items() if len(v) > 1}
+    pred_pairs = {(k, "CONTRADICTED" if k in contradicted else v[0]) for k, v in pred.items()}
     tp = len(gold_pairs & pred_pairs)
     precision = tp / max(len(pred_pairs), 1)
     recall = tp / max(len(gold_pairs), 1)
     f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
-    diag["wrong"] = sorted(f"{k}:said {v}, is {item.gold[k]}"
-                           for k, v in pred.items() if k in item.gold and item.gold[k] != v)[:6]
+    diag["wrong"] = sorted(f"{k}:said {'/'.join(v)}, is {item.gold[k]}"
+                           for k, v in pred.items()
+                           if k in item.gold and (k in contradicted or item.gold[k] != v[0]))[:6]
     diag["missing"] = sorted(k for k in item.gold if k not in pred)[:6]
     diag["contradicted"] = sorted(contradicted)[:6]
     diag["n_correct"] = tp
