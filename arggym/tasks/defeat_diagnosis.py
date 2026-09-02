@@ -11,10 +11,18 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
                             junctions_for)
 from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import randomize_rule_names
+from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
+
+
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
 EASY_LEVELS = 3
 _L = "abcdefghijklmnopqrstuvwxy"
 
@@ -263,6 +271,9 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             d["survives_because"] = rmap.get(d["survives_because"], d["survives_because"])
 
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    atoms, rnames = split_atoms_and_rules(base)
+    if atoms & rnames:
+        return None
 
     st = status(base, claim, ordering)
     if st not in ("OVERRULED", "UNDECIDED"):
@@ -307,7 +318,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
-    on = "the last-link strength ordering" if ordering == LAST_LINK \
+    on = "the last-link strength ordering" if _is_last(ordering) \
         else "the weakest-link strength ordering"
     extra = "   ...; survives_because: <rule>\n" if want_survival else ""
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
@@ -323,7 +334,6 @@ def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) 
 
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
-# A status line starts with `status:`; a status word inside a record's field value is not one.
 _STATUS_LINE = re.compile(r"^[\W\d]*status\s*[:=]\s*(justified|overruled|undecided)", re.I | re.M)
 _FIELD = re.compile(r"(\w+)\s*[:=]\s*([^;\n]+)")
 
@@ -354,7 +364,6 @@ def score(answer_text: str, item: DDItem) -> Dict:
                 "diagnostics": diag}
 
     statuses = {s.upper() for s in _STATUS_LINE.findall(body)}
-    # Records are keyed by failure point; each collects the set of kinds given for it.
     pred: Dict[Tuple[str, str], set] = {}
     pred_surv = {}
     last_key = None
@@ -379,8 +388,6 @@ def score(answer_text: str, item: DDItem) -> Dict:
             pred_surv[last_key] = fields["survives_because"].strip()
     diag["n_quoted"] = len(pred)
 
-    # Two different status lines, or two different kinds for one failure point, are a hedge
-    # that earns no credit: the status is wrong, the record is one prediction that never matches.
     diag["status_contradicted"] = len(statuses) > 1
     status_ok = statuses == {item.claim_status}
     diag["status_correct"] = status_ok

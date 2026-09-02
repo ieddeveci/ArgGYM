@@ -16,10 +16,18 @@ from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 
 TASK = "semantics_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
+
+
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
 EASY_LEVELS = 3
 MAX_DIRECTIVES = 26
 
-MAX_EAGER_ARGUMENTS = 18
+MAX_EAGER_ARGUMENTS = 32
 MAX_STATUS_SHARE = 0.45
 PANEL_THRESHOLD = round(MAX_STATUS_SHARE + 0.03, 3)
 _L = "abcdefghijklmnopqrstuvwxy"
@@ -32,10 +40,7 @@ EAGER = "eager"
 
 SEMANTICS_BY_LEVEL = {
     1: (GROUNDED,),
-    4: (GROUNDED, SCEPT_PREF),
-    8: (GROUNDED, SCEPT_PREF, CRED_PREF),
-    12: (GROUNDED, SCEPT_PREF, CRED_PREF, STABLE),
-    14: (GROUNDED, SCEPT_PREF, CRED_PREF, STABLE, EAGER),
+    4: (GROUNDED, EAGER),
 }
 
 
@@ -75,7 +80,6 @@ def render_ops(ops: Sequence[Operation]) -> str:
 
 @dataclass
 class SemCache:
-    """Each semantics a theory was asked for, enumerated once."""
     grounded: Optional[Dict[str, str]] = None
     preferred: Optional[List[set]] = None
     stable: Optional[List[set]] = None
@@ -84,11 +88,6 @@ class SemCache:
 
 def semantics_cache(ops: Sequence[Operation], sems: Sequence[str], ordering: str,
                     verifier: Optional[ASPICVerifier] = None) -> Optional[SemCache]:
-    """Enumerate every requested semantics once, over the one theory the queries share.
-
-    Returns None on the failures that used to reject an item query by query: the
-    verifier not building, or an enumeration raising.
-    """
     try:
         v = verifier if verifier is not None else ASPICVerifier.from_operations(
             list(ops), ordering=ordering)
@@ -252,6 +251,36 @@ def _odd(it, ridx) -> Tuple[List[Operation], str]:
     return ops, x
 
 
+def _strict_axiom(it, ridx):
+    from arggym.aspic.engine import Operation
+    ax, mid, out = next(it), next(it), next(it)
+    src = next(it)
+    ridx[0] += 1
+    s1 = f"r_{ridx[0]}"
+    ridx[0] += 1
+    d1 = f"r_{ridx[0]}"
+    ops = [Operation(kind="axiom", content=ax),
+           Operation(kind="strict", name=s1, antecedents=(ax,), consequent=mid),
+           Operation(kind="premise", content=src),
+           Operation(kind="defeasible", name=d1, antecedents=(src,), consequent="-" + mid)]
+    ridx[0] += 1
+    d2 = f"r_{ridx[0]}"
+    ops.append(Operation(kind="defeasible", name=d2, antecedents=(mid,), consequent=out))
+    return ops, out
+
+
+def _negated_premise(it, ridx):
+    from arggym.aspic.engine import Operation
+    base, out = next(it), next(it)
+    ridx[0] += 1
+    r = f"r_{ridx[0]}"
+    ops = [Operation(kind="premise", content=base),
+           Operation(kind="premise", content="-" + base),
+           Operation(kind="prefer_premise", stronger="-" + base, weaker=base),
+           Operation(kind="defeasible", name=r, antecedents=("-" + base,), consequent=out)]
+    return ops, out
+
+
 def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
@@ -264,10 +293,14 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
 
     kinds = ["defeated", "settled", "odd"]
     j_budget = junction_budget(level, JUNCTION_CAPS.get("semantics_query", 3))
-    _n_cluster = 2 + (1 if (j_budget or EAGER in sems) else 0)
+    _n_cluster = min(5, 3 + (1 if level >= 6 else 0) + (1 if level >= 11 else 0))
     for k in range(_n_cluster):
-        kind = ("floating" if k == 0 else "defeated" if k == 1
-                else "undermining" if EAGER in sems else "junction")
+        _fixed = ["floating", "defeated"]
+        _varied = ["undermining", "junction", "strict_axiom", "negated_premise", "settled"]
+        if k < len(_fixed):
+            kind = _fixed[k]
+        else:
+            kind = _varied[(rng.randrange(len(_varied)) + k) % len(_varied)]
         if kind == "floating":
             block, shared, contested = _floating(it, ridx)
             candidates.extend([shared, contested])
@@ -283,12 +316,21 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         elif kind == "settled":
             block, x = _settled(it, ridx)
             candidates.append(x)
+        elif kind == "strict_axiom":
+            block, x = _strict_axiom(it, ridx)
+            candidates.append(x)
+        elif kind == "negated_premise":
+            block, x = _negated_premise(it, ridx)
+            candidates.append(x)
         else:
             block, x = _odd(it, ridx)
             candidates.append(x)
         ops.extend(block)
 
     ops, _map = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
+    atoms, rnames = split_atoms_and_rules(ops)
+    if atoms & rnames:
+        return None
     if len(ops) > MAX_DIRECTIVES:
         return None
 
@@ -306,7 +348,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         except Exception:
             return None
         _fill = 0
-        while _na + 2 <= MAX_EAGER_ARGUMENTS and _fill < 8:
+        while _na + 2 <= MAX_EAGER_ARGUMENTS and _fill < 16:
             _a, _c = next(it), next(it)
             ridx[0] += 1
             base.append(Operation(kind="premise", content=_a))
@@ -315,12 +357,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
             candidates.append(_c)
             _na += 2
             _fill += 1
-        # The filler draws atoms and adds rules after the rename, so an atom here can
-        # land on a name the renamer already handed out. Every other task finishes
-        # building before the rename, which is why this is the only guard left.
-        _atoms, _rnames = split_atoms_and_rules(base)
-        if _atoms & _rnames:
-            return None
         try:
             _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
             if len(_v.fw.af.arguments) > MAX_EAGER_ARGUMENTS:
@@ -349,12 +385,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     if level > EASY_LEVELS and not diverging:
         return None
 
+    _div = set(diverging)
     by_status = collections.defaultdict(list)
     for k, v in gold.items():
         by_status[v].append(k)
     for v in by_status:
-        by_status[v].sort()
-        rng.shuffle(by_status[v])
+        by_status[v].sort(key=lambda q: (q[0] not in _div, q))
+    for v in by_status:
+        _d = [q for q in by_status[v] if q[0] in _div]
+        _n = [q for q in by_status[v] if q[0] not in _div]
+        rng.shuffle(_d)
+        rng.shuffle(_n)
+        by_status[v] = _n + _d
     order = sorted(by_status, key=lambda v: -len(by_status[v]))
     queries = []
     while any(by_status[v] for v in order):
@@ -400,7 +442,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
 
 
 def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: str) -> str:
-    on = ("the last-link strength ordering" if ordering == LAST_LINK
+    on = ("the last-link strength ordering" if _is_last(ordering)
           else "the weakest-link strength ordering")
     asks = "\n".join(f"   {c} under {s}" for c, s in queries)
     return (f"The following is a defeasible argumentation theory, evaluated with {on}.\n\n"
@@ -424,8 +466,6 @@ def score(answer_text: str, item: SemItem) -> Dict:
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
-    # Gold keys are lowercase, so the claim and semantics are folded to match, and a trailing
-    # "semantics" word is dropped so `x under grounded semantics` keys as (x, grounded).
     pred = collect(((claim.lower(), re.sub(r"\s+semantics$", "", sem.strip().lower())),
                     st.upper().replace(" ", "_"))
                    for claim, sem, st in _PAIR.findall(body))

@@ -12,7 +12,7 @@ from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
 from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import randomize_rule_names, language_enrichment, split_atoms_and_rules
+from arggym.core.invariants import randomize_rule_names, language_enrichment
 
 TASK = "perturbation"
 HELD_FRAC = 0.35
@@ -32,6 +32,14 @@ def _max_share(required: int) -> float:
 PANEL_THRESHOLD = round(MAX_STATUS_SHARE + 0.03, 2)
 REQUIRE_ALL_THREE = True
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
+
+
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
 _L = "abcdefghijklmnopqrstuvwxy"
 
 
@@ -250,8 +258,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     if n_pert >= 2:
         pert.append(Operation(kind="prefer_premise", stronger=cq, weaker="-" + cq))
 
-    # The perturbation's rules are named in the same pass as the theory's, so every rule
-    # in the item draws one name from the rule pool and none from the atom pool.
     _all, _rmap = randomize_rule_names(base + pert, stable_seed(seed, level, ordering, "rn"))
     base, pert = _all[:len(base)], _all[len(base):]
     for _c in comps:
@@ -262,6 +268,19 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             _a, _b = _c["held_by_pref"]
             _c["held_by_pref"] = (_rmap.get(_a, _a), _rmap.get(_b, _b))
     cq_rule = _rmap.get(cq_rule, cq_rule)
+
+    rules = {o.name for o in base + pert
+             if o.kind in ("defeasible", "strict") and o.name}
+    atoms = set()
+    for o in base + pert:
+        if o.content:
+            atoms.add(o.content.lstrip("-"))
+        for a in (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])):
+            if a.startswith("-") and a[1:] in rules:
+                continue
+            atoms.add(a.lstrip("-"))
+    if atoms & rules:
+        return None
 
     before = status_map(base, ordering)
     if not before:
@@ -311,13 +330,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "n_distinct_new_statuses": n_status,
             "new_statuses": sorted(set(changed.values())),
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
-            "n_atoms": len(split_atoms_and_rules(base + pert)[0]),
+            "n_atoms": len(atoms),
             "changed_fraction": round(len(changed) / max(len(before), 1), 3),
         })
 
 
 def _render_prompt(theory: str, pert: str, ordering: str) -> str:
-    on = "the last-link strength ordering" if ordering == LAST_LINK \
+    on = "the last-link strength ordering" if _is_last(ordering) \
         else "the weakest-link strength ordering"
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -347,7 +366,6 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
                 "exact_match": False, "diagnostics": diag}
     matches = _PAIR.findall(body)
     diag["n_lines"] = len(matches)
-    # Gold keys are lowercase, so the claim is folded to match; the status is compared uppercase.
     pred = collect((claim.lower(), stat.upper()) for claim, stat in matches)
     residue = _PAIR.sub(" ", body)
     for tok in residue.split():

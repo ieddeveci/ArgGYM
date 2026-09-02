@@ -11,11 +11,19 @@ from arggym.core.pairs import collect, pair_f1
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.invariants import randomize_rule_names
+from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, junctions_for, PROFILES
 
 TASK = "status_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
+
+
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
 EASY_LEVELS = 4
 MAX_STATUS_SHARE = 0.45
 PANEL_THRESHOLD = round(MAX_STATUS_SHARE + 0.03, 3)
@@ -226,6 +234,9 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ops = prof.filter(ops)
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    atoms, rnames = split_atoms_and_rules(base)
+    if atoms & rnames:
+        return None
 
     sm = full_status_map(base, ordering)
     if not sm:
@@ -284,7 +295,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
-    on = "the last-link strength ordering" if ordering == LAST_LINK \
+    on = "the last-link strength ordering" if _is_last(ordering) \
         else "the weakest-link strength ordering"
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -305,7 +316,6 @@ def score(answer_text: str, item: SQItem) -> Dict:
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
-    # Gold keys are lowercase, so the claim is folded to match; the status is compared uppercase.
     pred = collect((claim.lower(), stat.upper()) for claim, stat in _PAIR.findall(body))
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()

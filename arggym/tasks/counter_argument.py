@@ -10,10 +10,19 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
 from arggym.core.curriculum import negated_branch
 from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
-                        randomize_rule_names, language_enrichment, split_atoms_and_rules)
+                        randomize_rule_names, remap_text, language_enrichment,
+                        split_atoms_and_rules)
 
 TASK = "counter_argument"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
+
+
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
 EASY_LEVELS = 4
 _L = "abcdefghijklmnopqrstuvwxy"
 
@@ -207,17 +216,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             decoy_rule = None
         else:
             ops.append(Operation(kind="prefer_rule", stronger=killer[0], weaker=decoy_rule))
+        base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+        if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
+            return None
 
-    # Rename chain, decoy and enrichment rules from one pool so no name shape
-    # tells them apart. The status checks are name-independent, so the decoy
-    # check below runs on the renamed theory.
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for c in chains:
         c["rules"] = [(_rmap.get(nm, nm), lit, st) for nm, lit, st in c["rules"]]
     if decoy_rule is not None:
         decoy_rule = _rmap.get(decoy_rule, decoy_rule)
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-    if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
+    atoms, rnames = split_atoms_and_rules(base)
+    if atoms & rnames:
         return None
 
     pairs: List[Tuple[Operation, str]] = []
@@ -246,7 +256,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             else:
                 add(Operation(kind="prefer_rule", stronger=decoy_rule, weaker=rl[0]),
                     f"[prefer_rule: {decoy_rule} > {rl[0]}]")
-                if ordering == WEAKEST_LINK:
+                if _is_weakest(ordering):
                     for rr in _upto_tgt(c):
                         if not rr[2]:
                             add(Operation(kind="prefer_rule", stronger=decoy_rule,
@@ -268,7 +278,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                               consequent="-" + first[0]),
                     f"[defeasible z{ci}: {seed_lit} => -{first[0]}]")
                 continue
-            if ordering == LAST_LINK:
+            if _is_last(ordering):
                 add(Operation(kind="prefer_rule", stronger="w", weaker=final[0]),
                     f"[prefer_rule: w > {final[0]}]")
             else:
@@ -335,7 +345,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "mid_chain_target": target_rule_idx is not None,
             "decoy_present": bool(decoy_rule), "contested_seed": contested,
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
-            "n_atoms": len(split_atoms_and_rules(base)[0]),
+            "n_atoms": len(atoms),
             "reference_directives": len(lines),
             "strategy": "revive_decoy" if decoy_rule else "build",
             "reference_irredundant": irredundant, "minimality_proven": _proven,
@@ -345,7 +355,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 def _render_prompt(theory: str, target: str, ordering: str,
                    allow_strict: bool = False) -> str:
-    on = "the last-link strength ordering" if ordering == LAST_LINK \
+    on = "the last-link strength ordering" if _is_last(ordering) \
         else "the weakest-link strength ordering"
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
