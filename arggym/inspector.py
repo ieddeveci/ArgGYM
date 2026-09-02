@@ -269,9 +269,11 @@ async function grade(){
   if(g.exact_match!==undefined) h+=chip(g.exact_match?'exact match':'not exact', g.exact_match?'ok':'warn');
   h+='<table><tr><th>diagnostic</th><th>value</th></tr>';
   ['n_lines','n_unparseable','n_used','minimum','n_predicted','n_gold',
-   'n_survivor_included','n_wrong_status','n_missed','n_spurious','n_quoted','n_gold'].forEach(k=>{
+   'n_survivor_included','n_wrong_status','n_contradicted','n_missed','n_spurious','n_quoted','n_gold'].forEach(k=>{
     h+='<tr><td class="desc">'+k+'</td><td>'+(dg[k]===undefined?'-':dg[k])+'</td></tr>'});
   if(dg.illegal&&dg.illegal.length) h+='<tr><td class="desc">illegal</td><td>'+dg.illegal.join(', ')+'</td></tr>';
+  if(dg.contradicted&&dg.contradicted.length) h+='<tr><td class="desc">contradicted</td><td>'+dg.contradicted.join(', ')+'</td></tr>';
+  if(dg.wrong&&dg.wrong.length) h+='<tr><td class="desc">wrong</td><td>'+dg.wrong.join('<br>')+'</td></tr>';
   if(dg.goals_met) dg.goals_met.forEach(x=>{
     h+='<tr><td class="desc">'+x.claim+'</td><td>'+(x.got===x.want?'✓ ':'✗ ')+x.got+' (want '+x.want+')</td></tr>'});
   document.getElementById('grade').innerHTML=h+'</table>';

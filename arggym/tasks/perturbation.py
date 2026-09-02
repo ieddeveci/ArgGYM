@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from arggym.core.pairs import collect, pair_f1
+
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
@@ -351,19 +353,19 @@ _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b", re.I)
 def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dict:
     diag: Dict = {"n_lines": 0, "n_unparseable": 0, "n_predicted": 0,
                   "n_gold": len(item.gold), "wrong_status": [], "false_positives": [],
-                  "missed": []}
+                  "missed": [], "contradicted": []}
     m = _ANSWER.search(answer_text or "")
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1).strip()
-    pred: Dict[str, str] = {}
     if body.lower() == "none":
         diag["n_lines"] = 1
         return {"score": 0.0, "reason": "predicted_none", "f1": 0.0,
                 "exact_match": False, "diagnostics": diag}
-    for claim, stat in _PAIR.findall(body):
-        pred[claim] = stat.upper()
-    diag["n_lines"] = len(pred)
+    matches = _PAIR.findall(body)
+    diag["n_lines"] = len(matches)
+    # Gold keys are lowercase, so the claim is folded to match; the status is compared uppercase.
+    pred = collect((claim.lower(), stat.upper()) for claim, stat in matches)
     residue = _PAIR.sub(" ", body)
     for tok in residue.split():
         if tok.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", tok):
@@ -376,23 +378,22 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
     diag["n_predicted"] = len(pred)
 
     gold = item.gold
-    tp = sum(1 for k, v in pred.items() if gold.get(k) == v)
-    diag["wrong_status"] = sorted(k for k, v in pred.items() if k in gold and gold[k] != v)
+    r = pair_f1(pred, gold)
+    diag["wrong_status"] = sorted(k for k, v in pred.items() if k in gold and v != [gold[k]])
+    diag["contradicted"] = r.contradicted
     diag["false_positives"] = sorted(k for k in pred if k not in gold)
     diag["missed"] = sorted(k for k in gold if k not in pred)
-    precision = tp / len(pred)
-    recall = tp / max(len(gold), 1)
-    f1 = 0.0 if (precision + recall) == 0 else 2 * precision * recall / (precision + recall)
     surv = set(item.survivors)
     diag["survivor_included"] = sorted(k for k in diag["false_positives"] if k in surv)
     diag["spurious"] = sorted(k for k in diag["false_positives"] if k not in surv)
     diag["n_survivor_included"] = len(diag["survivor_included"])
     diag["n_wrong_status"] = len(diag["wrong_status"])
+    diag["n_contradicted"] = len(diag["contradicted"])
     diag["n_missed"] = len(diag["missed"])
     diag["n_spurious"] = len(diag["spurious"])
-    return {"score": round(f1, 4), "reason": "ok", "f1": round(f1, 4),
-            "precision": round(precision, 4), "recall": round(recall, 4),
-            "exact_match": pred == gold, "diagnostics": diag}
+    return {"score": round(r.f1, 4), "reason": "ok", "f1": round(r.f1, 4),
+            "precision": round(r.precision, 4), "recall": round(r.recall, 4),
+            "exact_match": r.exact_match, "diagnostics": diag}
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",

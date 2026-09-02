@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from arggym.core.pairs import collect, pair_f1
+
 from arggym.aspic.engine import Operation, UNSATISFIABLE
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS
@@ -414,14 +416,16 @@ _PAIR = re.compile(r"(-?\w+)\s+under\s+([a-z ]+?)\s*[:=]\s*"
 
 
 def score(answer_text: str, item: SemItem) -> Dict:
-    diag: Dict = {"n_gold": len(item.gold), "wrong": [], "missing": []}
+    diag: Dict = {"n_gold": len(item.gold), "wrong": [], "missing": [], "contradicted": []}
     m = _ANSWER.search(answer_text or "")
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
-    pred: Dict[Tuple[str, str], str] = {}
-    for claim, sem, st in _PAIR.findall(body):
-        pred[(claim, sem.strip().lower())] = st.upper().replace(" ", "_")
+    # Gold keys are lowercase, so the claim and semantics are folded to match, and a trailing
+    # "semantics" word is dropped so `x under grounded semantics` keys as (x, grounded).
+    pred = collect(((claim.lower(), re.sub(r"\s+semantics$", "", sem.strip().lower())),
+                    st.upper().replace(" ", "_"))
+                   for claim, sem, st in _PAIR.findall(body))
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
@@ -431,19 +435,17 @@ def score(answer_text: str, item: SemItem) -> Dict:
     if not pred:
         return {"score": 0.0, "reason": "no_parseable_pairs", "diagnostics": diag}
 
-    gold_pairs = {(c, s.lower(), v) for (c, s), v in item.gold.items()}
-    pred_pairs = {(c, s, v) for (c, s), v in pred.items()}
-    tp = len(gold_pairs & pred_pairs)
-    precision = tp / max(len(pred_pairs), 1)
-    recall = tp / max(len(gold_pairs), 1)
-    f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
-    diag["wrong"] = sorted(f"{c} under {s}: said {v}, is {item.gold[(c, s)]}"
+    gold = {(c, s.lower()): v for (c, s), v in item.gold.items()}
+    r = pair_f1(pred, gold)
+    diag["wrong"] = sorted(f"{c} under {s}: said {'/'.join(v)}, is {gold[(c, s)]}"
                            for (c, s), v in pred.items()
-                           if (c, s) in item.gold and item.gold[(c, s)] != v)[:6]
-    diag["n_correct"] = tp
-    return {"score": round(f1, 4), "reason": "ok", "f1": round(f1, 4),
-            "precision": round(precision, 4), "recall": round(recall, 4),
-            "exact_match": gold_pairs == pred_pairs, "diagnostics": diag}
+                           if (c, s) in gold and v != [gold[(c, s)]])[:6]
+    diag["missing"] = sorted(f"{c} under {s}" for (c, s) in gold if (c, s) not in pred)[:6]
+    diag["contradicted"] = [f"{c} under {s}" for c, s in r.contradicted][:6]
+    diag["n_correct"] = r.tp
+    return {"score": round(r.f1, 4), "reason": "ok", "f1": round(r.f1, 4),
+            "precision": round(r.precision, 4), "recall": round(r.recall, 4),
+            "exact_match": r.exact_match, "diagnostics": diag}
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
