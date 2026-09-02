@@ -36,7 +36,6 @@ def test_stray_token_is_rejected(fast_cell, fast_item):
 
 
 @pytest.mark.families(LABEL_MAP, DIAGNOSIS)
-@pytest.mark.xfail(strict=True, reason="#42, PR #58")
 def test_contradicted_line_scores_as_one_wrong_line(fast_cell, fast_item):
     adapter = MODES[fast_cell.mode]
     lines = body_lines(adapter.reference(fast_item))
@@ -53,7 +52,6 @@ def test_contradicted_line_scores_as_one_wrong_line(fast_cell, fast_item):
 
 
 @pytest.mark.families(CONSTRUCTION)
-@pytest.mark.xfail(strict=True, reason="#8 #21, PR #60")
 def test_surplus_directive_costs_the_same_whatever_its_kind(fast_cell, fast_item):
     adapter = MODES[fast_cell.mode]
     lines = body_lines(adapter.reference(fast_item))
@@ -68,7 +66,6 @@ def test_surplus_directive_costs_the_same_whatever_its_kind(fast_cell, fast_item
 
 
 @pytest.mark.modes("status_query")
-@pytest.mark.xfail(strict=True, reason="#41")
 def test_status_query_claim_ids_are_case_insensitive(fast_cell, fast_item):
     adapter = MODES[fast_cell.mode]
     lines = [f"{head.upper()}:{tail}" for head, _, tail

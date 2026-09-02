@@ -37,13 +37,10 @@ def name_class(name: str) -> str:
 
 # {property: {reason: modes}}; see the module docstring.
 KNOWN_FAILURES = {
-    "atom_named_like_a_rule": {
-        "#34, PR #61": {"status_query", "semantics_query", "defeat_diagnosis", "claim_chain",
-                        "defence"}},
+    "atom_named_like_a_rule": {},
     "duplicate_declaration": {
         "#62": {"counter_argument", "counter_argument_strict"}},
     "rule_names_reveal_structure": {
-        "#26, PR #61": {"counter_argument", "counter_argument_strict"},
         "#63": {"semantics_query"}},
 }
 

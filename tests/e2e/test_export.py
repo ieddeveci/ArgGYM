@@ -30,6 +30,5 @@ def test_exported_rows_verify(task, tmp_path):
         assert result["score"] == pytest.approx(1.0), (cell.short, result["reason"])
 
 
-@pytest.mark.xfail(strict=True, reason="#23, PR #59")
 def test_every_mode_is_exportable():
     assert set(export._EXPORTABLE) == set(MODES)
