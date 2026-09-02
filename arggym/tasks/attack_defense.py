@@ -251,7 +251,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
                     "contested_premises": decoy_srcs,
                     "clean_premise_available": True,
                 })
-    if score_item(item.reference, item.as_score_input())["score"] < 0.999:
+    if not reference_ok(score_item(item.reference, item.as_score_input())):
         return None
     return item
 
@@ -323,7 +323,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
                     "minimum_method": mn.get("method", "joint"),
                     "base_status": d.status(),
                 })
-    if score_item(item.reference, item.as_score_input())["score"] < 0.999:
+    if not reference_ok(score_item(item.reference, item.as_score_input())):
         return None
     return item
 
@@ -394,9 +394,15 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                     "min_moves": sol["n_directives"],
                     "all_reference_directives_necessary": sol["all_necessary"],
                 })
-    if score_item(item.reference, item.as_score_input())["score"] < 0.999:
+    if not reference_ok(score_item(item.reference, item.as_score_input())):
         return None
     return item
+
+
+def reference_ok(result: Dict) -> bool:
+    """A reference must score 1.0 with no dropped line: a rejectable preference
+    scores 1.0 when n_used == min_directives, so the score alone proves nothing."""
+    return result["score"] >= 0.999 and not result["diagnostics"]["illegal"]
 
 
 MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: build_mixed_item}
