@@ -3,7 +3,7 @@
 A generator and grader for defeasible-argumentation tasks in ASPIC+. Every item is built by
 construction and checked against the engine, so the gold answer is never asserted, it is verified.
 
-Ten tasks, eleven modes, fifteen levels, two strength orderings.
+Nine tasks, twelve modes, fifteen levels, two strength orderings.
 
 ```
 uv sync                           # install the package and its dependencies
@@ -69,6 +69,7 @@ gold construction. They share `core/` but not each other.
 | file | what it asks |
 |---|---|
 | `status_query.py` | State the status of each named claim. The baseline: everything else presupposes it. Queried claims are selected for balance, because 84% of literals in these theories are justified and asking about all of them would hand over most of the score. |
+| `semantics_query.py` | State the status of each claim under the semantics named beside it: grounded, sceptical or credulous preferred, stable, or eager. The same theory yields different answers under different semantics, so a model that knows only the grounded extension cannot score by default. |
 | `attack_defense.py` | Three modes. **attack**: make a justified claim overruled. **defence**: make an attacked claim justified. **attack_defense**: both at once on a shared structure, where the naive attack sabotages the defence. |
 | `perturbation.py` | Given a theory and a set of additions, predict which claims change status and to what. Tests prediction rather than action, and requires distinguishing a cascade from a survivor. |
 | `counter_argument.py` | Make a claim's *contrary* justified — which destroying its support does not achieve. Also provides the strict-permitted ablation, where a strict rule wins unconditionally and the question becomes whether the model finds the cheapest answer. |

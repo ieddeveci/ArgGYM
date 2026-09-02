@@ -33,27 +33,42 @@ def tasks() -> None:
         typer.echo(name)
 
 
+ALLOW_MISSING_HELP = "Write the file even when some (level, ordering, seed) cells produced no item."
+
+
 @app.command()
 def export(
     task: str = typer.Argument(..., help="Task to export; see 'arggym tasks'."),
     path: Optional[Path] = typer.Argument(None, help="Output file. Defaults to data/<task>.jsonl."),
+    allow_missing: bool = typer.Option(False, "--allow-missing", help=ALLOW_MISSING_HELP),
 ) -> None:
     """Export one task as JSONL."""
     from arggym.core import export as export_mod
 
     out = path if path is not None else DEFAULT_OUT_DIR / f"{task}.jsonl"
-    export_mod.export_task(str(out), task)
+    export_mod.export_task(str(out), task, allow_missing=allow_missing)
 
 
 @app.command("export-all")
 def export_all(
     directory: Path = typer.Argument(DEFAULT_OUT_DIR, help="Directory to write the JSONL into."),
+    allow_missing: bool = typer.Option(False, "--allow-missing", help=ALLOW_MISSING_HELP),
 ) -> None:
-    """Export every task as JSONL."""
+    """Export every task as JSONL. Attempts every task; fails at the end if any had missing cells."""
     from arggym.core import export as export_mod
 
+    failed = []
     for task in sorted(export_mod._EXPORTABLE):
-        export_mod.export_task(str(directory / f"{task}.jsonl"), task)
+        try:
+            export_mod.export_task(str(directory / f"{task}.jsonl"), task,
+                                   allow_missing=allow_missing)
+        except SystemExit as e:
+            typer.echo(str(e), err=True)
+            failed.append(task)
+    if failed:
+        typer.echo(f"export-all: {len(failed)} task(s) not written for missing cells: "
+                   f"{', '.join(failed)}", err=True)
+        raise typer.Exit(1)
 
 
 @app.command()
