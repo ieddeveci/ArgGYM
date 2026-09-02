@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "pytest-xdist>=3.0"]
 
 [project.scripts]
 arggym = "arggym.cli:main"
@@ -28,3 +28,9 @@ module-name = "arggym"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: full-grid cells of the end-to-end suite; run with `make test-all`",
+    "families(*names): restrict an e2e test to task families",
+    "modes(*names): restrict an e2e test to modes",
+]
