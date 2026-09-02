@@ -306,8 +306,12 @@ def score(answer_text: str, item: SQItem) -> Dict:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
     pred: Dict[str, str] = {}
+    contradicted: set = set()
     for claim, stat in _PAIR.findall(body):
-        pred[claim] = stat.upper()
+        stat = stat.upper()
+        if claim in pred and pred[claim] != stat:
+            contradicted.add(claim)
+        pred[claim] = stat
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
@@ -321,7 +325,8 @@ def score(answer_text: str, item: SQItem) -> Dict:
         return {"score": 0.0, "reason": "no_parseable_lines", "diagnostics": diag}
 
     gold_pairs = set(item.gold.items())
-    pred_pairs = set(pred.items())
+    # A claim answered with two different statuses is one prediction that can never match gold.
+    pred_pairs = {(k, "CONTRADICTED" if k in contradicted else v) for k, v in pred.items()}
     tp = len(gold_pairs & pred_pairs)
     precision = tp / max(len(pred_pairs), 1)
     recall = tp / max(len(gold_pairs), 1)
@@ -329,6 +334,7 @@ def score(answer_text: str, item: SQItem) -> Dict:
     diag["wrong"] = sorted(f"{k}:said {v}, is {item.gold[k]}"
                            for k, v in pred.items() if k in item.gold and item.gold[k] != v)[:6]
     diag["missing"] = sorted(k for k in item.gold if k not in pred)[:6]
+    diag["contradicted"] = sorted(contradicted)[:6]
     diag["n_correct"] = tp
     return {"score": round(f1, 4), "reason": "ok",
             "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
