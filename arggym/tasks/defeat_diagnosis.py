@@ -326,12 +326,15 @@ def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) 
 
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
+# A status line starts with `status:`; a status word inside a record's field value is not one.
+_STATUS_LINE = re.compile(r"^[\W\d]*status\s*[:=]\s*(justified|overruled|undecided)", re.I | re.M)
 _FIELD = re.compile(r"(\w+)\s*[:=]\s*([^;\n]+)")
 
 
 def score(answer_text: str, item: DDItem) -> Dict:
     diag: Dict = {"n_quoted": 0, "n_gold": len(item.diagnoses),
-                  "status_correct": False, "extra": [], "missing": []}
+                  "status_correct": False, "status_contradicted": False,
+                  "kind_contradicted": False, "extra": [], "missing": []}
     m = _ANSWER.search(answer_text or "")
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
@@ -353,13 +356,9 @@ def score(answer_text: str, item: DDItem) -> Dict:
         return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
                 "diagnostics": diag}
 
-    statuses = {s.upper() for s in _STATUS.findall(body)}
-    # Two different status lines are a hedge, which earns no status credit.
-    diag["status_contradicted"] = len(statuses) > 1
-    status_ok = statuses == {item.claim_status}
-    diag["status_correct"] = status_ok
-
-    pred = set()
+    statuses = {s.upper() for s in _STATUS_LINE.findall(body)}
+    # Records are keyed by failure point; each collects the set of kinds given for it.
+    pred: Dict[Tuple[str, str], set] = {}
     pred_surv = {}
     last_key = None
     records = re.split(r"(?=defeated_at\s*[:=])", body)
@@ -374,8 +373,8 @@ def score(answer_text: str, item: DDItem) -> Dict:
             continue
         fields = {k.lower(): v.strip().strip(",;.") for k, v in _FIELD.findall(line)}
         if "defeated_at" in fields and "defeater" in fields:
-            key = (fields["defeated_at"], fields["defeater"], fields.get("kind", "").lower())
-            pred.add(key)
+            key = (fields["defeated_at"], fields["defeater"])
+            pred.setdefault(key, set()).add(fields.get("kind", "").lower())
             last_key = key
             if fields.get("survives_because"):
                 pred_surv[key] = fields["survives_because"].strip()
@@ -383,18 +382,27 @@ def score(answer_text: str, item: DDItem) -> Dict:
             pred_surv[last_key] = fields["survives_because"].strip()
     diag["n_quoted"] = len(pred)
 
-    gold = {(d["defeated_at"], d["defeater"], d["kind"]) for d in item.diagnoses}
-    tp = len(gold & pred)
+    # Two different status lines, or two different kinds for one failure point, are a hedge
+    # that earns no credit: the status is wrong, the record is one prediction that never matches.
+    diag["status_contradicted"] = len(statuses) > 1
+    status_ok = statuses == {item.claim_status}
+    diag["status_correct"] = status_ok
+    diag["kind_contradicted"] = any(len(kinds) > 1 for kinds in pred.values())
+    gold = {(d["defeated_at"], d["defeater"]): d["kind"] for d in item.diagnoses}
+    matched = {k for k, kinds in pred.items() if kinds == {gold.get(k)}}
+    tp = len(matched)
     precision = tp / max(len(pred), 1)
     recall = tp / max(len(gold), 1)
     f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
-    diag["extra"] = sorted(str(x) for x in pred - gold)[:4]
-    diag["missing"] = sorted(str(x) for x in gold - pred)[:4]
+    diag["extra"] = sorted(str((a, b, k)) for (a, b), kinds in pred.items()
+                           if (a, b) not in matched for k in kinds)[:4]
+    diag["missing"] = sorted(str((a, b, k)) for (a, b), k in gold.items()
+                             if (a, b) not in matched)[:4]
 
-    gold_surv = {(d["defeated_at"], d["defeater"], d["kind"]): d["survives_because"]
+    gold_surv = {(d["defeated_at"], d["defeater"]): d["survives_because"]
                  for d in item.diagnoses if d.get("survives_because")}
     if gold_surv:
-        hit = sum(1 for k, v in gold_surv.items() if pred_surv.get(k) == v)
+        hit = sum(1 for k, v in gold_surv.items() if k in matched and pred_surv.get(k) == v)
         surv_score = hit / len(gold_surv)
         diag["survives_because_correct"] = hit
         diag["survives_because_total"] = len(gold_surv)
@@ -409,7 +417,7 @@ def score(answer_text: str, item: DDItem) -> Dict:
             "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
             "status_correct": status_ok,
             "survives_because_score": None if surv_score is None else round(surv_score, 4),
-            "exact_match": (pred == gold and status_ok
+            "exact_match": (tp == len(gold) == len(pred) and status_ok
                             and (surv_score is None or surv_score >= 0.999)),
             "diagnostics": diag}
 

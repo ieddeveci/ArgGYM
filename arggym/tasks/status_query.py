@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from arggym.core.pairs import collect, pair_f1
+
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
@@ -300,17 +302,14 @@ _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b(?!\w)", 
 
 
 def score(answer_text: str, item: SQItem) -> Dict:
-    diag: Dict = {"n_predicted": 0, "n_gold": len(item.gold), "wrong": [], "missing": []}
+    diag: Dict = {"n_predicted": 0, "n_gold": len(item.gold), "wrong": [], "missing": [],
+                  "contradicted": []}
     m = _ANSWER.search(answer_text or "")
     if m is None:
         return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     body = m.group(1)
-    # Every distinct status given for each claim, in the order seen.
-    pred: Dict[str, List[str]] = {}
-    for claim, stat in _PAIR.findall(body):
-        stats = pred.setdefault(claim, [])
-        if stat.upper() not in stats:
-            stats.append(stat.upper())
+    # Gold keys are lowercase, so the claim is folded to match; the status is compared uppercase.
+    pred = collect((claim.lower(), stat.upper()) for claim, stat in _PAIR.findall(body))
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
@@ -323,23 +322,15 @@ def score(answer_text: str, item: SQItem) -> Dict:
     if not pred:
         return {"score": 0.0, "reason": "no_parseable_lines", "diagnostics": diag}
 
-    gold_pairs = set(item.gold.items())
-    # A claim answered with two different statuses is one prediction that can never match gold.
-    contradicted = {k for k, v in pred.items() if len(v) > 1}
-    pred_pairs = {(k, "CONTRADICTED" if k in contradicted else v[0]) for k, v in pred.items()}
-    tp = len(gold_pairs & pred_pairs)
-    precision = tp / max(len(pred_pairs), 1)
-    recall = tp / max(len(gold_pairs), 1)
-    f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+    r = pair_f1(pred, item.gold)
     diag["wrong"] = sorted(f"{k}:said {'/'.join(v)}, is {item.gold[k]}"
-                           for k, v in pred.items()
-                           if k in item.gold and (k in contradicted or item.gold[k] != v[0]))[:6]
+                           for k, v in pred.items() if k in item.gold and v != [item.gold[k]])[:6]
     diag["missing"] = sorted(k for k in item.gold if k not in pred)[:6]
-    diag["contradicted"] = sorted(contradicted)[:6]
-    diag["n_correct"] = tp
-    return {"score": round(f1, 4), "reason": "ok",
-            "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
-            "exact_match": pred_pairs == gold_pairs, "diagnostics": diag}
+    diag["contradicted"] = r.contradicted[:6]
+    diag["n_correct"] = r.tp
+    return {"score": round(r.f1, 4), "reason": "ok", "f1": round(r.f1, 4),
+            "precision": round(r.precision, 4), "recall": round(r.recall, 4),
+            "exact_match": r.exact_match, "diagnostics": diag}
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
