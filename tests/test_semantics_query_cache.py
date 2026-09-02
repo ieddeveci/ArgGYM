@@ -51,24 +51,37 @@ def first_built_item(level: int, counts: dict, ordering: str = sq.LAST_LINK):
     pytest.fail(f"no level {level} item in 40 seeds")
 
 
-def test_level_14_enumerates_each_semantics_once(counts):
-    item, seen = first_built_item(14, counts)
+# The enumeration each semantics needs, so a test can ask for the schedule's own count
+# rather than name levels. semantics_for decides which of these a level requests, and
+# these tests hold whatever that schedule says.
+ENUMERATION = {
+    sq.SCEPT_PREF: "preferred_extensions",
+    sq.CRED_PREF: "preferred_extensions",
+    sq.STABLE: "stable_extensions",
+    sq.EAGER: "eager_extension",
+    sq.GROUNDED: "status_map",
+}
+
+TOP_LEVEL = max(sq.SEMANTICS_BY_LEVEL)
+
+
+def test_top_level_enumerates_each_requested_semantics_once(counts):
+    item, seen = first_built_item(TOP_LEVEL, counts)
     assert len(item.gold) >= 2
-    assert seen["preferred_extensions"] == 1, "preferred was re-enumerated per query"
-    assert seen["stable_extensions"] == 1
-    assert seen["eager_extension"] == 1
-    assert seen["status_map"] == 1
+    wanted = {ENUMERATION[s] for s in sq.semantics_for(TOP_LEVEL)}
+    for name in wanted:
+        assert seen[name] == 1, f"{name} was re-enumerated per query"
     # Two constructions guard the eager argument budget; the gold loop reuses the second.
     assert seen["verifier"] <= 2
 
 
-def test_unrequested_semantics_are_never_enumerated(counts):
-    item, seen = first_built_item(8, counts)
-    assert sq.STABLE not in sq.semantics_for(8) and sq.EAGER not in sq.semantics_for(8)
-    assert seen["preferred_extensions"] == 1
-    assert seen["stable_extensions"] == 0
-    assert seen["eager_extension"] == 0
-    assert seen["verifier"] == 1
+@pytest.mark.parametrize("level", sorted(sq.SEMANTICS_BY_LEVEL))
+def test_unrequested_semantics_are_never_enumerated(level, counts):
+    _item, seen = first_built_item(level, counts)
+    wanted = {ENUMERATION[s] for s in sq.semantics_for(level)}
+    for name in COUNTED:
+        if name not in wanted:
+            assert seen[name] == 0, f"{name} enumerated at level {level}, which does not ask for it"
 
 
 @pytest.mark.parametrize("level", [1, 4, 8, 12])
