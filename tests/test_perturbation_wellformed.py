@@ -16,7 +16,6 @@ from collections import defaultdict
 
 import pytest
 
-from arggym.core.invariants import split_atoms_and_rules
 from arggym.structures.chains import LAST_LINK, WEAKEST_LINK
 from arggym.tasks import perturbation
 
@@ -30,11 +29,29 @@ CELLS = [
 
 
 def _rules_and_atoms(ops):
+    """The atom set spelled out here rather than imported.
+
+    This is the only check that runs over the theory and the perturbation together,
+    which is the namespace the prompt shows; the end-to-end grid reaches base_ops
+    alone (tests/e2e/registry.py). Spelling the definition out means a change to
+    split_atoms_and_rules has to be argued for against this file too.
+    """
     bound = defaultdict(set)
     for o in ops:
         if o.kind in ("defeasible", "strict") and o.name:
             bound[o.name].add((tuple(o.antecedents or ()), o.consequent))
-    atoms, _ = split_atoms_and_rules(ops)
+    atoms = set()
+    for o in ops:
+        if o.content:
+            atoms.add(o.content.lstrip("-"))
+        for a in (o.antecedents or ()):
+            atoms.add(a.lstrip("-"))
+        c = o.consequent
+        if c and not (c.startswith("-") and c[1:] in bound):
+            atoms.add(c.lstrip("-"))
+        if o.kind == "prefer_premise":
+            atoms.add(o.stronger.lstrip("-"))
+            atoms.add(o.weaker.lstrip("-"))
     return bound, atoms
 
 
