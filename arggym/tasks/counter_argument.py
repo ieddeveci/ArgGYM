@@ -36,6 +36,11 @@ def _is_last(ordering: str) -> bool:
     return str(ordering).startswith("last_link")
 EASY_LEVELS = 4
 _L = "abcdefghijklmnopqrstuvwxy"
+# One pool per item, read through a single iterator by every consumer, so the chain,
+# the decoy and the language enrichment can never be handed the same name. Two draws
+# from two seeds could, and did. The pool covers the whole item: the heaviest cell on
+# the export grid takes 60 names.
+_POOL = 400
 
 
 def stable_seed(*parts) -> int:
@@ -46,6 +51,8 @@ def _names(seed: int, n: int) -> List[str]:
     rng = random.Random(seed)
     pool = [f"{a}{b}{d}" for a in _L[:12] for b in _L[12:] for d in range(10)]
     rng.shuffle(pool)
+    if n > len(pool):
+        raise ValueError(f"name pool exhausted: asked {n} of {len(pool)}")
     return pool[:n]
 
 
@@ -105,8 +112,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     contested = level >= 8 or allow_strict
     mid_target = level >= 6 and (seed % 2 == 1)
 
-    names = _names(stable_seed(seed, level, ordering, "nm"), 20 + n_chain * (depth + 5))
-    it = iter(names)
+    it = iter(_names(stable_seed(seed, level, ordering, "nm"), _POOL))
     apex = next(it)
     seed_lit = next(it)
     ops: List[Operation] = [Operation(kind="premise", content=seed_lit)]
@@ -199,8 +205,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     def _upto_tgt(c: Dict) -> List[Tuple[str, str, bool]]:
         return c["rules"][:c["tgt_idx"] + 1] if target_rule_idx is not None else c["rules"]
 
-    _lx, _ = language_enrichment(
-        iter(_names(stable_seed(seed, level, ordering, 'lx'), 40)), [900], prefix='lx')
+    _lx, _ = language_enrichment(it, [900], prefix="lx")
     ops = list(ops) + _lx
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 

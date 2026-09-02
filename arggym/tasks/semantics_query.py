@@ -340,41 +340,57 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
             candidates.append(x)
         ops.extend(block)
 
-    ops, _map = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
-    atoms, rnames = split_atoms_and_rules(ops)
-    if atoms & rnames:
-        return None
     if len(ops) > MAX_DIRECTIVES:
         return None
 
-    rng.shuffle(ops)
-    facts = [o for o in ops if o.kind in ("premise", "axiom")]
-    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
-    prefs = [o for o in ops if o.kind.startswith("prefer")]
-    base = facts + rules + prefs
-
-    _cache_v: Optional[ASPICVerifier] = None
+    # The eager padding is part of the theory the prompt shows, so it is built here,
+    # before the rename, and renamed with everything else. Otherwise its rules keep
+    # their r_<n> names beside the pool names and mark out the padding by shape alone.
+    # It is held aside rather than spliced into ops so the shuffle below draws exactly
+    # as it does without padding: the gates further down depend on the rng, and the
+    # padding must not re-roll which items they accept.
+    _pad: List[Operation] = []
     if EAGER in sems:
+        _ordered = ([o for o in ops if o.kind in ("premise", "axiom")]
+                    + [o for o in ops if o.kind in ("defeasible", "strict")]
+                    + [o for o in ops if o.kind.startswith("prefer")])
         try:
-            _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
-            _na = len(_v.fw.af.arguments)
+            _na = len(ASPICVerifier.from_operations(
+                _ordered, ordering=ordering).fw.af.arguments)
         except Exception:
             return None
         _fill = 0
         while _na + 2 <= MAX_EAGER_ARGUMENTS and _fill < 16:
             _a, _c = next(it), next(it)
             ridx[0] += 1
-            base.append(Operation(kind="premise", content=_a))
-            base.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+            _pad.append(Operation(kind="premise", content=_a))
+            _pad.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
                                   antecedents=(_a,), consequent=_c))
             candidates.append(_c)
             _na += 2
             _fill += 1
+
+    _n = len(ops)
+    ops, _map = randomize_rule_names(list(ops) + _pad,
+                                     stable_seed(seed, level, ordering, "rn"))
+    ops, _pad = ops[:_n], ops[_n:]
+    atoms, rnames = split_atoms_and_rules(ops + _pad)
+    if atoms & rnames:
+        return None
+
+    rng.shuffle(ops)
+    facts = [o for o in ops if o.kind in ("premise", "axiom")]
+    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
+    prefs = [o for o in ops if o.kind.startswith("prefer")]
+    base = facts + rules + prefs + _pad
+
+    _cache_v: Optional[ASPICVerifier] = None
+    if EAGER in sems:
         try:
             _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
-            if len(_v.fw.af.arguments) > MAX_EAGER_ARGUMENTS:
-                return None
         except Exception:
+            return None
+        if len(_v.fw.af.arguments) > MAX_EAGER_ARGUMENTS:
             return None
         _cache_v = _v
 
