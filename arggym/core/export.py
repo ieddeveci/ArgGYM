@@ -6,6 +6,7 @@ import os
 import sys
 
 from arggym.aspic.engine import Operation
+from arggym.core.curriculum import ATTACK, DEFENCE, MIXED
 from arggym.core.scoring import score_item
 
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -20,6 +21,10 @@ _EXPORTABLE = {
     "formalization": "formalize",
     "status_query": "statusquery",
     "semantics_query": "semquery",
+    "attack": "attackdef",
+    "defence": "attackdef",
+    "attack_defense": "attackdef",
+    "perturbation": "perturb",
 }
 
 
@@ -74,29 +79,54 @@ def _export_row(task: str, lv: int, o: str, s: int):
             return None
         return it, statusquery.score(it.reference, it)["score"], \
             [{"claim": c, "want": it.gold[c]} for c in it.queried], it.metadata["n_queried"]
+    if task in (ATTACK, DEFENCE, MIXED):
+        from arggym.tasks import attack_defense as attackdef
+        it = attackdef.make_item(lv, s, o, mode=task)
+        if it is None:
+            return None
+        return it, score_item(it.reference, it.as_score_input())["score"], \
+            [dict(g) for g in it.goals], it.min_directives
+    if task == "perturbation":
+        from arggym.tasks import perturbation as perturb
+        it = perturb.make_item(lv, s, o)
+        if it is None:
+            return None
+        return it, perturb.score(it.reference(), it)["score"], \
+            [{"claim": k, "current": it.before.get(k, "-"), "want": v}
+             for k, v in sorted(it.gold.items())], len(it.gold)
     return None
 
 
-def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1)) -> None:
+def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1),
+                allow_missing: bool = False) -> None:
     if task not in _EXPORTABLE:
         raise SystemExit(f"unknown task {task}; known: {sorted(_EXPORTABLE)}")
-    rows = []
+    rows, missing = [], []
     for lv in levels:
         for o in (LAST_LINK, WEAKEST_LINK):
             for s in seeds:
                 got = _export_row(task, lv, o, s)
                 if got is None:
+                    missing.append({"level": lv, "ordering": o, "seed": s})
                     continue
                 it, refscore, goals, mind = got
+                # perturbation's reference is a method; every other task stores a string
+                ref = it.reference() if callable(it.reference) else it.reference
                 rows.append({"task": task, "level": lv, "ordering": o, "seed": s,
-                             "prompt": it.prompt, "reference": it.reference,
+                             "prompt": it.prompt, "reference": ref,
                              "goals": goals, "min_directives": mind,
                              "metadata": it.metadata, "reference_score": refscore})
+    n_requested = len(levels) * 2 * len(seeds)
+    if missing and not allow_missing:
+        cells = ", ".join(f"(L{m['level']}, {m['ordering']}, seed {m['seed']})" for m in missing)
+        raise SystemExit(f"{task}: {len(missing)} of {n_requested} cells returned no item: {cells}; "
+                         f"nothing written (pass allow_missing=True / --allow-missing to export anyway)")
     h = hashlib.blake2b(digest_size=16)
     for r in rows:
         h.update((r["prompt"] + r["reference"]
                   + json.dumps(r["metadata"], sort_keys=True, default=str)).encode())
     manifest = {"task": task, "taskset_hash": h.hexdigest(), "n_items": len(rows),
+                "n_requested": n_requested, "missing_cells": missing,
                 "n_valid": sum(1 for r in rows if r["reference_score"] >= 0.999),
                 "levels": list(levels), "orderings": [LAST_LINK, WEAKEST_LINK],
                 "python": sys.version.split()[0],
@@ -111,4 +141,7 @@ def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1)) ->
         for r in rows:
             f.write(json.dumps(r, default=str) + "\n")
     print(f"wrote {len(rows)} items ({manifest['n_valid']} valid) -> {path}")
+    if missing:
+        print(f"missing {len(missing)} of {n_requested} cells: "
+              + ", ".join(f"(L{m['level']}, {m['ordering']}, seed {m['seed']})" for m in missing))
     print(f"taskset_hash {manifest['taskset_hash']}")

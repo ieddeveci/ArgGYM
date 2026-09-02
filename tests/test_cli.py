@@ -18,7 +18,8 @@ runner = CliRunner()
 def written():
     """Capture (task, path) pairs instead of generating anything."""
     calls = []
-    with patch("arggym.core.export.export_task", lambda path, task: calls.append((task, path))):
+    with patch("arggym.core.export.export_task",
+               lambda path, task, allow_missing=False: calls.append((task, path))):
         yield calls
 
 
@@ -59,3 +60,32 @@ def test_gates_report_the_missing_validation_package():
     result = runner.invoke(app, ["gates"])
     assert result.exit_code == 1
     assert "validation" in result.output
+
+
+def test_allow_missing_is_passed_through():
+    seen = []
+    with patch("arggym.core.export.export_task",
+               lambda path, task, allow_missing=False: seen.append(allow_missing)):
+        assert runner.invoke(app, ["export", "status_query", "--allow-missing"]).exit_code == 0
+        assert runner.invoke(app, ["export", "status_query"]).exit_code == 0
+        assert runner.invoke(app, ["export-all", "somewhere", "--allow-missing"]).exit_code == 0
+    n = len(seen)
+    assert seen[:2] == [True, False] and all(seen[2:]) and n > 2
+
+
+def test_export_all_attempts_every_task_and_fails_at_the_end():
+    """A task with missing cells must not stop the others, but must make the command fail."""
+    from arggym.core import export
+
+    attempted = []
+
+    def stub(path, task, allow_missing=False):
+        attempted.append(task)
+        if task == "status_query":
+            raise SystemExit(f"{task}: 2 of 20 cells returned no item")
+
+    with patch("arggym.core.export.export_task", stub):
+        result = runner.invoke(app, ["export-all", "somewhere"])
+    assert result.exit_code == 1
+    assert attempted == sorted(export._EXPORTABLE)
+    assert "status_query" in result.output
