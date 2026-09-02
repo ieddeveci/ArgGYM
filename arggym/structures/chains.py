@@ -7,6 +7,15 @@ from arggym.aspic.engine import Operation
 from arggym.core.curriculum import negated_branch
 from arggym.aspic.api import ASPICVerifier
 
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
+
+
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
 LAST_LINK = "last_link_elitist"
 WEAKEST_LINK = "weakest_link_elitist"
 
@@ -125,7 +134,7 @@ def build_c5(root, mids, target, rn, rival_premise, rival_rule,
         Operation(kind="defeasible", name=rival_rule, antecedents=(rival_premise,),
                   consequent="-" + target),
     ]
-    if ordering == LAST_LINK:
+    if _is_last(ordering):
         extras.append(Operation(kind="prefer_rule",
                                 stronger=ch.rules[-1]["name"], weaker=rival_rule))
     else:
@@ -185,11 +194,16 @@ class ConfigSpec:
     profile: Dict[str, Tuple[FrozenSet[str], FrozenSet[str]]]
     note: str
 
+    @staticmethod
+    def _axis(ordering: str) -> str:
+        return ("weakest_link_elitist" if str(ordering).startswith("weakest_link")
+                else "last_link_elitist")
+
     def admits(self, ordering: str) -> FrozenSet[str]:
-        return self.profile[ordering][0]
+        return self.profile[self._axis(ordering)][0]
 
     def blocks(self, ordering: str) -> FrozenSet[str]:
-        return self.profile[ordering][1]
+        return self.profile[self._axis(ordering)][1]
 
 
 _ALL4 = frozenset({UNDERMINE, UNDERCUT_FINAL, UNDERCUT_MID, REBUT})
@@ -284,7 +298,7 @@ def attack_ops(chain: Chain, kind: str, src: str, ordering: str,
     if kind == REBUT:
         nm = f"kr{idx}"
         ops = [Operation(kind="defeasible", name=nm, antecedents=(src,), consequent="-" + tgt)]
-        if ordering == LAST_LINK:
+        if _is_last(ordering):
             fr = chain.final_rule()
             if fr.get("strict"):
                 return None

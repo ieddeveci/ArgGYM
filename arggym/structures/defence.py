@@ -9,6 +9,14 @@ from arggym.aspic.api import ASPICVerifier
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
 
+def _is_weakest(ordering: str) -> bool:
+    return str(ordering).startswith("weakest_link")
+
+
+def _is_last(ordering: str) -> bool:
+    return str(ordering).startswith("last_link")
+
+
 @dataclass
 class Attacker:
     name: str
@@ -167,7 +175,7 @@ def defence_moves(item: DefenceItem) -> List[Tuple[str, int, List[Operation]]]:
             out.append((f"undercut:{rn}", i,
                         [Operation(kind="defeasible", name=f"z{i}_{k}",
                                    antecedents=(base_root,), consequent="-" + rn)]))
-        if item.ordering == LAST_LINK:
+        if _is_last(item.ordering):
             out.append((f"prefer:{a.name}", i,
                         [Operation(kind="prefer_rule", stronger=item.support_rules[-1],
                                    weaker=a.name)]))
