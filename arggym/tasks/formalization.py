@@ -19,6 +19,17 @@ from arggym.core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TR
 TASK = "formalization"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
+_ORDERING_NAME = {
+    "last_link_elitist": "the last-link elitist strength ordering",
+    "last_link_democratic": "the last-link democratic strength ordering",
+    "weakest_link_elitist": "the weakest-link elitist strength ordering",
+    "weakest_link_democratic": "the weakest-link democratic strength ordering",
+}
+
+
+def _ordering_phrase(ordering: str) -> str:
+    return _ORDERING_NAME.get(ordering, str(ordering))
+
 
 def _is_weakest(ordering: str) -> bool:
     return str(ordering).startswith("weakest_link")
@@ -351,8 +362,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -> str:
-    on = "the last-link strength ordering" if _is_last(ordering) \
-        else "the weakest-link strength ordering"
+    on = _ordering_phrase(ordering)
     return (f"The following argumentation is described in words. Formalize it as an ASPIC+ theory, "
             f"to be evaluated under grounded semantics with {on}.\n\n{nl}\n\n"
             f"Under a correct formalization: {concl}.\n\n"

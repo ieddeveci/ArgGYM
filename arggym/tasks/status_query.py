@@ -17,6 +17,17 @@ from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, junctions_for
 TASK = "status_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
+_ORDERING_NAME = {
+    "last_link_elitist": "the last-link elitist strength ordering",
+    "last_link_democratic": "the last-link democratic strength ordering",
+    "weakest_link_elitist": "the weakest-link elitist strength ordering",
+    "weakest_link_democratic": "the weakest-link democratic strength ordering",
+}
+
+
+def _ordering_phrase(ordering: str) -> str:
+    return _ORDERING_NAME.get(ordering, str(ordering))
+
 
 def _is_weakest(ordering: str) -> bool:
     return str(ordering).startswith("weakest_link")
@@ -87,6 +98,60 @@ class SQItem:
     level: int
     reference: str
     metadata: Dict = field(default_factory=dict)
+
+
+def _weakest_link_split(ops, names, ridx, want_split: bool):
+    from arggym.aspic.engine import Operation
+    pa, pb, tbase, la, lb, goal = (next(names) for _ in range(6))
+    ridx[0] += 1
+    ja = f"q_{ridx[0]}"
+    ridx[0] += 1
+    jb = f"q_{ridx[0]}"
+    ridx[0] += 1
+    join = f"q_{ridx[0]}"
+    ridx[0] += 1
+    sup = f"q_{ridx[0]}"
+    ops.extend([
+        Operation(kind="premise", content=pa),
+        Operation(kind="premise", content=pb),
+        Operation(kind="premise", content=tbase),
+        Operation(kind="defeasible", name=ja, antecedents=(pa,), consequent=la),
+        Operation(kind="defeasible", name=jb, antecedents=(pb,), consequent=lb),
+        Operation(kind="defeasible", name=join, antecedents=(la, lb), consequent="-" + goal),
+        Operation(kind="defeasible", name=sup, antecedents=(tbase,), consequent=goal),
+        Operation(kind="prefer_premise", stronger=tbase, weaker=pa),
+        Operation(kind="prefer_rule", stronger=sup, weaker=ja),
+    ])
+    if not want_split:
+        ops.append(Operation(kind="prefer_premise", stronger=tbase, weaker=pb))
+    return goal
+
+
+def _several_last_links(ops, names, ridx, want_split: bool):
+    from arggym.aspic.engine import Operation
+    leg1, leg2, base, part1, part2, thesis = (next(names) for _ in range(6))
+    ridx[0] += 1
+    arm1 = f"v_{ridx[0]}"
+    ridx[0] += 1
+    arm2 = f"v_{ridx[0]}"
+    ridx[0] += 1
+    joiner = f"v_{ridx[0]}"
+    ridx[0] += 1
+    support = f"v_{ridx[0]}"
+    ops.extend([
+        Operation(kind="premise", content=leg1),
+        Operation(kind="premise", content=leg2),
+        Operation(kind="premise", content=base),
+        Operation(kind="defeasible", name=arm1, antecedents=(leg1,), consequent=part1),
+        Operation(kind="defeasible", name=arm2, antecedents=(leg2,), consequent=part2),
+        Operation(kind="strict", name=joiner, antecedents=(part1, part2),
+                  consequent="-" + thesis),
+        Operation(kind="defeasible", name=support, antecedents=(base,), consequent=thesis),
+        Operation(kind="prefer_rule", stronger=support, weaker=arm1),
+    ])
+    if not want_split:
+        ops.append(Operation(kind="prefer_rule", stronger=support, weaker=arm2))
+    return thesis
 
 
 def _tower(ops: List[Operation], names, ridx: List[int], target_lit: str, height: int) -> None:
@@ -231,6 +296,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 _tower(ops, it, ridx, c2, 2 * rng.randint(1, max_tower))
             planned.append((c2, "JUSTIFIED"))
 
+    if prof.permits("strict") and prof.permits("prefer_rule") and level >= 4:
+        _t = _several_last_links(ops, it, ridx, want_split=(level % 2 == 0))
+        planned.append((_t, None))
+    if prof.permits("prefer_premise") and prof.permits("defeasible") and level >= 4:
+        _w = _weakest_link_split(ops, it, ridx, want_split=(level % 3 != 0))
+        planned.append((_w, None))
+
     ops = prof.filter(ops)
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
@@ -295,8 +367,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
-    on = "the last-link strength ordering" if _is_last(ordering) \
-        else "the weakest-link strength ordering"
+    on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"State the status of each of the following claims: {', '.join(queried)}.\n"

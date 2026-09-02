@@ -17,6 +17,17 @@ from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 TASK = "semantics_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
+_ORDERING_NAME = {
+    "last_link_elitist": "the last-link elitist strength ordering",
+    "last_link_democratic": "the last-link democratic strength ordering",
+    "weakest_link_elitist": "the weakest-link elitist strength ordering",
+    "weakest_link_democratic": "the weakest-link democratic strength ordering",
+}
+
+
+def _ordering_phrase(ordering: str) -> str:
+    return _ORDERING_NAME.get(ordering, str(ordering))
+
 
 def _is_weakest(ordering: str) -> bool:
     return str(ordering).startswith("weakest_link")
@@ -29,6 +40,9 @@ MAX_DIRECTIVES = 26
 
 MAX_EAGER_ARGUMENTS = 32
 MAX_STATUS_SHARE = 0.45
+
+MIN_QUERIES = 4
+MAX_QUERIES_BY_LEVEL = 12
 PANEL_THRESHOLD = round(MAX_STATUS_SHARE + 0.03, 3)
 _L = "abcdefghijklmnopqrstuvwxy"
 
@@ -293,14 +307,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
 
     kinds = ["defeated", "settled", "odd"]
     j_budget = junction_budget(level, JUNCTION_CAPS.get("semantics_query", 3))
-    _n_cluster = min(5, 3 + (1 if level >= 6 else 0) + (1 if level >= 11 else 0))
+    _lo = 3 + (1 if level >= 6 else 0)
+    _hi = min(6, _lo + 1 + (1 if level >= 11 else 0))
+    _n_cluster = rng.randint(_lo, _hi)
     for k in range(_n_cluster):
-        _fixed = ["floating", "defeated"]
-        _varied = ["undermining", "junction", "strict_axiom", "negated_premise", "settled"]
-        if k < len(_fixed):
-            kind = _fixed[k]
-        else:
-            kind = _varied[(rng.randrange(len(_varied)) + k) % len(_varied)]
+        _menu = ["defeated", "settled", "undermining", "junction",
+                 "strict_axiom", "negated_premise"]
+        kind = "floating" if k == 0 else _menu[rng.randrange(len(_menu))]
         if kind == "floating":
             block, shared, contested = _floating(it, ridx)
             candidates.extend([shared, contested])
@@ -409,23 +422,29 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     _required = [v for k, v in _first_of.items()]
     queries = _required + [q for q in queries if q not in _required]
 
+    _pool_n = len(queries)
+    _frac = 0.55 + rng.random() * 0.35
+    _target = max(MIN_QUERIES, min(MAX_QUERIES_BY_LEVEL, _pool_n,
+                                   int(round(_pool_n * _frac))))
     kept = []
     counts = collections.Counter()
     for q in queries:
+        if len(kept) >= _target:
+            break
         cand = counts.copy()
         cand[gold[q]] += 1
         n = sum(cand.values())
-        if q not in _required and n >= 3 and max(cand.values()) / n > MAX_STATUS_SHARE:
+        if q not in _required and n >= 6 and max(cand.values()) / n > MAX_STATUS_SHARE:
             continue
         kept.append(q)
         counts[gold[q]] += 1
-    if len(kept) < 2:
+    if len(kept) < MIN_QUERIES:
         return None
     queries = kept
     gold = {q: gold[q] for q in queries}
     if len(set(gold.values())) < 2:
         return None
-    if len(gold) >= 3 and max(counts.values()) / len(gold) > MAX_STATUS_SHARE:
+    if len(gold) >= 6 and max(counts.values()) / len(gold) > MAX_STATUS_SHARE:
         return None
     rng.shuffle(queries)
     lines = [f"{c} under {s}: {gold[(c, s)].lower().replace('_', ' ')}" for c, s in queries]
@@ -442,8 +461,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
 
 
 def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: str) -> str:
-    on = ("the last-link strength ordering" if _is_last(ordering)
-          else "the weakest-link strength ordering")
+    on = _ordering_phrase(ordering)
     asks = "\n".join(f"   {c} under {s}" for c, s in queries)
     return (f"The following is a defeasible argumentation theory, evaluated with {on}.\n\n"
             f"{theory}\n\n"

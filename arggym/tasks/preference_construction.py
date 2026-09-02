@@ -16,6 +16,17 @@ from arggym.core.invariants import (randomize_rule_names, language_enrichment, s
 TASK = "preference_construction"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
+_ORDERING_NAME = {
+    "last_link_elitist": "the last-link elitist strength ordering",
+    "last_link_democratic": "the last-link democratic strength ordering",
+    "weakest_link_elitist": "the weakest-link elitist strength ordering",
+    "weakest_link_democratic": "the weakest-link democratic strength ordering",
+}
+
+
+def _ordering_phrase(ordering: str) -> str:
+    return _ORDERING_NAME.get(ordering, str(ordering))
+
 
 def _is_weakest(ordering: str) -> bool:
     return str(ordering).startswith("weakest_link")
@@ -287,8 +298,7 @@ _STATUS_WORD = {"JUSTIFIED": "justified", "OVERRULED": "overruled", "UNDECIDED":
 
 
 def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
-    on = "the last-link strength ordering" if _is_last(ordering) \
-        else "the weakest-link strength ordering"
+    on = _ordering_phrase(ordering)
     lines = [f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
              f"with {on}.", "", theory, ""]
     for g in goals:
