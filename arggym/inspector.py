@@ -170,7 +170,9 @@ PAGE = """
   <label>Ordering</label>
   <select id="ordering">
     <option value="last_link_elitist">last-link elitist</option>
+    <option value="last_link_democratic">last-link democratic</option>
     <option value="weakest_link_elitist">weakest-link elitist</option>
+    <option value="weakest_link_democratic">weakest-link democratic</option>
   </select>
   <label>Seed</label>
   <div class="row"><input id="seed" type="number" value="1">
@@ -235,7 +237,7 @@ async function gen(){
   Object.entries(d.meta).forEach(([k,v])=>{mt+='<tr><td class="desc">'+k+'</td><td>'+JSON.stringify(v)+'</td></tr>'});
   document.getElementById('meta').innerHTML=mt+'</table>';
   document.getElementById('status').innerHTML=chip(d.mode+' L'+d.level,'neu')
-     +chip(d.ordering.replace('_elitist',''),'neu')
+     +chip(d.ordering.replace(/_/g,' '),'neu')
      +chip('reference '+d.ref_score.toFixed(3), d.ref_score>=0.999?'ok':'bad');
   document.getElementById('grade').innerHTML='';
   const gEl=document.getElementById('graph');
@@ -313,7 +315,7 @@ def api_generate():
                         "goals": [{"claim": f"{c} under {s}", "current": "-",
                                    "want": sq.gold[(c, s)]} for c, s in sq.queries],
                         "meta": sq.metadata,
-                        "spec": f"L{sq.level} semantics_query {sq.ordering.split('_')[0]}-link | "
+                        "spec": f"L{sq.level} semantics_query {sq.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{sq.metadata['n_queries']} queries over "
                                 f"{len(sq.metadata['semantics'])} semantics | "
                                 f"{sq.metadata['n_items']} directives, "
@@ -336,7 +338,7 @@ def api_generate():
                         "goals": [{"claim": c, "current": "-", "want": sq.gold[c]}
                                   for c in sq.queried],
                         "meta": sq.metadata,
-                        "spec": f"L{sq.level} status_query {sq.ordering.split('_')[0]}-link | "
+                        "spec": f"L{sq.level} status_query {sq.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{sq.metadata['n_queried']} claims asked of "
                                 f"{sq.metadata['n_items']} directives | modal share "
                                 f"{sq.metadata['modal_share']:.2f}, tower "
@@ -359,7 +361,7 @@ def api_generate():
                         "goals": [{"claim": l, "current": "-", "want": fi.gold_status[l]}
                                   for l in fi.queried],
                         "meta": fi.metadata,
-                        "spec": f"L{fi.level} formalization {fi.ordering.split('_')[0]}-link | "
+                        "spec": f"L{fi.level} formalization {fi.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{fi.metadata['n_directives']} directives "
                                 f"(target {fi.metadata['target_range']}) | "
                                 f"{fi.metadata['n_axioms']} axioms, "
@@ -382,7 +384,7 @@ def api_generate():
                         "goals": [{"claim": dd.claim, "current": dd.claim_status.lower(),
                                    "want": "diagnose every failure"}],
                         "meta": dd.metadata,
-                        "spec": f"L{dd.level} defeat_diagnosis {dd.ordering.split('_')[0]}-link | "
+                        "spec": f"L{dd.level} defeat_diagnosis {dd.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{dd.metadata['n_routes']} broken routes, depth "
                                 f"{dd.metadata['chain_depth']} | tower {dd.metadata['tower']}, "
                                 f"kinds {dd.metadata['kinds']}"})
@@ -404,7 +406,7 @@ def api_generate():
                         "goals": [{"claim": cc.claim, "current": "justified",
                                    "want": "trace the line"}],
                         "meta": cc.metadata,
-                        "spec": f"L{cc.level} claim_chain {cc.ordering.split('_')[0]}-link | "
+                        "spec": f"L{cc.level} claim_chain {cc.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{cc.metadata['n_items']} items, depth "
                                 f"{cc.metadata['chain_depth']}, line {cc.metadata['line_length']} | "
                                 f"tower {cc.metadata['tower_height_true']}, decoys "
@@ -426,7 +428,7 @@ def api_generate():
                         "min_directives": pc.min_directives, "goals": pc.goals,
                         "meta": pc.metadata,
                         "spec": f"L{pc.level} preference_construction "
-                                f"{pc.ordering.split('_')[0]}-link | "
+                                f"{pc.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{pc.metadata['n_claims']} claims, "
                                 f"{pc.metadata['n_conflicts']} conflicts | shared="
                                 f"{pc.metadata['shared_conflict']} theory_prefs="
@@ -453,7 +455,7 @@ def api_generate():
                                   {"claim": cit.target, "current": "justified",
                                    "want": "OVERRULED"}],
                         "meta": cit.metadata,
-                        "spec": f"L{cit.level} counter_argument {cit.ordering.split('_')[0]}-link | "
+                        "spec": f"L{cit.level} counter_argument {cit.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{cit.metadata['n_chains']} chains "
                                 f"({cit.metadata['n_strict_final']} strict-final) depth "
                                 f"{cit.metadata['chain_depth']} | strategy "
@@ -483,7 +485,7 @@ def api_generate():
                         "goals": [{"claim": k, "current": pit.before.get(k, "-"), "want": v}
                                   for k, v in sorted(pit.gold.items())],
                         "meta": pit.metadata,
-                        "spec": f"L{pit.level} perturbation {pit.ordering.split('_')[0]}-link | "
+                        "spec": f"L{pit.level} perturbation {pit.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{pit.metadata['n_components']} components depth "
                                 f"{pit.metadata['chain_depth']} | "
                                 f"{pit.metadata['n_perturbations']} perturbations | "
