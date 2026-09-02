@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
@@ -98,19 +98,6 @@ def _render_ops(ops: Sequence[Operation]) -> str:
     return "\n".join(out)
 
 
-def _atoms_and_rules(ops: Sequence[Operation]) -> Tuple[set, set]:
-    atoms, rules = set(), set()
-    for o in ops:
-        if o.kind in ("premise", "axiom"):
-            atoms.add(o.content.lstrip("-"))
-        elif o.kind in ("defeasible", "strict"):
-            if o.name:
-                rules.add(o.name)
-            for a in o.antecedents or ():
-                atoms.add(a.lstrip("-"))
-    return atoms, rules
-
-
 def build_attack_item(level: int, seed: int, ordering: str,
                       profile: str = "FULL") -> Optional[Item]:
     import random
@@ -190,9 +177,6 @@ def build_attack_item(level: int, seed: int, ordering: str,
             _r["name"] = _rmap.get(_r["name"], _r["name"])
     base = _ops_ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
-    atoms, rnames = _atoms_and_rules(base)
-    if atoms & rnames:
-        return None
     try:
         v = ASPICVerifier.from_operations(base, ordering=ordering)
         if str(v.status(target)) != "JUSTIFIED":
@@ -284,9 +268,6 @@ def build_defence_item(level: int, seed: int, ordering: str,
     _allops, _rmap = randomize_rule_names(list(d.all_ops()) + extra,
                                           stable_seed(seed, level, ordering, "drn"))
     base = _ops_ordered(_allops, shuffle_seed=stable_seed(seed, level, ordering, "dshuf"))
-    atoms, rnames = _atoms_and_rules(base)
-    if atoms & rnames:
-        return None
     n_moves_est = len(d.attackers) * (atk_d + 1)
     if n_moves_est <= 14:
         mn = verify_defence_minimum(d)
@@ -359,9 +340,6 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     _allops, _rmap = randomize_rule_names(list(m.all_ops()) + extra,
                                           stable_seed(seed, level, ordering, "mrn"))
     base = _ops_ordered(_allops, shuffle_seed=stable_seed(seed, level, ordering, "mshuf"))
-    atoms, rnames = _atoms_and_rules(base)
-    if atoms & rnames:
-        return None
     src = None
     for o in m.ops:
         if o.kind == "premise":

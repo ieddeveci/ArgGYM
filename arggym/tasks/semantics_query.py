@@ -289,9 +289,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         ops.extend(block)
 
     ops, _map = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
-    atoms, rnames = split_atoms_and_rules(ops)
-    if atoms & rnames:
-        return None
     if len(ops) > MAX_DIRECTIVES:
         return None
 
@@ -318,6 +315,12 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
             candidates.append(_c)
             _na += 2
             _fill += 1
+        # The filler draws atoms and adds rules after the rename, so an atom here can
+        # land on a name the renamer already handed out. Every other task finishes
+        # building before the rename, which is why this is the only guard left.
+        _atoms, _rnames = split_atoms_and_rules(base)
+        if _atoms & _rnames:
+            return None
         try:
             _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
             if len(_v.fw.af.arguments) > MAX_EAGER_ARGUMENTS:

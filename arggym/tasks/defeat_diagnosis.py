@@ -11,7 +11,7 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
                             junctions_for)
 from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.invariants import randomize_rule_names
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -263,9 +263,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             d["survives_because"] = rmap.get(d["survives_because"], d["survives_because"])
 
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
-    atoms, rnames = split_atoms_and_rules(base)
-    if atoms & rnames:
-        return None
 
     st = status(base, claim, ordering)
     if st not in ("OVERRULED", "UNDECIDED"):

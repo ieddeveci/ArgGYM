@@ -12,7 +12,7 @@ from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
 from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import randomize_rule_names, language_enrichment
+from arggym.core.invariants import randomize_rule_names, language_enrichment, split_atoms_and_rules
 
 TASK = "perturbation"
 HELD_FRAC = 0.35
@@ -263,23 +263,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             _c["held_by_pref"] = (_rmap.get(_a, _a), _rmap.get(_b, _b))
     cq_rule = _rmap.get(cq_rule, cq_rule)
 
-    # The atom and rule pools overlap on 240 names, so a collision survives the naming
-    # above and is rejected here. The check covers the perturbation, which is where the
-    # undercutters live: in a rule position a negated rule name is an undercut target,
-    # not an atom, while a premise or axiom content is always a literal.
-    rules = {o.name for o in base + pert
-             if o.kind in ("defeasible", "strict") and o.name}
-    atoms = set()
-    for o in base + pert:
-        if o.content:
-            atoms.add(o.content.lstrip("-"))
-        for a in (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])):
-            if a.startswith("-") and a[1:] in rules:
-                continue
-            atoms.add(a.lstrip("-"))
-    if atoms & rules:
-        return None
-
     before = status_map(base, ordering)
     if not before:
         return None
@@ -328,7 +311,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "n_distinct_new_statuses": n_status,
             "new_statuses": sorted(set(changed.values())),
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
-            "n_atoms": len(atoms),
+            "n_atoms": len(split_atoms_and_rules(base + pert)[0]),
             "changed_fraction": round(len(changed) / max(len(before), 1), 3),
         })
 
