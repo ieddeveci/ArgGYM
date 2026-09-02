@@ -64,16 +64,24 @@ def strategy_candidates(base_ops, goal_claim: str, goal_status: str, ordering: s
 
 
 def split_atoms_and_rules(ops) -> Tuple[set, set]:
+    """Return (atoms, rule names); ``atoms & rules`` is the set of name collisions.
+
+    A consequent ``-<name>`` with ``<name>`` a rule is an undercut target, not an
+    atom (NOTATION.md, undercutting). Every other antecedent, consequent and
+    premise/axiom content is an atom, whether or not it shares a name with a rule.
+    """
     rules = {o.name for o in ops
              if o.kind in ("defeasible", "strict") and getattr(o, "name", None)}
     atoms = set()
     for o in ops:
-        for x in (list(getattr(o, "antecedents", None) or ())
-                  + ([o.consequent] if getattr(o, "consequent", None) else [])
-                  + ([o.content] if getattr(o, "content", None) else [])):
-            bare = x.lstrip("-")
-            if bare not in rules:
-                atoms.add(bare)
+        for a in (getattr(o, "antecedents", None) or ()):
+            atoms.add(a.lstrip("-"))
+        c = getattr(o, "consequent", None)
+        if c and not (c.startswith("-") and c[1:] in rules):
+            atoms.add(c.lstrip("-"))
+        content = getattr(o, "content", None)
+        if content:
+            atoms.add(content.lstrip("-"))
     return atoms, rules
 
 
@@ -85,6 +93,8 @@ def randomize_rule_names(ops, seed: int, prefix: str = ""):
     pool = [f"{prefix}{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz"
             for b in "aeiouy" for c in "0123456789"]
     rng.shuffle(pool)
+    taken, _ = split_atoms_and_rules(ops)
+    pool = [p for p in pool if p not in taken]
     if len(pool) < len(old_names):
         return list(ops), {}
     mapping = {old: pool[i] for i, old in enumerate(old_names)}

@@ -10,7 +10,8 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
 from arggym.core.curriculum import negated_branch
 from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
-                        randomize_rule_names, remap_text, language_enrichment)
+                        randomize_rule_names, remap_text, language_enrichment,
+                        split_atoms_and_rules)
 
 TASK = "counter_argument"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -184,12 +185,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ops = list(ops) + _lx
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
-    atoms = {a.lstrip("-") for o in base for a in
-             (list(o.antecedents or ()) + ([o.consequent] if o.consequent else [])
-              + ([o.content] if o.content else []))}
-    rnames = {o.name for o in base if o.kind in ("defeasible", "strict") and o.name}
-    if atoms & rnames:
-        return None
     if any(o.kind in ("premise", "axiom") and o.content == target for o in base):
         return None
     if status(base, target, ordering) != "JUSTIFIED":
@@ -216,6 +211,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
         if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
             return None
+
+    # Rename chain, decoy and enrichment rules from one pool so no name shape
+    # tells them apart. The status checks above are name-independent.
+    ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
+    for c in chains:
+        c["rules"] = [(_rmap.get(nm, nm), lit, st) for nm, lit, st in c["rules"]]
+    if decoy_rule is not None:
+        decoy_rule = _rmap.get(decoy_rule, decoy_rule)
+    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    atoms, rnames = split_atoms_and_rules(base)
+    if atoms & rnames:
+        return None
 
     pairs: List[Tuple[Operation, str]] = []
 
