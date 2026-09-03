@@ -174,7 +174,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     n_group = max(3, round(n_query / 1.6))
     max_tower = 0 if level < 5 else min(1 + (level - 5) // 4, 3)
     j_budget = junctions_for(level, max(1, n_group * 3))
+    # The junction takes the whole group, so every group it lands on skips the `want`
+    # dispatch below and the two blocks after it. Uncapped it exceeded the number of
+    # groups it is allowed to land on, which left three shapes off the grid entirely:
+    # justified-with-tower, overruled-by-undermined-premise, and overruled-by-rebuttal.
+    # Half the eligible groups keep the junction and half keep their own shape.
+    _eligible = sum(1 for g in range(n_group) if STATUSES[g % 3] != "UNDECIDED")
+    j_budget = min(j_budget, max(1, _eligible // 2))
     j_used = [0]
+    shapes: collections.Counter = collections.Counter()
 
     names = _names(stable_seed(seed, (level, ordering, "nm") * 3), 40 + n_group * 12)
     it = iter(names)
@@ -214,6 +222,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             planned.append((jt, "OVERRULED"))
             planned.append((l1, "JUSTIFIED"))
             j_used[0] += 1
+            shapes["junction"] += 1
             continue
 
         if not prof.permits("defeasible"):
@@ -227,6 +236,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                     ops.append(Operation(kind="prefer_premise",
                                          stronger="-" + root, weaker=root))
             planned.append((mid, want))
+            shapes["no_defeasible"] += 1
             continue
 
         if want == "JUSTIFIED":
@@ -280,6 +290,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 ops.append(Operation(kind="defeasible", name=atk, antecedents=(q,),
                                      consequent="-" + mid))
                 ops.append(Operation(kind="prefer_rule", stronger=atk, weaker=sup))
+        shapes[want.lower()] += 1
         planned.append((mid, want))
 
         if g % 4 == 1 and prof.permits("strict"):
@@ -349,6 +360,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             queried.append(l)
     rng.shuffle(queried)
 
+    # A short item was shipped rather than rejected, so `n_queried == target_n_query` held
+    # by luck of the rng stream and nothing put a build back for being under length. That
+    # is what left two level-3 cells at 8 of 8 short: `make_item` already walks 24 build
+    # seeds and only retries when `build` returns None.
+    if len(queried) < n_query:
+        return None
+
     gold = {l: sm[l] for l in queried}
     counts = collections.Counter(gold.values())
     if len(counts) < 3:
@@ -371,6 +389,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
             "n_axioms": len([o for o in base if o.kind == "axiom"]),
             "n_strict": len([o for o in base if o.kind == "strict"]),
+            "group_shapes": dict(shapes),
         })
 
 
