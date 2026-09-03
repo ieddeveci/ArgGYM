@@ -120,8 +120,17 @@ def _weakest_link_split(ops, names, ridx, want_split: bool):
         Operation(kind="defeasible", name=join, antecedents=(la, lb), consequent="-" + goal),
         Operation(kind="defeasible", name=sup, antecedents=(tbase,), consequent=goal),
         Operation(kind="prefer_premise", stronger=tbase, weaker=pa),
+        # Every rule of the join argument, not just the first. Weakest-link reads the
+        # rule set as well as the premise set, so with `jb` and `join` left unranked the
+        # two arguments stayed incomparable on the rules whatever the premises said, and
+        # the `want_split` premise below could not change any status.
         Operation(kind="prefer_rule", stronger=sup, weaker=ja),
+        Operation(kind="prefer_rule", stronger=sup, weaker=jb),
+        Operation(kind="prefer_rule", stronger=sup, weaker=join),
     ])
+    # The discriminator. Ranked, `{pa, pb}` is weaker than `{tbase}` under both readings.
+    # Left split, only `pa` is weaker: elitist needs one such element and defeats the join
+    # argument, democratic needs every element and does not.
     if not want_split:
         ops.append(Operation(kind="prefer_premise", stronger=tbase, weaker=pb))
     return goal
@@ -304,11 +313,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 _tower(ops, it, ridx, c2, 2 * rng.randint(1, max_tower))
             planned.append((c2, "JUSTIFIED"))
 
+    _last_split = _weakest_split = None
     if prof.permits("strict") and prof.permits("prefer_rule") and level >= 4:
-        _t = _several_last_links(ops, it, ridx, want_split=(level % 2 == 0))
+        _last_split = level % 2 == 0
+        _t = _several_last_links(ops, it, ridx, want_split=_last_split)
         planned.append((_t, None))
     if prof.permits("prefer_premise") and prof.permits("defeasible") and level >= 4:
-        _w = _weakest_link_split(ops, it, ridx, want_split=(level % 3 != 0))
+        # Drawn rather than derived from the level. The exported grid steps by three, so a
+        # remainder taken against three is the same number at every level it is asked
+        # about, and the split branch reached no shipped item (#69).
+        _weakest_split = stable_seed(seed, level, ordering, "wls") % 2 == 0
+        _w = _weakest_link_split(ops, it, ridx, want_split=_weakest_split)
         planned.append((_w, None))
 
     ops = prof.filter(ops)
@@ -371,6 +386,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "n_rules": len([o for o in base if o.kind in ("defeasible", "strict")]),
             "n_axioms": len([o for o in base if o.kind == "axiom"]),
             "n_strict": len([o for o in base if o.kind == "strict"]),
+            # None where the level is below the guard and the construct is not built.
+            "last_link_split": _last_split, "weakest_link_split": _weakest_split,
         })
 
 
