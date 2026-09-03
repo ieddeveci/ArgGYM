@@ -262,8 +262,9 @@ def build_defence_item(level: int, seed: int, ordering: str,
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     sup = max(2, min(5, 2 + level // 4))
     atk_d = max(2, min(5, 2 + level // 4))
+    n_junc = junctions_for(level, max(1, n * 4))
     d = build_defence(n, ordering, it, support_depth=sup, junction=(level >= 6),
-                      n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
+                      n_junctions=n_junc,
                       ternary=wants_ternary(level, 0),
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
                       attacker_depth=atk_d)
@@ -311,6 +312,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
                 reference=ref, min_directives=mn["witness_moves"],
                 metadata={
                     "n_attackers": n, "n_strict_attackers": n_strict, "n_decoys": n_decoy,
+                    "n_junctions": n_junc,
                     "support_depth": sup, "attacker_depth": atk_d,
                     "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
                     "minimality_proven": mn.get("lower_bound_proven", mn.get("proven", True)),
@@ -332,9 +334,10 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
     stem = max(1, min(4, 1 + level // 5))
+    n_junc = junctions_for(level, max(1, n_atk * 4))
     m = build_mixed(it, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
                     depth=depth, shared_depth=stem, junction=(level >= 6),
-                    n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
+                    n_junctions=n_junc,
                     ternary=wants_ternary(level, 0))
     if m is None:
         return None
@@ -381,7 +384,7 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                 metadata={
                     "minimality_proven": sol.get("all_necessary", False),
                     "minimality_method": "interaction_all_necessary",
-                    "n_attackers": n_atk, "shared_node": m.shared_node,
+                    "n_attackers": n_atk, "n_junctions": n_junc, "shared_node": m.shared_node,
                     "branch_depth": depth, "stem_depth": stem,
                     "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
                     "minimality_proven": sol.get("all_necessary", False),
