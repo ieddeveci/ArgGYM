@@ -116,7 +116,12 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     if level >= 3:
         n_conf = min(10, n_conf + rng.randint(0, 1))
         depth = max(1, min(5, depth + rng.randint(-1 if level >= 8 else 0, 1)))
-    shared = level >= 5 and (level % 3 == 2)
+    # The grid steps by 3, so level is a multiple of 3 at every evaluated level and
+    # level % 3 is the constant 0 there: the old `level % 3 == 2` selected levels 5, 8,
+    # 11 and 14 and so never fired. Divide the step out first, turning level into the
+    # index it is meant to be, and the alternation lands on the grid: 6 and 12 share a
+    # conflict, 3, 9 and 15 do not, so both shapes are covered.
+    shared = level >= 6 and (level // 3) % 2 == 0
     if shared:
         n_claims = min(8, n_claims + 1)
         n_conf = min(10, max(n_conf, n_claims + 1))
