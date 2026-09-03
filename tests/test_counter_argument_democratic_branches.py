@@ -57,6 +57,21 @@ def test_reference_answer_solves_its_own_item(level, ordering, seed):
     assert solves(item), f"L{level}/{ordering}/s{seed}: the reference answer does not solve it"
 
 
+def test_a_rejected_build_now_generates():
+    """The cheapest build the fix changes, so the default suite covers it.
+
+    `make_item(6, 0, ...)` walks build seeds 0 through 13. On main every even one of those
+    was rejected for want of the branch premise ranking, and the retry loop hid it by
+    settling on an odd seed. Seed 4 is the cheapest of the rejected ones: 0.00s to fail on
+    main against 2s to build here. Levels 3 and 9 above cannot carry this, because no
+    junction branch lands on the path to the target there and the new directives never
+    fire.
+    """
+    item = ca.build(6, 4, "weakest_link_democratic")
+    assert item is not None, "a build the branch premise ranking should have rescued"
+    assert solves(item)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("seed", (0, 1))
 @pytest.mark.parametrize("allow_strict", (False, True))
