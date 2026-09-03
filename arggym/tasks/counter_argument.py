@@ -34,6 +34,10 @@ def _is_weakest(ordering: str) -> bool:
 
 def _is_last(ordering: str) -> bool:
     return str(ordering).startswith("last_link")
+
+
+def _is_democratic(ordering: str) -> bool:
+    return str(ordering).endswith("_democratic")
 EASY_LEVELS = 4
 _L = "abcdefghijklmnopqrstuvwxy"
 # One pool per item, read through a single iterator by every consumer, so the chain,
@@ -136,6 +140,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         ops.append(Operation(kind="axiom" if ax_strict else "premise", content=root))
         cur = root
         rules: List[Tuple[str, str, bool]] = []
+        # Each junction branch rests on an ordinary premise of its own, and that premise
+        # belongs to every argument the chain carries. Keyed by the branch rule so the
+        # reference solution can slice premises and rules the same way; the democratic
+        # paths below have to rank both. Remapped with the rule names after the rename.
+        bprem: Dict[str, str] = {}
         tgt_idx: Optional[int] = None
         for j in range(depth):
             ridx += 1
@@ -167,6 +176,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                     ops.append(Operation(kind="defeasible", name=bnm, antecedents=(_bsrc,),
                                          consequent=blit))
                     rules.append((bnm, blit, False))
+                    bprem[bnm] = _bsrc
                     _extra.append(blit)
                 ridx += 1
                 nm = f"d{ridx}"
@@ -180,7 +190,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 tgt_idx = len(rules) - 1
             cur = nxt
         chains.append({"root": root, "rules": rules, "strict_final": strict_flags[ci],
-                       "tgt_idx": tgt_idx})
+                       "tgt_idx": tgt_idx, "bprem": bprem})
 
     if mid_target and depth >= 3 and n_chain >= 2:
         cand = junction
@@ -239,6 +249,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for c in chains:
         c["rules"] = [(_rmap.get(nm, nm), lit, st) for nm, lit, st in c["rules"]]
+        c["bprem"] = {_rmap.get(nm, nm): lit for nm, lit in c["bprem"].items()}
     if decoy_rule is not None:
         decoy_rule = _rmap.get(decoy_rule, decoy_rule)
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
@@ -278,6 +289,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                             add(Operation(kind="prefer_rule", stronger=decoy_rule,
                                           weaker=rr[0]),
                                 f"[prefer_rule: {decoy_rule} > {rr[0]}]")
+                        # Democratic reads the whole set: the chain is weaker only when
+                        # every element of it is weaker than something in the decoy, so a
+                        # branch premise left unranked keeps the chain incomparable and it
+                        # defeats the decoy back. Elitist needs one weak element and gets
+                        # it from the root below, so ranking the branch there only enlarges
+                        # the subset search.
+                        _bp = c["bprem"].get(rr[0]) if _is_democratic(ordering) else None
+                        if _bp is not None:
+                            add(Operation(kind="prefer_premise", stronger=decoy_root,
+                                          weaker=_bp),
+                                f"[prefer_premise: {decoy_root} > {_bp}]")
                     add(Operation(kind="prefer_premise", stronger=decoy_root,
                                   weaker=c["root"]),
                         f"[prefer_premise: {decoy_root} > {c['root']}]")
@@ -304,6 +326,12 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                     if not rl[2]:
                         add(Operation(kind="prefer_rule", stronger="w", weaker=rl[0]),
                             f"[prefer_rule: w > {rl[0]}]")
+                    # Same as the decoy path above: democratic needs every element of the
+                    # chain ranked, branch premises included.
+                    _bp = c["bprem"].get(rl[0]) if _is_democratic(ordering) else None
+                    if _bp is not None:
+                        add(Operation(kind="prefer_premise", stronger=seed_lit, weaker=_bp),
+                            f"[prefer_premise: {seed_lit} > {_bp}]")
 
     ref_ops, lines = dedupe_parallel(pairs)
 
@@ -326,7 +354,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ref_ops, lines = dedupe_parallel(pairs)
     if not ref_ops or not holds(ref_ops):
         return None
-    irredundant = assert_irredundant(ref_ops, holds)
+    irredundant, _irr_calls = assert_irredundant(ref_ops, holds)
 
     bank: List[Tuple[List[Operation], List[str]]] = []
     if allow_strict:
@@ -364,7 +392,10 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "n_atoms": len(atoms),
             "reference_directives": len(lines),
             "strategy": "revive_decoy" if decoy_rule else "build",
-            "reference_irredundant": irredundant, "minimality_proven": _proven,
+            "reference_irredundant": irredundant,
+            "irredundance_calls": _irr_calls,
+            "irredundance_budget_exhausted": irredundant is None,
+            "minimality_proven": _proven,
             "min_within_reference": len(lines),
         })
 
