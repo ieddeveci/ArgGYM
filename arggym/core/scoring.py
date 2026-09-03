@@ -12,7 +12,13 @@ PARTIAL_CAP = 0.25
 
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _PREMISE = re.compile(r"^\[(premise|axiom)\s*:\s*(-?[A-Za-z]\w*)\]$")
-_RULE = re.compile(r"^\[(defeasible|strict)\s*([A-Za-z]\w*)?\s*:\s*(.+?)\s*(=>|->)\s*(-?[A-Za-z]\w*)\]$")
+# The name is required and separated from the kind by whitespace, and the arrow has to
+# be the one that kind uses. Written `\s*` with an optional name, the pattern read
+# `[stricttest: a => b]` as a strict rule named "test", accepted a rule with no name at
+# all under an invented one, and took either arrow for either kind (#19).
+_RULE = re.compile(r"^\[(defeasible|strict)\s+([A-Za-z]\w*)\s*:\s*(.+?)\s*(=>|->)\s*"
+                   r"(-?[A-Za-z]\w*)\]$")
+ARROW = {"defeasible": "=>", "strict": "->"}
 _PREF = re.compile(r"^\[prefer_(rule|premise)\s*:\s*(-?[A-Za-z]\w*)\s*>\s*(-?[A-Za-z]\w*)\]$")
 
 
@@ -31,7 +37,6 @@ def parse_answer(text: str) -> ParsedAnswer:
     if m is None:
         out.no_region = True
         return out
-    auto = 0
     body = m.group(1)
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
@@ -48,14 +53,13 @@ def parse_answer(text: str) -> ParsedAnswer:
             continue
         mm = _RULE.match(line)
         if mm:
-            auto += 1
-            name = mm.group(2) or f"m{auto}"
+            kind, name = mm.group(1), mm.group(2)
             ants = tuple(a.strip() for a in mm.group(3).split("AND") if a.strip())
-            if not ants:
+            if not ants or mm.group(4) != ARROW[kind]:
                 out.n_unparseable += 1
                 out.unparseable_examples.append(line[:60])
                 continue
-            out.ops.append(Operation(kind=mm.group(1), name=name,
+            out.ops.append(Operation(kind=kind, name=name,
                                      antecedents=ants, consequent=mm.group(5)))
             continue
         mm = _PREF.match(line)
@@ -76,6 +80,26 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
     ordinary = {o.content for o in base_ops if o.kind == "premise"}
     axioms = {o.content for o in base_ops if o.kind == "axiom"}
     rule_names = {o.name for o in base_ops if o.kind in ("strict", "defeasible")}
+    # NOTATION.md: "rule antecedents must be literals ALREADY present in the theory".
+    # Nothing checked it, so a rule over two invented literals was accepted and an answer
+    # could route its chain through an intermediate the theory never mentions (#35). A
+    # contrary the answer legally introduces counts as present from that line on, which
+    # is what makes `[premise: -x]` followed by a rule over -x a legal pair.
+    known = set(ordinary) | set(axioms)
+    for o in base_ops:
+        if o.kind in ("strict", "defeasible"):
+            known.update(o.antecedents)
+            if o.consequent:
+                known.add(o.consequent)
+    # The contraries the answer legally introduces are collected first, so a rule may use
+    # one whether it is written above or below the premise that introduces it. Checked in
+    # a single pass, `[premise: -q]` before a rule over `-q` was legal and the same two
+    # lines the other way round were not -- an order nothing else in the pipeline cares
+    # about, since `build_framework` sorts operations by kind before applying them.
+    for o in ops:
+        if o.kind == "premise" and o.content.startswith("-") and o.content[1:] in ordinary \
+                and o.content[1:] not in axioms:
+            known.add(o.content)
     kept: List[Operation] = []
     reasons: List[str] = []
     for o in ops:
@@ -88,6 +112,10 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
         if o.kind in ("strict", "defeasible"):
             if o.name in rule_names:
                 reasons.append(f"duplicate_rule_name:{o.name}")
+                continue
+            unknown = [a for a in o.antecedents if a not in known]
+            if unknown:
+                reasons.append(f"illegal_unknown_antecedent:{','.join(sorted(unknown))}")
                 continue
             rule_names.add(o.name)
         if o.kind in ("premise", "axiom"):

@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.core.scoring import ARROW
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
 from arggym.core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
                           NEGATED_AXIOM, NEGATED_LITERAL, NEGATED_PREMISE, REBUT_RULE,
@@ -368,13 +369,18 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -
             f"Under a correct formalization: {concl}.\n\n"
             "Notation: [premise: x], [axiom: x], [defeasible name: a => b], [strict name: a -> b], "
             "[prefer_rule: r1 > r2], [prefer_premise: x > y]. Negation is written -x. "
-            "Rule names are yours to choose.\n\n"
+            "Rule names are yours to choose: a name starts with a letter and continues with "
+            "letters, digits or underscores, and is separated from the kind by a space.\n\n"
             "Answer format: one directive per line, between [answer] and [/answer].")
 
 
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _P = re.compile(r"^\[(premise|axiom):\s*(-?\w+)\]$")
-_R = re.compile(r"^\[(defeasible|strict)\s+([\w]+)\s*:\s*(.+?)\s*(=>|->)\s*(-?\w+)\]$")
+# The same shape the shared scorer uses: a name that starts with a letter, and the arrow
+# that kind uses. Written `[\w]+` with either arrow, it accepted `_x` and `1n` as names and
+# took a strict rule written with the defeasible arrow -- while the prompt beside it says
+# a name starts with a letter and names the arrow per kind (#19, #20).
+_R = re.compile(r"^\[(defeasible|strict)\s+([A-Za-z]\w*)\s*:\s*(.+?)\s*(=>|->)\s*(-?\w+)\]$")
 _F = re.compile(r"^\[prefer_(rule|premise):\s*(-?\w+)\s*>\s*(-?\w+)\]$")
 
 
@@ -397,7 +403,7 @@ def parse(text: str) -> Tuple[List[Operation], int]:
             ops.append(Operation(kind=mm.group(1), content=mm.group(2)))
             continue
         mm = _R.match(line)
-        if mm:
+        if mm and mm.group(4) == ARROW[mm.group(1)]:
             ops.append(Operation(kind=mm.group(1), name=mm.group(2),
                                  antecedents=tuple(a.strip() for a in mm.group(3).split("AND")),
                                  consequent=mm.group(5)))
