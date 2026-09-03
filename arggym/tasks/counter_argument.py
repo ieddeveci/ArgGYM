@@ -354,7 +354,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ref_ops, lines = dedupe_parallel(pairs)
     if not ref_ops or not holds(ref_ops):
         return None
-    irredundant = assert_irredundant(ref_ops, holds)
+    irredundant, _irr_calls = assert_irredundant(ref_ops, holds)
 
     bank: List[Tuple[List[Operation], List[str]]] = []
     if allow_strict:
@@ -392,7 +392,10 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             "n_atoms": len(atoms),
             "reference_directives": len(lines),
             "strategy": "revive_decoy" if decoy_rule else "build",
-            "reference_irredundant": irredundant, "minimality_proven": _proven,
+            "reference_irredundant": irredundant,
+            "irredundance_calls": _irr_calls,
+            "irredundance_budget_exhausted": irredundant is None,
+            "minimality_proven": _proven,
             "min_within_reference": len(lines),
         })
 

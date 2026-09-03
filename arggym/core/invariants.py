@@ -35,13 +35,34 @@ def minimal_subset(candidates: Sequence[T], holds: Callable[[List[T]], bool],
     return full
 
 
-def assert_irredundant(chosen: Sequence[T], holds: Callable[[List[T]], bool]) -> bool:
+def assert_irredundant(chosen: Sequence[T], holds: Callable[[List[T]], bool],
+                       max_calls: int = 40000) -> Tuple[Optional[bool], int]:
+    """Does any proper subset of `chosen` still hold? Returns (verdict, calls spent).
+
+    True means no proper subset within the budget held, False means one did, and None
+    means the budget ran out before the question was settled. The caller records which,
+    so an unfinished scan is never reported as a clean result.
+
+    Sizes are walked downward, largest first. The question is whether anything can be
+    dropped, so testing `n - 1` before 1 spends the budget on removals of a few elements
+    rather than on subsets far too small to hold. Both orders cover the same number of
+    combinations, since C(n, k) equals C(n, n - k); what differs is what a budget that
+    runs out has established. Downward it is "no removal of this many or fewer works",
+    which is the useful half.
+
+    A full scan is 2^n. At n = 25, with the verifier at 6.7ms a call, that is 62 hours,
+    which is how counter_argument's level 12 weakest-link-democratic cell stalled (#28).
+    """
     full = list(chosen)
-    for size in range(1, len(full)):
+    calls = 0
+    for size in range(len(full) - 1, 0, -1):
         for combo in itertools.combinations(full, size):
+            if calls >= max_calls:
+                return None, calls
+            calls += 1
             if holds(list(combo)):
-                return False
-    return True
+                return False, calls
+    return True, calls
 
 
 def strategy_candidates(base_ops, goal_claim: str, goal_status: str, ordering: str,
