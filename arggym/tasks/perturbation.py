@@ -346,6 +346,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
+# A perturbation may declare a preference the theory already declares the other way.
+# The DSL has no removal, so that is the only way to write "this preference no longer
+# decides the conflict", and 13 of the 40 exported items use it. The engine reads the
+# pair as equally preferred and gold follows the engine, so the item is sound -- but the
+# model was being graded on a convention no prompt stated (#6).
+TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both directions is "
+            "equally preferred and settles nothing between them.")
+
+
 def _render_prompt(theory: str, pert: str, ordering: str) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
@@ -354,8 +363,9 @@ def _render_prompt(theory: str, pert: str, ordering: str) -> str:
             "Which claims of the original theory change status, and what does each new status become?\n"
             "Claims include negated literals such as -x, where those appear in the theory.\n"
             "Possible statuses: justified, overruled, undecided.\n"
-            "A claim is justified when some argument for it is accepted, overruled when every argument for it is defeated, and undecided otherwise.\n"
-            "\n"
+            "A claim is justified when some argument for it is accepted, overruled when "
+            "every argument for it is defeated, and undecided otherwise.\n"
+            f"{TIE_NOTE}\n\n"
             "Answer format: one line per changed claim, written as `claim: status`, between [answer] "
             "and [/answer]. If no claim changes status, write `none`.")
 
