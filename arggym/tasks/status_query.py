@@ -186,7 +186,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         want = STATUSES[g % 3]
         root, mid = next(it), next(it)
 
-        if j_used[0] < j_budget and prof.permits("defeasible"):
+        # The junction plants one OVERRULED and one JUSTIFIED literal and takes the whole
+        # group, so a group it lands on never reaches the `want` dispatch below. The budget
+        # is spent on a prefix of the groups, which meant it ate the undecided third from
+        # the front: at level 12, six groups ask for UNDECIDED and one used to survive.
+        # Undecided literals are the scarce status, and the 0.45 share cap turns a shortage
+        # of them into a shortage of queries, so the junction gives way to them here.
+        if (want != "UNDECIDED"
+                and j_used[0] < j_budget
+                and prof.permits("defeasible")):
             b1, b2, jt = next(it), next(it), next(it)
             ops.append(Operation(kind="premise", content=b1))
             ops.append(Operation(kind="premise", content=b2))
