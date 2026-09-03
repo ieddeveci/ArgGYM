@@ -83,7 +83,6 @@ def test_reversed_reference_scores_one(fast_cell, fast_item):
 
 
 @pytest.mark.families(CHAIN)
-@pytest.mark.xfail(strict=True, reason="#25")
 def test_claim_chain_reversed_line_is_not_full_credit(fast_cell, fast_item):
     adapter = MODES[fast_cell.mode]
     lines = body_lines(adapter.reference(fast_item))

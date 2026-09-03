@@ -335,6 +335,30 @@ def _render_prompt(theory: str, claim: str, ordering: str) -> str:
 _ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 
 
+def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:
+    """Of the rules quoted, how many arrive after everything they rest on.
+
+    "In order from the premise to the claim" is a constraint, not one sequence. From
+    level 6 the line is a tree rather than a chain -- six premises feeding sixteen rules
+    at level 9 -- and its branches interleave in billions of ways that all read premise
+    to claim. Matching against the order the generator happened to append in would score
+    the branch order rather than the reasoning, so the check is the property itself:
+    every antecedent of a rule is introduced by an earlier line of the answer.
+    """
+    have: Set[str] = set()
+    n_rules = ok = 0
+    for o in picked:
+        if o.kind in ("premise", "axiom"):
+            have.add(o.content)
+            continue
+        n_rules += 1
+        if all(a in have for a in o.antecedents):
+            ok += 1
+        if o.consequent:
+            have.add(o.consequent)
+    return ok, n_rules
+
+
 def score(answer_text: str, item: CCItem) -> Dict:
     diag: Dict = {"n_quoted": 0, "n_gold": len(item.line_ops), "extra": [], "missing": []}
     m = _ANSWER.search(answer_text or "")
@@ -359,8 +383,10 @@ def score(answer_text: str, item: CCItem) -> Dict:
 
     gold_lines = [render_op(o) for o in item.line_ops]
     gold_set, pred_set = set(gold_lines), set(quoted)
+    # Content is still a set: which directives the line is made of. Counting the answer's
+    # lines rather than its distinct lines is new, so a repeated directive is not free.
     tp = len(gold_set & pred_set)
-    precision = tp / max(len(pred_set), 1)
+    precision = tp / max(len(quoted), 1)
     recall = tp / max(len(gold_set), 1)
     f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
     diag["extra"] = sorted(pred_set - gold_set)[:5]
@@ -368,6 +394,14 @@ def score(answer_text: str, item: CCItem) -> Dict:
 
     by_line = {render_op(o): o for o in item.base_ops}
     picked = [by_line[l] for l in quoted if l in by_line]
+
+    # The order term. The prompt requires the line premise-to-claim and the score ignored
+    # it, so reversing the complete gold answer scored 1.000 (#25).
+    _ok, _n_rules = _in_support_order(picked)
+    order_factor = 1.0 if not _n_rules else _ok / _n_rules
+    diag["n_rules_quoted"] = _n_rules
+    diag["n_rules_after_their_antecedents"] = _ok
+    f1 *= order_factor
     justifies = False
     if picked:
         alone = status(picked, item.claim, item.ordering) == "JUSTIFIED"
@@ -385,7 +419,9 @@ def score(answer_text: str, item: CCItem) -> Dict:
     return {"score": round(f1, 4), "reason": "ok",
             "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
             "exact_match": pred_set == gold_set,
-            "correct_order": quoted == gold_lines,
+            "correct_order": order_factor == 1.0,
+            "matches_reference_order": quoted == gold_lines,
+            "order_factor": round(order_factor, 4),
             "behaviourally_justifies": justifies,
             "diagnostics": diag}
 
