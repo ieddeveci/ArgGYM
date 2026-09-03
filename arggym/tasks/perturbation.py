@@ -353,7 +353,9 @@ def _render_prompt(theory: str, pert: str, ordering: str) -> str:
             f"The following directives are then added to the theory:\n\n{pert}\n\n"
             "Which claims of the original theory change status, and what does each new status become?\n"
             "Claims include negated literals such as -x, where those appear in the theory.\n"
-            "Possible statuses: justified, overruled, undecided.\n\n"
+            "Possible statuses: justified, overruled, undecided.\n"
+            "A claim is justified when some argument for it is accepted, overruled when every argument for it is defeated, and undecided otherwise.\n"
+            "\n"
             "Answer format: one line per changed claim, written as `claim: status`, between [answer] "
             "and [/answer]. If no claim changes status, write `none`.")
 

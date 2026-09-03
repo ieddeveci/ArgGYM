@@ -371,7 +371,9 @@ def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"State the status of each of the following claims: {', '.join(queried)}.\n"
-            "Possible statuses: justified, overruled, undecided.\n\n"
+            "Possible statuses: justified, overruled, undecided.\n"
+            "A claim is justified when some argument for it is accepted, overruled when every argument for it is defeated, and undecided otherwise.\n"
+            "\n"
             "Answer format: one line per claim, written as `claim: status`, "
             "between [answer] and [/answer].")
 
