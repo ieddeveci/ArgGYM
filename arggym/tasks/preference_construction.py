@@ -317,7 +317,9 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
     verb = "makes" if len(goals) == 1 else "simultaneously makes"
     lines += ["", f"What is the minimal set of preference directives that {verb} {wants}?", "",
               "Permitted additions: preference directives only. "
-              "No new rules or premises may be added.", "",
+              "No new rules or premises may be added.",
+              "The answer must be minimal: one using more than twice the fewest directives "
+              "that work scores zero.", "",
               "Answer format: one directive per line, between [answer] and [/answer]."]
     return "\n".join(lines)
 

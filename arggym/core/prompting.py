@@ -10,18 +10,44 @@ ORDERING_NAME = {
     "weakest_link_democratic": "the weakest-link democratic strength ordering",
 }
 
-_PERMITTED = (
-    "Permitted additions, written exactly in these forms:\n"
-    "   [defeasible <name>: <antecedent> => <consequent>]\n"
-    "   [prefer_rule: <rule> > <rule>]\n"
-    "   [prefer_premise: <literal> > <literal>]\n"
-    "   [premise: -<literal>]   permitted only as the negation of an ordinary premise above\n"
-    "Rule antecedents must be literals already present in the theory. "
-    "A rule name in a consequent, written -<name>, switches that rule off."
-)
+_STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]\n"
+_TAIL = ("Several antecedents are joined with AND. Rule antecedents must be literals "
+         "already present in the theory, and a new rule needs a name that no rule already "
+         "in the theory, and no earlier line of the answer, has used. A rule name in a "
+         "consequent, written -<name>, switches that rule off.\n"
+         "The answer must be minimal: one using more than twice the fewest directives that "
+         "work scores zero. A directive that cannot be read at all scores the whole answer "
+         "zero, and so does an answer that reaches every goal while leaving the theory "
+         "inconsistent.")
+
+
+def permitted_block(allow_strict: bool = False) -> str:
+    """The permitted directive forms, as the scorer actually enforces them.
+
+    `check_legality` rejects a strict rule unless the item allows one, and rejects any
+    new axiom or bare premise (`core/scoring.py:82-104`). Until now no prompt said so:
+    the two `counter_argument` variants rendered byte-identically while one accepted a
+    one-directive strict answer and the other scored it zero (#37), and this block
+    itself shipped on no item because the flag that gates it was off (#38, #18).
+
+    Its content is the same on every item of a variant, so it leaks nothing about the
+    theory it is attached to.
+    """
+    return ("Permitted additions, written exactly in these forms:\n"
+            "   [defeasible <name>: <antecedent> => <consequent>]\n"
+            + (_STRICT_FORM if allow_strict else "")
+            + "   [prefer_rule: <rule> > <rule>]\n"
+              "   [prefer_premise: <literal> > <literal>]\n"
+              "   [premise: -<literal>]   permitted only as the negation of an ordinary "
+              "premise written above without a leading -\n"
+            + ("" if allow_strict else "Strict rules may not be added.\n")
+            + "New axioms may not be added.\n"
+            + _TAIL)
+
+
 _FORMAT = ("Answer format: one directive per line, between [answer] and [/answer].")
 
-INCLUDE_NOTATION = False
+INCLUDE_NOTATION = True
 
 _STATUS_WORD = {"JUSTIFIED": "justified", "OVERRULED": "overruled", "UNDECIDED": "undecided"}
 
@@ -34,7 +60,7 @@ def _goal_line(claim: str, current: str, want: str) -> str:
 
 
 def render(theory_text: str, ordering: str, goals: Sequence[Dict],
-           include_notation: Optional[bool] = None) -> str:
+           include_notation: Optional[bool] = None, allow_strict: bool = False) -> str:
     head = (f"The following is a defeasible argumentation theory, evaluated under {SEMANTICS} "
             f"with {ORDERING_NAME.get(ordering, ordering)}.")
     parts: List[str] = [head, "", theory_text, ""]
@@ -50,6 +76,6 @@ def render(theory_text: str, ordering: str, goals: Sequence[Dict],
         parts.append("What is the minimal set of directives that simultaneously makes "
                      f"{wants}?")
     if INCLUDE_NOTATION if include_notation is None else include_notation:
-        parts += ["", _PERMITTED]
+        parts += ["", permitted_block(allow_strict)]
     parts += ["", _FORMAT]
     return "\n".join(parts)

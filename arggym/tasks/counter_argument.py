@@ -9,6 +9,7 @@ from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
 from arggym.core.curriculum import negated_branch
+from arggym.core.prompting import permitted_block
 from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
                         randomize_rule_names, remap_text, language_enrichment,
                         split_atoms_and_rules)
@@ -408,6 +409,7 @@ def _render_prompt(theory: str, target: str, ordering: str,
             f"The claim {target} is currently justified.\n"
             f"What is the minimal set of directives that makes -{target} justified "
             f"and {target} overruled?\n\n"
+            f"{permitted_block(allow_strict)}\n\n"
             "Answer format: one directive per line, between [answer] and [/answer].")
 
 
