@@ -111,7 +111,19 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
     n_chain = max(1, min(1 + (level * 5) // 15, 6))
     depth = max(2, min(2 + (level * 3) // 15, 5))
+    # Below level 6 this floors at one while there are only two or three chains, so a
+    # strict-final chain always reached the target. A strict counter-argument then
+    # contradicts it instead of winning, and the strict ablation had no cheap answer to
+    # find at its own entry level: the cheapest item cost three directives where level 6
+    # cost one (#32). Drawn here, so about half of those items admit the shortcut, which
+    # is the same split levels 6 and up get from the mid-chain target.
+    #
+    # Only for the ablation. The plain variant asks a different question and the draw has
+    # nothing to say about it, so gating keeps its items exactly as they were. The two
+    # variants already build different theories below level 8, through `contested`.
     n_strict = 0 if level < 3 else min(n_chain, 1 + (level - 3) // 4)
+    if allow_strict and 3 <= level < 6 and stable_seed(seed, level, ordering, "cas") % 2 == 0:
+        n_strict = 0
     n_axiom_strict = 0
     use_decoy = level >= 9 and n_strict < n_chain
     contested = level >= 8 or allow_strict
