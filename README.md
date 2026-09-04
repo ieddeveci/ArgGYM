@@ -32,6 +32,10 @@ a delimiter, so wrap the answer in `<answer>` tags, a JSON field, a tool call, o
 `ds.score_answer(text, entry)` returns the float alone, so a reasoning-gym-shaped harness or an RL
 loop works unchanged.
 
+`examples/evaluate.py` is a working reference: standard library only, reads a frozen taskset, calls
+any OpenAI-compatible endpoint, writes a scored JSONL. It reaches into no ArgGYM internal, which is
+the point of it.
+
 ## Freeze a taskset
 
 ```
