@@ -305,6 +305,14 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 _STATUS_WORD = {"JUSTIFIED": "justified", "OVERRULED": "overruled", "UNDECIDED": "undecided"}
 
 
+# The reference answer sometimes declares a preference the theory already declares the
+# other way, which is how it undoes a resolved conflict: the DSL has no removal, so a
+# reversal is the only available move and the engine reads the pair as equally preferred.
+# Eight of the 40 exported items have a gold answer that does this (#6).
+TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both directions is "
+            "equally preferred and settles nothing between them.")
+
+
 def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
     on = _ordering_phrase(ordering)
     lines = [f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
@@ -319,7 +327,8 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
               "Permitted additions: preference directives only. "
               "No new rules or premises may be added.",
               "The answer must be minimal: one using more than twice the fewest directives "
-              "that work scores zero.", "",
+              "that work scores zero.",
+              TIE_NOTE, "",
               "Answer format: one directive per line, between [answer] and [/answer]."]
     return "\n".join(lines)
 

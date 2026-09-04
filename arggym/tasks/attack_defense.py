@@ -255,6 +255,42 @@ def build_attack_item(level: int, seed: int, ordering: str,
     return item
 
 
+_DEFENCE_SCHEDULE = {
+    # level: attackers, support depth, attacker depth, strict attackers, decoys,
+    #        strict decoys
+    1: (2, 2, 2, 0, 0, 0),
+    6: (3, 3, 3, 0, 1, 1),
+    9: (3, 4, 4, 1, 1, 2),
+    12: (4, 4, 5, 1, 2, 2),
+    15: (5, 5, 5, 2, 2, 3),
+}
+
+
+def _defence_shape(level: int):
+    """The structural knobs, read off a schedule instead of derived from arithmetic.
+
+    Four of them were `max(2, min(5, 2 + level // 4))`, which saturates at level 12, so
+    levels 12 and 15 built the same shape and the top of the curriculum had no step in it.
+    The level 6 to 9 step moved five knobs at once, which makes a difficulty jump there
+    impossible to attribute (#31).
+
+    The strict decoys are in the table too. Their expression, `min(1 + (level - 4) // 4,
+    3)`, saturated at level 12 exactly like the others, so leaving them out would have
+    kept one instance of the defect the rest of the table exists to remove.
+
+    Written out, the steps are: 3 to 6 raises everything from the floor; 6 to 9 deepens
+    both chains and introduces a strict attacker and a strict decoy while holding the
+    attacker count; 9 to 12 adds an attacker, an attacker depth and a decoy; 12 to 15
+    adds an attacker, support depth, a second strict attacker and a third strict decoy.
+    No two exported levels share a shape.
+    """
+    out = _DEFENCE_SCHEDULE[1]
+    for k in sorted(_DEFENCE_SCHEDULE):
+        if level >= k:
+            out = _DEFENCE_SCHEDULE[k]
+    return out
+
+
 def _n_junctions(ops: Sequence[Operation]) -> int:
     """Junctions in the theory as built, which is not always the budget asked for.
 
@@ -270,12 +306,8 @@ def _n_junctions(ops: Sequence[Operation]) -> int:
 
 def build_defence_item(level: int, seed: int, ordering: str,
                        profile: str = "FULL") -> Optional[Item]:
-    n = max(2, min(5, 2 + level // 4))
-    n_strict = 1 if level >= 7 else 0
-    n_decoy = 0 if level < 6 else min(2, 1 + (level - 6) // 5)
+    n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
-    sup = max(2, min(5, 2 + level // 4))
-    atk_d = max(2, min(5, 2 + level // 4))
     n_junc = junctions_for(level, max(1, n * 4))
     d = build_defence(n, ordering, it, support_depth=sup, junction=(level >= 6),
                       n_junctions=n_junc,
@@ -285,7 +317,6 @@ def build_defence_item(level: int, seed: int, ordering: str,
     if d is None:
         return None
     extra: List[Operation] = []
-    n_ds = 0 if level < 4 else min(1 + (level - 4) // 4, 3)
     for j in range(n_ds):
         a, b2, c2 = next(it), next(it), next(it)
         extra.append(Operation(kind="premise", content=a))

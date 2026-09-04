@@ -11,10 +11,13 @@ ORDERING_NAME = {
 }
 
 _STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]\n"
-_TAIL = ("Several antecedents are joined with AND. Rule antecedents must be literals "
-         "already present in the theory, and a new rule needs a name that no rule already "
-         "in the theory, and no earlier line of the answer, has used. A rule name in a "
-         "consequent, written -<name>, switches that rule off.\n"
+_TAIL = ("Every rule needs a name, written after the kind and separated from it by a space. "
+         "A name starts with a letter and continues with letters, digits or underscores, "
+         "and no rule already in the theory, and no earlier line of the answer, has used it. "
+         "The arrow is => for a defeasible rule and -> for a strict one.\n"
+         "Several antecedents are joined with AND. Rule antecedents must be literals "
+         "already present in the theory. A rule name in a consequent, written -<name>, "
+         "switches that rule off.\n"
          "The answer must be minimal: one using more than twice the fewest directives that "
          "work scores zero. A directive that cannot be read at all scores the whole answer "
          "zero, and so does an answer that reaches every goal while leaving the theory "
