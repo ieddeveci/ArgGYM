@@ -72,6 +72,20 @@ def export_all(
 
 
 @app.command()
+def freeze(
+    config: Path = typer.Option(Path("tasksets/standard.yaml"), "--config", "-c",
+                                help="Taskset spec to build."),
+    out: Path = typer.Option(Path("data/taskset.jsonl"), "--out", "-o",
+                             help="Output JSONL."),
+) -> None:
+    """Build a taskset from a spec, into one JSONL with a manifest line."""
+    from arggym.core.freeze import freeze as run
+    from arggym.core.spec import load
+
+    run(load(str(config)), str(out))
+
+
+@app.command()
 def inspect() -> None:
     """Start the inspector on http://127.0.0.1:5000."""
     try:

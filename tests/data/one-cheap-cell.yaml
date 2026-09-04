@@ -1,0 +1,9 @@
+# A few cheap cells, for checking that two exports of one spec agree.
+# Level 3 across three tasks costs seconds; the standard grid costs half an hour.
+tasks: [claim_chain, status_query, preference_construction]
+levels: [3]
+orderings: [last_link_elitist, weakest_link_democratic]
+seeds:
+  start: 0
+  take: 2
+  scan_limit: 12

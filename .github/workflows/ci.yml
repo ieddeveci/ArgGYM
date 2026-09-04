@@ -62,15 +62,15 @@ jobs:
       - run: uv sync
       - name: export the same spec twice
         run: |
-          uv run arggym export claim_chain /tmp/a.jsonl
-          uv run arggym export claim_chain /tmp/b.jsonl
+          uv run arggym freeze -c tests/data/one-cheap-cell.yaml -o /tmp/a.jsonl
+          uv run arggym freeze -c tests/data/one-cheap-cell.yaml -o /tmp/b.jsonl
           uv run python - <<'PY'
           import json
           a = json.loads(open("/tmp/a.jsonl").readline())["__manifest__"]
           b = json.loads(open("/tmp/b.jsonl").readline())["__manifest__"]
-          if a.get("missing_cells") != b.get("missing_cells"):
+          if a["cells"] != b["cells"]:
               raise SystemExit("the generator is not deterministic: "
-                               f"{a.get('missing_cells')} vs {b.get('missing_cells')}")
+                               "two runs skipped different seeds")
           if a["taskset_hash"] != b["taskset_hash"]:
               raise SystemExit("same cells, different hash: a renderer or a scorer "
                                f"is not deterministic ({a['taskset_hash']} vs {b['taskset_hash']})")
