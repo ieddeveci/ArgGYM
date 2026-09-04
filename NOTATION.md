@@ -101,9 +101,18 @@ These are two independent axes and an item names both.
 
 ## 5. Statuses
 
-* **justified** -- in the extension
-* **overruled** -- its contrary is in the extension; the conflict was RESOLVED against it
-* **undecided** -- neither; the conflict exists and nothing settles it
+A claim's status is read off the arguments FOR it, not off its contrary.
+
+* **justified** -- some argument for it is accepted
+* **overruled** -- every argument for it is defeated
+* **undecided** -- no argument for it is accepted, but at least one is neither accepted
+  nor defeated; the conflict exists and nothing settles it
+
+A justified undercut defeats every argument for a claim without putting the contrary
+anywhere, so the claim is overruled while neither it nor its contrary is in the
+extension. Reading overruled as "the contrary is in the extension" gets that case wrong
+(#29): the contrary being accepted is one way for every argument to be defeated, not the
+definition.
 
 ---
 
