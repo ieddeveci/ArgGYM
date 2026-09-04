@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
                             junctions_for)
 from arggym.core.curriculum import negated_branch
@@ -314,7 +315,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     return DDItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         claim_status=st, diagnoses=diagnoses, ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         metadata={
             "n_routes": n_routes, "chain_depth": depth, "tower": tower,
             "n_inert_decoys": n_inert,
@@ -335,33 +336,28 @@ def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) 
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is not justified.\n"
             f"State its status, and identify every point at which its support fails.\n\n"
-            "Answer format, between [answer] and [/answer]:\n"
+            "Answer format:\n"
             "   first line: `status: overruled` or `status: undecided`\n"
             "   then one line per failure point, as\n"
             "   `defeated_at: <target>; defeater: <defeater>; "
             "kind: undermine|undercut|rebut`\n" + extra)
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
 _STATUS_LINE = re.compile(r"^[\W\d]*status\s*[:=]\s*(justified|overruled|undecided)", re.I | re.M)
 _FIELD = re.compile(r"(\w+)\s*[:=]\s*([^;\n]+)")
 
 
-def score(answer_text: str, item: DDItem) -> Dict:
+def score(answer_text: str, item: DDItem) -> ScoreResult:
     diag: Dict = {"n_quoted": 0, "n_gold": len(item.diagnoses),
                   "status_correct": False, "status_contradicted": False,
                   "kind_contradicted": False, "extra": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = extract_answer(answer_text)
 
     for _k in re.findall(r"kind\s*[:=]\s*([^;\n,]+)", body, flags=re.I):
         if _k.strip().strip(",;.").lower() not in (UNDERMINE, UNDERCUT, REBUT):
             diag["invalid_kind"] = _k.strip()
-            return {"score": 0.0, "reason": f"invalid_kind:{_k.strip()[:16]}",
-                    "diagnostics": diag}
+            return ScoreResult(0.0, False, f"invalid_kind:{_k.strip()[:16]}", diag)
     residue = _STATUS.sub(" ", body)
     residue = re.sub(r"(defeated_at|defeater|kind|survives_because)\s*[:=]\s*[^;\n]+",
                      " ", residue, flags=re.I)
@@ -370,8 +366,7 @@ def score(answer_text: str, item: DDItem) -> Dict:
     if junk:
         diag["n_unparseable"] = len(junk)
         diag["junk_tokens"] = junk[:6]
-        return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
-                "diagnostics": diag}
+        return ScoreResult(0.0, False, f"unparseable_tokens:{len(junk)}", diag)
 
     statuses = {s.upper() for s in _STATUS_LINE.findall(body)}
     pred: Dict[Tuple[str, str], set] = {}
@@ -397,6 +392,10 @@ def score(answer_text: str, item: DDItem) -> Dict:
         elif "survives_because" in fields and last_key is not None:
             pred_surv[last_key] = fields["survives_because"].strip()
     diag["n_quoted"] = len(pred)
+    if not statuses and not pred:
+        # Nothing was said. Previously this arrived as "ok" at 0.0, which reads as a
+        # scored answer rather than an absent one.
+        return ScoreResult(0.0, False, "empty_answer", diag)
 
     diag["status_contradicted"] = len(statuses) > 1
     status_ok = statuses == {item.claim_status}
@@ -427,13 +426,13 @@ def score(answer_text: str, item: DDItem) -> Dict:
         score_val = 0.85 * f1 + 0.15 * (1.0 if status_ok else 0.0)
     else:
         score_val = 0.60 * f1 + 0.15 * (1.0 if status_ok else 0.0) + 0.25 * surv_score
-    return {"score": round(score_val, 4), "reason": "ok",
-            "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
-            "status_correct": status_ok,
-            "survives_because_score": None if surv_score is None else round(surv_score, 4),
-            "exact_match": (tp == len(gold) == len(pred) and status_ok
-                            and (surv_score is None or surv_score >= 0.999)),
-            "diagnostics": diag}
+    exact_match = (tp == len(gold) == len(pred) and status_ok
+                   and (surv_score is None or surv_score >= 0.999))
+    diag.update(f1=round(f1, 4), precision=round(precision, 4), recall=round(recall, 4),
+                status_correct=status_ok,
+                survives_because_score=None if surv_score is None else round(surv_score, 4),
+                exact_match=exact_match)
+    return ScoreResult(round(score_val, 4), exact_match, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",

@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.pairs import collect, pair_f1
 
 from arggym.aspic.engine import Operation
@@ -394,7 +395,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     return SQItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, queried=queried, gold=gold,
         ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         metadata={
             "n_queried": len(queried), "n_groups": n_group, "max_tower": max_tower,
             "n_items": len(base), "target_n_query": n_query,
@@ -418,21 +419,16 @@ def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
             "Possible statuses: justified, overruled, undecided.\n"
             "A claim is justified when some argument for it is accepted, overruled when every argument for it is defeated, and undecided otherwise.\n"
             "\n"
-            "Answer format: one line per claim, written as `claim: status`, "
-            "between [answer] and [/answer].")
+            "Answer format: one line per claim, written as `claim: status`.")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b(?!\w)", re.I)
 
 
-def score(answer_text: str, item: SQItem) -> Dict:
+def score(answer_text: str, item: SQItem) -> ScoreResult:
     diag: Dict = {"n_predicted": 0, "n_gold": len(item.gold), "wrong": [], "missing": [],
                   "contradicted": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = extract_answer(answer_text)
     pred = collect((claim.lower(), stat.upper()) for claim, stat in _PAIR.findall(body))
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
@@ -440,11 +436,10 @@ def score(answer_text: str, item: SQItem) -> Dict:
     diag["n_unparseable"] = len(junk)
     diag["junk_tokens"] = junk[:6]
     if junk:
-        return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
-                "diagnostics": diag}
+        return ScoreResult(0.0, False, f"unparseable_tokens:{len(junk)}", diag)
     diag["n_predicted"] = len(pred)
     if not pred:
-        return {"score": 0.0, "reason": "no_parseable_lines", "diagnostics": diag}
+        return ScoreResult(0.0, False, "no_parseable_lines", diag)
 
     r = pair_f1(pred, item.gold)
     diag["wrong"] = sorted(f"{k}:said {'/'.join(v)}, is {item.gold[k]}"
@@ -452,9 +447,9 @@ def score(answer_text: str, item: SQItem) -> Dict:
     diag["missing"] = sorted(k for k in item.gold if k not in pred)[:6]
     diag["contradicted"] = r.contradicted[:6]
     diag["n_correct"] = r.tp
-    return {"score": round(r.f1, 4), "reason": "ok", "f1": round(r.f1, 4),
-            "precision": round(r.precision, 4), "recall": round(r.recall, 4),
-            "exact_match": r.exact_match, "diagnostics": diag}
+    diag.update(f1=round(r.f1, 4), precision=round(r.precision, 4),
+                recall=round(r.recall, 4), exact_match=r.exact_match)
+    return ScoreResult(round(r.f1, 4), r.exact_match, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,

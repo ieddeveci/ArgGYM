@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
 from arggym.aspic.engine import Operation
+from arggym.core.answers import ScoreResult
 from arggym.core.scoring import score_item
 from arggym.tasks import (attack_defense, claim_chain, counter_argument, defeat_diagnosis,
                           formalization, perturbation, preference_construction,
@@ -33,6 +34,22 @@ class Adapter:
     theory_ops: Callable[[Any], List[Operation]]  # the theory the prompt shows
     prompt: Callable[[Any], str]
     junk_reason: str                               # UNPARSEABLE_LINES or UNPARSEABLE_TOKENS
+
+    def __post_init__(self):
+        """`adapter.score` always yields a mapping.
+
+        The scorers are mid-migration to `ScoreResult`, so a task returns either shape.
+        Normalizing here keeps every test written against one shape and means converting
+        a task module needs no edit in this file.
+        """
+        object.__setattr__(self, "score", _as_mapping(self.score))
+
+
+def _as_mapping(fn: Callable[[str, Any], Any]) -> Callable[[str, Any], Dict]:
+    def scored(text: str, item: Any) -> Dict:
+        result = fn(text, item)
+        return result.as_dict() if isinstance(result, ScoreResult) else result
+    return scored
 
 
 def _attack_defense(mode: str) -> Adapter:

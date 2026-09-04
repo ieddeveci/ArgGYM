@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.pairs import collect, pair_f1
 
 from arggym.aspic.engine import Operation
@@ -114,10 +115,8 @@ class PerturbItem:
 
     def reference(self) -> str:
         if not self.gold:
-            return "[answer]\nnone\n[/answer]"
-        return ("[answer]\n"
-                + "\n".join(f"{k}: {v.lower()}" for k, v in sorted(self.gold.items()))
-                + "\n[/answer]")
+            return "none"
+        return "\n".join(f"{k}: {v.lower()}" for k, v in sorted(self.gold.items()))
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
@@ -366,26 +365,25 @@ def _render_prompt(theory: str, pert: str, ordering: str) -> str:
             "A claim is justified when some argument for it is accepted, overruled when "
             "every argument for it is defeated, and undecided otherwise.\n"
             f"{TIE_NOTE}\n\n"
-            "Answer format: one line per changed claim, written as `claim: status`, between [answer] "
-            "and [/answer]. If no claim changes status, write `none`.")
+            "Answer format: one line per changed claim, written as `claim: status`. "
+            "If no claim changes status, write `none`.")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b", re.I)
 
 
-def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dict:
+def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> ScoreResult:
     diag: Dict = {"n_lines": 0, "n_unparseable": 0, "n_predicted": 0,
                   "n_gold": len(item.gold), "wrong_status": [], "false_positives": [],
                   "missed": [], "contradicted": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1).strip()
+    body = extract_answer(answer_text).strip()
     if body.lower() == "none":
+        # Success is exact match over the label map, and an empty prediction matches an
+        # empty gold. `build` rejects every draw where nothing changed, so gold is never
+        # empty and this arm is unreachable today -- while the prompt still offers `none`.
         diag["n_lines"] = 1
-        return {"score": 0.0, "reason": "predicted_none", "f1": 0.0,
-                "exact_match": False, "diagnostics": diag}
+        diag.update(f1=0.0, exact_match=not item.gold)
+        return ScoreResult(0.0, not item.gold, "predicted_none", diag)
     matches = _PAIR.findall(body)
     diag["n_lines"] = len(matches)
     pred = collect((claim.lower(), stat.upper()) for claim, stat in matches)
@@ -394,10 +392,9 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
         if tok.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", tok):
             diag["n_unparseable"] += 1
     if strict_parse and diag["n_unparseable"]:
-        return {"score": 0.0, "reason": f"unparseable_lines:{diag['n_unparseable']}",
-                "diagnostics": diag}
+        return ScoreResult(0.0, False, f"unparseable_lines:{diag['n_unparseable']}", diag)
     if not pred:
-        return {"score": 0.0, "reason": "no_pairs", "diagnostics": diag}
+        return ScoreResult(0.0, False, "no_pairs", diag)
     diag["n_predicted"] = len(pred)
 
     gold = item.gold
@@ -414,9 +411,9 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Dic
     diag["n_contradicted"] = len(diag["contradicted"])
     diag["n_missed"] = len(diag["missed"])
     diag["n_spurious"] = len(diag["spurious"])
-    return {"score": round(r.f1, 4), "reason": "ok", "f1": round(r.f1, 4),
-            "precision": round(r.precision, 4), "recall": round(r.recall, 4),
-            "exact_match": r.exact_match, "diagnostics": diag}
+    diag.update(f1=round(r.f1, 4), precision=round(r.precision, 4),
+                recall=round(r.recall, 4), exact_match=r.exact_match)
+    return ScoreResult(round(r.f1, 4), r.exact_match, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
