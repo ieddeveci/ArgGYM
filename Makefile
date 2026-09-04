@@ -9,7 +9,7 @@ help:
 	@echo 'make clean     remove build artefacts and caches (leaves data/)'
 
 setup:
-	uv sync --extra dev
+	uv sync
 
 test:
 	uv run pytest -q

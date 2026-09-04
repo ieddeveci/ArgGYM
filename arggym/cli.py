@@ -74,7 +74,13 @@ def export_all(
 @app.command()
 def inspect() -> None:
     """Start the inspector on http://127.0.0.1:5000."""
-    from arggym import inspector
+    try:
+        from arggym import inspector
+    except ImportError:
+        # Flask is an extra, so scoring model outputs in CI does not pull a web
+        # framework (#54). Only this one command needs it.
+        typer.echo("the inspector needs Flask: pip install 'arggym[inspector]'", err=True)
+        raise typer.Exit(1)
 
     inspector.app.run(debug=False, port=5000)
 

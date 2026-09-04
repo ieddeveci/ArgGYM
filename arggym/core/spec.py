@@ -1,0 +1,167 @@
+"""What a taskset is built from.
+
+Today the grid is a function default the CLI cannot override, so a paper's
+taskset is defined by "whatever the defaults were at that commit". A spec file
+makes it an input that can be checked in, cited and diffed.
+
+The seed policy is the part worth reading. A cell asks for a number of items and
+gives the export a bound on how far to look; the export either produces what was
+asked for or fails naming the cell. The alternative -- a fixed seed range, take
+what builds -- lets a cell that rejects 12 of 20 seeds ship 8 items with nothing
+saying so, and the frozen v2 taskset has exactly such a cell.
+
+Version fields are constraints rather than records. Present, they are checked
+before anything is generated and the build refuses on a mismatch; absent, the
+export records what it used. That is what makes "reproducible from the spec
+alone" mean something.
+"""
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, Optional, Sequence, Tuple
+
+ALL_ORDERINGS = ("last_link_elitist", "last_link_democratic",
+                 "weakest_link_elitist", "weakest_link_democratic")
+
+
+@dataclass(frozen=True)
+class SeedPolicy:
+    """How many items a cell needs, and how far the export may look."""
+
+    start: int = 0
+    take: int = 2
+    scan_limit: int = 40
+
+    def __post_init__(self) -> None:
+        if self.take < 1:
+            raise ValueError("seeds.take must be at least 1")
+        if self.scan_limit < self.take:
+            raise ValueError(
+                f"seeds.scan_limit ({self.scan_limit}) is below seeds.take "
+                f"({self.take}); the cell could never be filled")
+
+
+@dataclass(frozen=True)
+class TasksetSpec:
+    tasks: Tuple[str, ...]
+    levels: Tuple[int, ...] = (3, 6, 9, 12, 15)
+    orderings: Tuple[str, ...] = ALL_ORDERINGS
+    seeds: SeedPolicy = field(default_factory=SeedPolicy)
+    profile: str = "FULL"
+    #: Refuse a cell that needs more than 1/min_acceptance seeds per item. A
+    #: degraded cell should be a decision, not a silent property of the file.
+    min_acceptance: float = 0.5
+    #: Optional constraints, checked before generating. See the module docstring.
+    arggym: Optional[str] = None
+    pyarg: Optional[str] = None
+    prompt_version: Optional[int] = None
+    theory_schema: Optional[int] = None
+    scoring_version: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        from arggym.core import registry
+
+        if not self.tasks:
+            raise ValueError("a spec must name at least one task")
+        unknown = [t for t in self.tasks if t not in registry.REGISTRY]
+        if unknown:
+            raise ValueError(f"unknown task(s) {', '.join(unknown)}; "
+                             f"known: {', '.join(registry.task_names())}")
+        bad = [o for o in self.orderings if o not in ALL_ORDERINGS]
+        if bad:
+            raise ValueError(f"unknown ordering(s) {', '.join(bad)}")
+        if not self.levels:
+            raise ValueError("a spec must name at least one level")
+        if not 0.0 < self.min_acceptance <= 1.0:
+            raise ValueError("min_acceptance must be in (0, 1]")
+        # The profile axis is real -- nine tasks branch on it -- but two tasks
+        # cannot take one at all and only one mixes it into its seed, so a
+        # non-FULL taskset would not be reproducible from its coordinates.
+        # See docs/dataset-contract.md section 7.
+        if self.profile != "FULL":
+            raise ValueError(
+                f"profile {self.profile!r} is not exportable yet: "
+                "counter_argument and semantics_query take no profile, and only "
+                "status_query mixes it into its seed, so the seed would not name "
+                "the item. Track this on #51.")
+
+    @property
+    def cells(self) -> Tuple[Tuple[str, int, str], ...]:
+        return tuple((t, lv, o) for t in self.tasks
+                     for lv in self.levels for o in self.orderings)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+def _tup(v, name):
+    if v is None:
+        return None
+    if isinstance(v, (str, bytes)):
+        raise ValueError(f"{name} must be a list, not a bare string")
+    return tuple(v)
+
+
+def from_dict(d: Dict[str, Any]) -> TasksetSpec:
+    d = dict(d)
+    seeds = d.pop("seeds", None) or {}
+    if not isinstance(seeds, dict):
+        raise ValueError("seeds must be a mapping of start/take/scan_limit")
+    known = {f for f in TasksetSpec.__dataclass_fields__}
+    stray = sorted(set(d) - known)
+    if stray:
+        # A typo in a spec file would otherwise change nothing and be blamed on
+        # the generator.
+        raise ValueError(f"unknown spec field(s): {', '.join(stray)}")
+    for k, n in (("tasks", "tasks"), ("levels", "levels"), ("orderings", "orderings")):
+        if k in d:
+            d[k] = _tup(d[k], n)
+    return TasksetSpec(seeds=SeedPolicy(**seeds), **d)
+
+
+def load(path: str) -> TasksetSpec:
+    """Read a spec from YAML or JSON, decided by the file's suffix."""
+    import json
+
+    with open(path) as f:
+        text = f.read()
+    if path.endswith((".yaml", ".yml")):
+        try:
+            import yaml
+        except ImportError:  # pragma: no cover - depends on the install
+            raise SystemExit("reading a YAML spec needs pyyaml; "
+                             "install it or write the spec as .json") from None
+        data = yaml.safe_load(text)
+    else:
+        data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} does not hold a spec mapping")
+    return from_dict(data)
+
+
+def check_versions(spec: TasksetSpec) -> None:
+    """Refuse to build a spec this tree cannot satisfy.
+
+    Checked before generating rather than recorded after, so a mismatch costs
+    seconds instead of a full export.
+    """
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+    import arggym
+    from arggym.core.serialize import THEORY_SCHEMA
+
+    def _installed(name: str) -> Optional[str]:
+        try:
+            return _pkg_version(name)
+        except PackageNotFoundError:  # pragma: no cover - depends on the install
+            return None
+
+    for got, want, what in (
+        (arggym.__version__, spec.arggym, "arggym"),
+        (_installed("python-argumentation"), spec.pyarg, "python-argumentation"),
+        (THEORY_SCHEMA, spec.theory_schema, "theory_schema"),
+    ):
+        if want is not None and got is not None and str(got) != str(want):
+            raise SystemExit(
+                f"spec asks for {what} {want}, this tree has {got}; "
+                "the taskset would not be the one the spec names")
