@@ -14,16 +14,6 @@ app = typer.Typer(
 )
 
 
-def _load_gates():
-    """The optional local validation suite. It is not distributed with ArgGYM."""
-    try:
-        from validation import gates
-    except ImportError:
-        typer.echo("gates are unavailable: no importable 'validation' package", err=True)
-        raise typer.Exit(1)
-    return gates
-
-
 @app.command()
 def tasks() -> None:
     """List the tasks that can be exported."""
@@ -97,23 +87,6 @@ def inspect() -> None:
         raise typer.Exit(1)
 
     inspector.app.run(debug=False, port=5000)
-
-
-@app.command()
-def gates() -> None:
-    """List the gates in the optional local validation suite."""
-    for name in sorted(_load_gates().ALL):
-        typer.echo(name)
-
-
-@app.command()
-def gate(name: str = typer.Argument(..., help="Gate to run; see 'arggym gates'.")) -> None:
-    """Run one gate from the optional local validation suite."""
-    suite = _load_gates()
-    if name not in suite.ALL:
-        typer.echo(f"unknown gate {name!r}; try 'arggym gates'", err=True)
-        raise typer.Exit(1)
-    suite.ALL[name]()
 
 
 def main() -> None:

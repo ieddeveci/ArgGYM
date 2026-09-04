@@ -56,10 +56,15 @@ def test_unknown_task_is_rejected():
     assert "unknown task bogus" in str(result.exception) + result.output
 
 
-def test_gates_report_the_missing_validation_package():
-    result = runner.invoke(app, ["gates"])
-    assert result.exit_code == 1
-    assert "validation" in result.output
+def test_the_cli_offers_no_command_it_cannot_run():
+    # `gates` and `gate` imported a `validation` package that is not in the repo
+    # and not distributed, so a fresh clone met two commands that could only
+    # fail. A benchmark whose quality gates are invisible to the people meant to
+    # trust it is worse than one that does not advertise them (#52).
+    listed = runner.invoke(app, ["--help"]).output
+    for gone in ("gates", "gate "):
+        assert gone not in listed
+    assert runner.invoke(app, ["gates"]).exit_code != 0
 
 
 def test_allow_missing_is_passed_through():
