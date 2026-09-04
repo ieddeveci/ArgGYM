@@ -1,0 +1,163 @@
+"""Items on demand: one dataset object per difficulty, indexed by seed.
+
+`ds[k]` is the item built from seed `start + k`. Difficulty lives in the config,
+so every item in one dataset is the same level and ordering, and the grid is a
+concatenation of these.
+
+The index is the seed, unconditionally. The tempting alternative -- skip a seed
+that fails to build so the index stays dense -- costs more than it looks:
+
+- `ds[5]` could not be computed without knowing whether seeds 0-4 built, so
+  random access becomes linear and sharding breaks.
+- A change that flips one low-index build shifts every item above it while the
+  config, the seed and `len(ds)` stay identical: a total change presenting as a
+  no-op.
+- It hides the thing worth seeing. The frozen v2 taskset records twelve
+  rejections in one `status_query` cell of twenty. Densifying turns that into
+  "twenty items, looks fine", which is the failure #72 describes.
+
+So a failed build raises, naming the cell. Densifying is the export's job, where
+it is recorded (`core/spec.py`).
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, Iterator, List, Optional, Sequence
+
+from arggym.core import registry
+from arggym.core.answers import ScoreResult
+from arggym.core.serialize import THEORY_SCHEMA, ops_to_json
+
+
+class BuildFailed(RuntimeError):
+    """A cell produced no item at this seed."""
+
+
+class TaskDataset:
+    """Items of one task at one difficulty, addressed by seed."""
+
+    def __init__(self, task: str, level: int, ordering: str, size: int = 100,
+                 seed: int = 0, profile: str = "FULL") -> None:
+        self.spec = registry.get(task)
+        self.task = task
+        self.level = level
+        self.ordering = ordering
+        self.size = size
+        self.seed = seed
+        self.profile = profile
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __iter__(self) -> Iterator[Dict[str, Any]]:
+        for i in range(self.size):
+            yield self[i]
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        if not 0 <= idx < self.size:
+            raise IndexError(idx)
+        seed = self.seed + idx
+        item = self.spec.make_item(self.level, seed, self.ordering)
+        if item is None:
+            raise BuildFailed(
+                f"{self.task} L{self.level} {self.ordering} seed {seed} built no item "
+                f"after its retry budget. The index is the seed, so this seed is not "
+                f"silently replaced; export with a spec to skip it and record why.")
+        return self.entry(item, seed, idx)
+
+    def entry(self, item: Any, seed: int, index: int) -> Dict[str, Any]:
+        """One item as the row a harness reads."""
+        gold: Dict[str, Any] = {}
+        for f in self.spec.gold_op_fields:
+            ops = getattr(item, f, None)
+            if ops is not None:
+                gold[f] = ops_to_json(ops)
+
+        meta: Dict[str, Any] = {
+            # The registered task name, not the package: a composite dispatches
+            # scoring on this, so it has to be a registry key.
+            "source_dataset": self.task,
+            "source_index": index,
+            "seed": seed,
+            "level": self.level,
+            "ordering": self.ordering,
+            "profile": self.profile,
+            "theory_schema": THEORY_SCHEMA,
+            "checker": self.spec.checker,
+            "answer_shape": self.spec.answer_shape,
+            "stats": dict(getattr(item, "metadata", {}) or {}),
+        }
+        for f in self.spec.theory_fields:
+            ops = getattr(item, f, None)
+            if ops is not None:
+                meta[f] = ops_to_json(ops)
+        if gold:
+            meta["gold"] = gold
+
+        ref = item.reference
+        return {
+            "id": f"{self.task}/L{self.level}/{self.ordering}/s{seed}",
+            "task": self.task,
+            "question": item.prompt,
+            "reference_answer": ref() if callable(ref) else ref,
+            "metadata": meta,
+        }
+
+    def score(self, answer: str, entry: Dict[str, Any]) -> ScoreResult:
+        raise NotImplementedError(
+            "scoring from a row alone lands with the value seam; "
+            "score through the task module until then")
+
+    def score_answer(self, answer: str, entry: Dict[str, Any]) -> float:
+        return self.score(answer, entry).score
+
+
+class ConcatDataset:
+    """Several datasets read end to end, in the order given.
+
+    Not reasoning-gym's `CompositeDataset`, which seeds an RNG from the global
+    index, picks a sub-dataset by weight and passes the same index through
+    unchanged. That yields roughly N/K items per sub-dataset, always at the same
+    index values -- a training mixture. An evaluation grid wants every cell, once.
+    """
+
+    def __init__(self, parts: Sequence[TaskDataset]) -> None:
+        self.parts: List[TaskDataset] = list(parts)
+        self._starts: List[int] = []
+        n = 0
+        for p in self.parts:
+            self._starts.append(n)
+            n += len(p)
+        self.size = n
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __iter__(self) -> Iterator[Dict[str, Any]]:
+        for p in self.parts:
+            yield from p
+
+    def _locate(self, idx: int) -> Any:
+        import bisect
+
+        if not 0 <= idx < self.size:
+            raise IndexError(idx)
+        i = bisect.bisect_right(self._starts, idx) - 1
+        return self.parts[i], idx - self._starts[i]
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        part, local = self._locate(idx)
+        return part[local]
+
+
+def create(task: str, level: int, ordering: str = "last_link_elitist",
+           size: int = 100, seed: int = 0, profile: str = "FULL") -> TaskDataset:
+    return TaskDataset(task, level, ordering, size=size, seed=seed, profile=profile)
+
+
+def from_spec(spec: Any, size: Optional[int] = None) -> ConcatDataset:
+    """Every cell of a taskset spec, in a stable order."""
+    n = size if size is not None else spec.seeds.take
+    return ConcatDataset([
+        TaskDataset(task, level, ordering, size=n, seed=spec.seeds.start,
+                    profile=spec.profile)
+        for task, level, ordering in spec.cells])

@@ -45,6 +45,12 @@ class TaskSpec:
     answer_shape: str
     #: Passed to the module's `make_item` on top of (level, seed, ordering).
     variant: Dict[str, Any] = field(default_factory=dict)
+    #: Item attributes holding the theory the question shows. `perturbation`
+    #: renders two lists, so this is a tuple rather than one name.
+    theory_fields: Tuple[str, ...] = ("base_ops",)
+    #: Item attributes holding operations that give the answer away.
+    #: `formalization`'s reference_ops is the gold answer, not a theory.
+    gold_op_fields: Tuple[str, ...] = ()
 
     def make_item(self, level: int, seed: int, ordering: str,
                   **kwargs: Any) -> Optional[Any]:
@@ -52,8 +58,9 @@ class TaskSpec:
         return mod.make_item(level, seed, ordering, **{**self.variant, **kwargs})
 
 
-def _spec(name, module, checker, shape, **variant) -> Tuple[str, TaskSpec]:
-    return name, TaskSpec(name, module, checker, shape, variant)
+def _spec(name, module, checker, shape, theory=("base_ops",), gold=(),
+          **variant) -> Tuple[str, TaskSpec]:
+    return name, TaskSpec(name, module, checker, shape, variant, theory, gold)
 
 
 REGISTRY: Dict[str, TaskSpec] = dict([
@@ -66,11 +73,17 @@ REGISTRY: Dict[str, TaskSpec] = dict([
     _spec("defence", "attack_defense", VERIFIED, OPERATION_LIST, mode="defence"),
     _spec("attack_defense", "attack_defense", VERIFIED, OPERATION_LIST,
           mode="attack_defense"),
-    _spec("formalization", "formalization", GRADED, OPERATION_LIST),
+    # The question is prose and the operations are the gold answer, so this
+    # task has no theory to publish and everything op-shaped is gold.
+    _spec("formalization", "formalization", GRADED, OPERATION_LIST,
+          theory=(), gold=("reference_ops",)),
     _spec("status_query", "status_query", GRADED, LABEL_MAP),
     _spec("semantics_query", "semantics_query", GRADED, LABEL_MAP),
-    _spec("perturbation", "perturbation", GRADED, LABEL_MAP),
-    _spec("claim_chain", "claim_chain", GRADED, ORDERED_SEQUENCE),
+    _spec("perturbation", "perturbation", GRADED, LABEL_MAP,
+          theory=("base_ops", "pert_ops")),
+    # line_ops is the justifying line the answer must reproduce.
+    _spec("claim_chain", "claim_chain", GRADED, ORDERED_SEQUENCE,
+          gold=("line_ops",)),
     _spec("defeat_diagnosis", "defeat_diagnosis", GRADED, RECORD_LIST),
 ])
 
