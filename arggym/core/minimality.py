@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
 
 
 @dataclass(frozen=True)
@@ -185,5 +185,4 @@ def find_minimum_decomposed(base_ops, chains, target, src, want, ordering) -> Di
         "skippable_chains": skippable,
         "searched_exhaustively": False,
         "method": "decomposed",
-        "combos_checked": 0,
     }

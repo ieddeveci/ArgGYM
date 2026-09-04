@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from importlib import import_module
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # How an answer is judged. `exact` means a normalized comparison against the
 # reference is sound; `graded` a continuous scorer over a unique gold; and

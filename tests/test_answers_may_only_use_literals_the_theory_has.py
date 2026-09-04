@@ -10,11 +10,9 @@ not mention (#35). No prompt said it either, which is fixed in the same branch.
 """
 from __future__ import annotations
 
-import pytest
-
+from arggym.aspic.engine import Operation
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import check_legality, score_item
-from arggym.aspic.engine import Operation
 from arggym.tasks import counter_argument as ca
 
 BASE = [

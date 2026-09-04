@@ -11,9 +11,9 @@ import inspect
 
 import pytest
 
+from arggym.core.export import ALL_ORDERINGS, export_task
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import parse_answer, score_item
-from arggym.core.export import ALL_ORDERINGS, export_task
 from arggym.tasks import counter_argument as ca
 from arggym.tasks import formalization as fz
 

@@ -17,8 +17,14 @@ from __future__ import annotations
 import pytest
 
 from arggym.core.answers import ScoreResult
-from arggym.tasks import claim_chain, defeat_diagnosis, formalization
-from arggym.tasks import perturbation, semantics_query, status_query
+from arggym.tasks import (
+    claim_chain,
+    defeat_diagnosis,
+    formalization,
+    perturbation,
+    semantics_query,
+    status_query,
+)
 
 LEVEL, ORDERING, SEED = 3, "last_link_elitist", 0
 

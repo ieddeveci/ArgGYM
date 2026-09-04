@@ -18,7 +18,7 @@ alone" mean something.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 ALL_ORDERINGS = ("last_link_elitist", "last_link_democratic",
                  "weakest_link_elitist", "weakest_link_democratic")
@@ -145,7 +145,8 @@ def check_versions(spec: TasksetSpec) -> None:
     Checked before generating rather than recorded after, so a mismatch costs
     seconds instead of a full export.
     """
-    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
 
     import arggym
     from arggym.core.serialize import THEORY_SCHEMA

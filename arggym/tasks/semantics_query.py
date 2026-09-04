@@ -7,13 +7,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.core.answers import ScoreResult, extract_answer
-from arggym.core.pairs import collect, pair_f1
-
-from arggym.aspic.engine import Operation, UNSATISFIABLE
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS
+from arggym.aspic.engine import UNSATISFIABLE, Operation
+from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.curriculum import JUNCTION_CAPS, junction_budget
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.pairs import collect, pair_f1
 
 TASK = "semantics_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -313,7 +312,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     ridx = [0]
     candidates: List[str] = []
 
-    j_budget = junction_budget(level, JUNCTION_CAPS.get("semantics_query", 3))
+    junction_budget(level, JUNCTION_CAPS.get("semantics_query", 3))
     _lo = 3 + (1 if level >= 6 else 0)
     _hi = min(6, _lo + 1 + (1 if level >= 11 else 0))
     _n_cluster = rng.randint(_lo, _hi)

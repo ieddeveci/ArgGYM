@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.answers import ScoreResult
 from arggym.aspic.engine import Operation
+from arggym.core.answers import ScoreResult
 from arggym.core.scoring import build_framework, score_item
 from arggym.tasks.attack_defense import reference_ok
 

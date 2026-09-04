@@ -11,8 +11,14 @@ import json
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.serialize import (THEORY_SCHEMA, check_schema, op_from_dict,
-                                   op_to_dict, ops_from_json, ops_to_json)
+from arggym.core.serialize import (
+    THEORY_SCHEMA,
+    check_schema,
+    op_from_dict,
+    op_to_dict,
+    ops_from_json,
+    ops_to_json,
+)
 
 EVERY_KIND = [
     Operation(kind="premise", content="p"),

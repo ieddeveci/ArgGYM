@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
+from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.curriculum import negated_branch
-from arggym.aspic.api import ASPICVerifier
 
 
 def _is_last(ordering: str) -> bool:

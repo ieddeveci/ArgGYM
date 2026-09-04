@@ -28,6 +28,16 @@ jobs:
       - name: tests
         run: uv run pytest -q -n auto
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run ruff check arggym tests
+
   install:
     # A bare install must not pull a web framework, and the console script must
     # work from it. Both are easy to break from inside a synced dev checkout,

@@ -24,12 +24,14 @@ See `docs/dataset-contract.md`.
 __version__ = "2.0.0"
 
 from arggym.core.answers import ScoreResult, extract_answer
-from arggym.core.dataset import (BuildFailed, ConcatDataset, TaskDataset,
-                                 create, from_spec)
-from arggym.core.registry import TaskSpec, get as get_task, task_names
-from arggym.core.rows import MissingField, score as score_row
+from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
+from arggym.core.registry import TaskSpec, task_names
+from arggym.core.registry import get as get_task
+from arggym.core.rows import MissingField
+from arggym.core.rows import score as score_row
 from arggym.core.serialize import THEORY_SCHEMA, ops_from_json, ops_to_json
-from arggym.core.spec import SeedPolicy, TasksetSpec, load as load_spec
+from arggym.core.spec import SeedPolicy, TasksetSpec
+from arggym.core.spec import load as load_spec
 
 __all__ = [
     "__version__",

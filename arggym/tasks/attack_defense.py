@@ -4,20 +4,27 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-
-from arggym.structures.chains import CONFIGS, LAST_LINK, WEAKEST_LINK, reasoning_cost
-from arggym.core.invariants import randomize_rule_names, remap_text, language_enrichment
-from arggym.core.minimality import find_minimum, find_minimum_decomposed
-from arggym.structures.defence import (build_defence, verify_minimum as verify_defence_minimum,
-                     verify_minimum_decomposed as verify_defence_decomposed)
-from arggym.structures.interaction import build_mixed, check_interference, solve_mixed
-from arggym.core.prompting import render
-from arggym.core.curriculum import PROFILES, ATTACK, DEFENCE, MIXED, spec_for
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
+from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult
+from arggym.core.curriculum import (
+    ATTACK,
+    DEFENCE,
+    MIXED,
+    PROFILES,
+    junctions_for,
+    spec_for,
+    wants_ternary,
+)
+from arggym.core.invariants import language_enrichment, randomize_rule_names, remap_text
+from arggym.core.minimality import find_minimum, find_minimum_decomposed
+from arggym.core.prompting import render
 from arggym.core.scoring import score_item, subgoals_from
+from arggym.structures.chains import CONFIGS, LAST_LINK, reasoning_cost
+from arggym.structures.defence import build_defence
+from arggym.structures.defence import verify_minimum as verify_defence_minimum
+from arggym.structures.defence import verify_minimum_decomposed as verify_defence_decomposed
+from arggym.structures.interaction import build_mixed, check_interference, solve_mixed
 
 TASK = "attack_defense"
 _L = "abcdefghijklmnopqrstuvwxy"
@@ -426,8 +433,6 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                     "junction_budget": n_junc, "n_junctions": _n_junctions(base),
                     "branch_depth": depth, "stem_depth": stem,
                     "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
-                    "minimality_proven": sol.get("all_necessary", False),
-                    "minimality_method": "interaction_all_necessary",
                     "interferes": inter["interferes"],
                     "naive_attack_sabotages_defence":
                         inter.get("naive_B") == "OVERRULED",

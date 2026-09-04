@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import hashlib
-import itertools
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
-from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import (randomize_rule_names, language_enrichment, split_atoms_and_rules,
-                            minimal_subset_exact)
+from arggym.aspic.engine import Operation
+from arggym.core.curriculum import (
+    PROFILES,
+    junctions_for,
+    negated_branch,
+)
+from arggym.core.invariants import (
+    language_enrichment,
+    minimal_subset_exact,
+    randomize_rule_names,
+    split_atoms_and_rules,
+)
 
 TASK = "preference_construction"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -149,7 +155,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             _pts.add(min(depth // 2, depth - 1))
             if j_budget > n_conf and depth >= 3:
                 _pts.add(0)
-        junction_at = -1
         for j in range(depth):
             ridx += 1
             nm = f"d{ridx}"

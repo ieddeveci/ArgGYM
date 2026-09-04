@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple, Union
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 __all__ = [
     "Theory", "Rule", "Fact", "Preference", "Contrariness",
@@ -384,8 +384,8 @@ class Theory:
         from py_arg.aspic_classes.argumentation_system import ArgumentationSystem
         from py_arg.aspic_classes.argumentation_theory import ArgumentationTheory
         from py_arg.aspic_classes.defeasible_rule import DefeasibleRule
-        from py_arg.aspic_classes.strict_rule import StrictRule
         from py_arg.aspic_classes.literal import Literal
+        from py_arg.aspic_classes.strict_rule import StrictRule
 
         names: Set[str] = set()
         for l in self.literals:
@@ -517,9 +517,13 @@ class Theory:
 
     def _ordering_object(self, theory):
         from py_arg.aspic_classes.orderings.argument_orderings.last_link_ordering import (
-            LastLinkElitistOrdering, LastLinkDemocraticOrdering)
+            LastLinkDemocraticOrdering,
+            LastLinkElitistOrdering,
+        )
         from py_arg.aspic_classes.orderings.argument_orderings.weakest_link_ordering import (
-            WeakestLinkElitistOrdering, WeakestLinkDemocraticOrdering)
+            WeakestLinkDemocraticOrdering,
+            WeakestLinkElitistOrdering,
+        )
         cls = {LAST_LINK_ELITIST: LastLinkElitistOrdering,
                LAST_LINK_DEMOCRATIC: LastLinkDemocraticOrdering,
                WEAKEST_LINK_ELITIST: WeakestLinkElitistOrdering,
@@ -579,7 +583,8 @@ class Theory:
                     f"with a different one than was asked for") from exc
             try:
                 from py_arg.abstract_argumentation_classes.abstract_argumentation_framework import (
-                    AbstractArgumentationFramework)
+                    AbstractArgumentationFramework,
+                )
                 from py_arg.abstract_argumentation_classes.defeat import Defeat
                 args = list(th.all_arguments)
                 defeats = []
@@ -757,7 +762,8 @@ class Theory:
     @staticmethod
     def _sub_framework(name, args, defeats):
         from py_arg.abstract_argumentation_classes.abstract_argumentation_framework import (
-            AbstractArgumentationFramework)
+            AbstractArgumentationFramework,
+        )
         touched = set(args)
         for d in defeats:
             touched.add(d.from_argument)
@@ -810,9 +816,7 @@ class Theory:
         if semantics != PREFERRED:
             return None
         import importlib
-        from itertools import product
-        from py_arg.abstract_argumentation_classes.abstract_argumentation_framework import (
-            AbstractArgumentationFramework)
+
         from py_arg.abstract_argumentation_classes.defeat import Defeat
         mod_name = {PREFERRED: "get_preferred_extensions", COMPLETE: "get_complete_extensions",
                     GROUNDED: "get_grounded_extension",
@@ -869,8 +873,7 @@ class Theory:
     def _extensions_by_component(self, comps, semantics, base):
         import importlib
         from itertools import product
-        from py_arg.abstract_argumentation_classes.abstract_argumentation_framework import (
-            AbstractArgumentationFramework)
+
         from py_arg.abstract_argumentation_classes.defeat import Defeat
         mod_name = {PREFERRED: "get_preferred_extensions", STABLE: "get_stable_extensions",
                     SEMISTABLE: "get_semistable_extensions",
@@ -913,8 +916,9 @@ class Theory:
         if not undecided:
             return [{str(getattr(a, "conclusion", a)) for a in grounded}]
 
-        from py_arg.abstract_argumentation_classes.defeat import Defeat
         import importlib
+
+        from py_arg.abstract_argumentation_classes.defeat import Defeat
         uset = set(undecided)
         defeats_sub = []
         for a in undecided:
@@ -957,7 +961,7 @@ class Theory:
 
     def _sat_unique(self, semantics: str):
         try:
-            from satcheck import ideal_sat, eager_sat
+            from satcheck import eager_sat, ideal_sat
         except Exception:
             return None
         try:

@@ -212,7 +212,8 @@ def check_engine(want: Optional[str], task: str) -> None:
     """
     if want is None:
         return
-    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
 
     try:
         got = _pkg_version("python-argumentation")

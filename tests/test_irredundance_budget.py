@@ -28,7 +28,9 @@ def test_irredundant_set_is_reported_true():
 
 
 def test_a_droppable_element_is_reported_false():
-    holds = lambda sub: {"a", "b"} <= set(sub)
+    def holds(sub):
+        return {"a", "b"} <= set(sub)
+
     verdict, _calls = assert_irredundant(["a", "b", "c"], holds)
     assert verdict is False
 

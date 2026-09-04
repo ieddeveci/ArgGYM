@@ -273,11 +273,11 @@ def minimal_subset_exact(candidates, holds, max_calls=20000):
 
     keep = []
     for i, o in enumerate(full):
-        rest = [x for j, x in enumerate(full) if j != i and x not in ()]
+        [x for j, x in enumerate(full) if j != i and x not in ()]
         if not H([x for j, x in enumerate(full) if j != i]):
             keep.append(o)
     forced = list(keep)
-    lower = max(1, len(forced))
+    max(1, len(forced))
     if forced and H(forced):
         return forced, True, calls[0]
 

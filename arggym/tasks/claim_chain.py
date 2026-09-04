@@ -6,13 +6,22 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, extract_answer
-from arggym.core.curriculum import (junction_budget, JUNCTION_CAPS, PROFILES, wants_ternary,
-                            junctions_for, negated_branch)
-from arggym.core.invariants import (split_atoms_and_rules, randomize_rule_names, negation_gadget,
-                        language_enrichment)
+from arggym.core.curriculum import (
+    JUNCTION_CAPS,
+    PROFILES,
+    junction_budget,
+    junctions_for,
+    negated_branch,
+    wants_ternary,
+)
+from arggym.core.invariants import (
+    language_enrichment,
+    randomize_rule_names,
+    split_atoms_and_rules,
+)
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -111,7 +120,7 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL") -> Optional[CCItem]:
-    rng = random.Random(stable_seed(seed, level, ordering, "cc"))
+    random.Random(stable_seed(seed, level, ordering, "cc"))
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
     tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)

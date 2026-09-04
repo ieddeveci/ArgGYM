@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
-from arggym.aspic.engine import ASPICFramework, Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import ASPICFramework, Operation
 from arggym.core.answers import ScoreResult, extract_answer
 
 BLOAT_FACTOR = 2

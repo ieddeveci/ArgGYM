@@ -5,7 +5,6 @@ import json
 import os
 import sys
 
-from arggym.aspic.engine import Operation
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED
 from arggym.core.scoring import score_item
 
@@ -37,10 +36,12 @@ _EXPORTABLE = {
 
 
 def _export_row(task: str, lv: int, o: str, s: int):
+    from arggym.tasks import claim_chain as claimchain
+    from arggym.tasks import counter_argument as counterarg
+    from arggym.tasks import defeat_diagnosis as defeatdiag
+    from arggym.tasks import formalization as formalize
     from arggym.tasks import preference_construction as prefcon
-    from arggym.tasks import (counter_argument as counterarg, claim_chain as claimchain,
-                       defeat_diagnosis as defeatdiag, formalization as formalize,
-                       status_query as statusquery)
+    from arggym.tasks import status_query as statusquery
     if task == "preference_construction":
         it = prefcon.make_item(lv, s, o)
         if it is None:

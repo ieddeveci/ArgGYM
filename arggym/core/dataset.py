@@ -31,7 +31,8 @@ from arggym.core.serialize import THEORY_SCHEMA, ops_to_json
 
 
 def _pyarg_version() -> Optional[str]:
-    from importlib.metadata import PackageNotFoundError, version as _v
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _v
 
     try:
         return _v("python-argumentation")

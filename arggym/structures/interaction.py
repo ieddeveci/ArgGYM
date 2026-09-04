@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
 
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
@@ -70,14 +70,14 @@ def build_mixed(names: Iterable[str], ordering: str = LAST_LINK,
     if junction and max(1, shared_depth) >= 1:
         for k in range(max(1, n_junctions)):
             j_points.add(k % max(1, shared_depth))
-    junction_at = -1
     for i in range(max(1, shared_depth)):
         nxt = shared_node if i == max(1, shared_depth) - 1 else next(it)
         nm = f"k{i}"
         if i in j_points:
             extra = []
             for _e in range(2 if ternary else 1):
-                broot = next(it); blit = next(it)
+                broot = next(it)
+                blit = next(it)
                 ops.append(Operation(kind="premise", content=broot))
                 ops.append(Operation(kind="defeasible", name=f"{nm}b{_e}",
                                      antecedents=(broot,), consequent=blit))

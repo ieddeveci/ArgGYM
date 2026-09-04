@@ -6,17 +6,35 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.curriculum import JUNCTION_CAPS, PROFILES, junction_budget
+from arggym.core.nlforms import (
+    AXIOM,
+    DEFEASIBLE,
+    FORWARD_CONNECTIVES,
+    JUNCTION_DEFEASIBLE,
+    JUNCTION_STRICT,
+    LINE_TRANSITIONS,
+    NEGATED_AXIOM,
+    NEGATED_LITERAL,
+    NEGATED_PREMISE,
+    NEW_TOPIC,
+    OBJECTION_CONNECTIVES,
+    OPENERS,
+    PREFER_PREMISE,
+    PREFER_RULE,
+    PREMISE,
+    REBUT_RULE,
+    RULE_ANAPHORA,
+    RULE_REFERENCE,
+    STRICT,
+    STRICT_EXCLUSION,
+    STRICT_FROM_NEGATION,
+    UNDERCUT,
+)
 from arggym.core.scoring import ARROW
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
-from arggym.core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
-                          NEGATED_AXIOM, NEGATED_LITERAL, NEGATED_PREMISE, REBUT_RULE,
-                          STRICT_EXCLUSION, STRICT_FROM_NEGATION,
-                          JUNCTION_DEFEASIBLE, JUNCTION_STRICT,
-                     NEW_TOPIC, OBJECTION_CONNECTIVES, OPENERS, PREFER_PREMISE, PREFER_RULE,
-                     PREMISE, RULE_ANAPHORA, RULE_REFERENCE, STRICT, UNDERCUT)
 
 TASK = "formalization"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"

@@ -6,12 +6,17 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, extract_answer
-from arggym.core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
-                            junctions_for)
-from arggym.core.curriculum import negated_branch
+from arggym.core.curriculum import (
+    JUNCTION_CAPS,
+    PROFILES,
+    junction_budget,
+    junctions_for,
+    negated_branch,
+    wants_ternary,
+)
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 
 TASK = "defeat_diagnosis"
@@ -121,7 +126,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     j_budget = min(3, junction_budget(level, JUNCTION_CAPS["defeat_diagnosis"]))
     j_routes = set(range(min(j_budget, n_routes))) if use_junction else set()
-    junction_at_route = -1
     for k in range(n_routes):
         kind = kind_seq[k]
         use_axiom = (level >= 4 and kind != UNDERMINE and k % 2 == 0
@@ -148,7 +152,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             j_here.add(depth // 2)
             if j_budget > n_routes and depth >= 5:
                 j_here.add(max(1, depth // 4))
-        junction_at = -1
         for j in range(depth):
             ridx[0] += 1
             nm = f"r_{ridx[0]}"

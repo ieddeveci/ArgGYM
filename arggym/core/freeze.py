@@ -135,7 +135,8 @@ def taskset_hash(rows: List[Dict[str, Any]]) -> str:
 
 
 def _versions() -> Dict[str, Any]:
-    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
 
     import arggym
     from arggym.core.serialize import THEORY_SCHEMA

@@ -6,14 +6,16 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from arggym.core.answers import ScoreResult, extract_answer
-from arggym.core.pairs import collect, pair_f1
-
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
-from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import randomize_rule_names, language_enrichment
+from arggym.aspic.engine import Operation
+from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.curriculum import (
+    PROFILES,
+    junctions_for,
+    negated_branch,
+)
+from arggym.core.invariants import language_enrichment, randomize_rule_names
+from arggym.core.pairs import collect, pair_f1
 
 TASK = "perturbation"
 HELD_FRAC = 0.35

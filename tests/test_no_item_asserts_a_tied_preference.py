@@ -25,7 +25,7 @@ from typing import List
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.export import ALL_ORDERINGS, _EXPORTABLE, _export_row, export_task
+from arggym.core.export import _EXPORTABLE, ALL_ORDERINGS, _export_row, export_task
 from arggym.core.scoring import parse_answer
 
 GRID = inspect.signature(export_task).parameters["levels"].default
