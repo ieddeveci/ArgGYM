@@ -269,9 +269,11 @@ async function grade(){
   if(g.efficiency!==undefined) h+=chip('efficiency '+g.efficiency.toFixed(3),'neu');
   if(g.precision!==undefined) h+=chip('P '+g.precision.toFixed(2)+' R '+g.recall.toFixed(2),'neu');
   if(g.exact_match!==undefined) h+=chip(g.exact_match?'exact match':'not exact', g.exact_match?'ok':'warn');
+  if(g.order_factor!==undefined) h+=chip(g.correct_order?'premise to claim':'out of order', g.correct_order?'ok':'bad');
   h+='<table><tr><th>diagnostic</th><th>value</th></tr>';
   ['n_lines','n_unparseable','n_used','minimum','n_predicted','n_gold',
-   'n_survivor_included','n_wrong_status','n_contradicted','n_missed','n_spurious','n_quoted','n_gold'].forEach(k=>{
+   'n_survivor_included','n_wrong_status','n_contradicted','n_missed','n_spurious','n_quoted','n_gold',
+   'n_rules_quoted','n_rules_after_their_antecedents'].forEach(k=>{
     h+='<tr><td class="desc">'+k+'</td><td>'+(dg[k]===undefined?'-':dg[k])+'</td></tr>'});
   if(dg.illegal&&dg.illegal.length) h+='<tr><td class="desc">illegal</td><td>'+dg.illegal.join(', ')+'</td></tr>';
   if(dg.contradicted&&dg.contradicted.length) h+='<tr><td class="desc">contradicted</td><td>'+dg.contradicted.join(', ')+'</td></tr>';
