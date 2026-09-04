@@ -190,7 +190,7 @@ PAGE = """
   <div id="status"></div>
   <div class="card"><h3>Question Prompt</h3><pre id="prompt">generate an item&hellip;</pre></div>
   <div class="card"><h3>Answer</h3>
-    <textarea id="ans" rows="7" placeholder="[answer]&#10;...&#10;[/answer]"></textarea>
+    <textarea id="ans" rows="7" placeholder="one directive per line"></textarea>
     <button onclick="grade()">Grade</button><div id="grade"></div></div>
   <div class="card"><h3>Theory structure</h3>
     <div class="row"><button onclick="toggleGraph()">show / hide</button>
@@ -267,9 +267,9 @@ async function grade(){
   let h=chip('score '+g.score.toFixed(3), g.score>=0.999?'ok':(g.score>0?'warn':'bad'))
        +chip(g.reason, g.reason==='ok'?'ok':'bad');
   if(dg.efficiency!==undefined) h+=chip('efficiency '+dg.efficiency.toFixed(3),'neu');
-  if(g.precision!==undefined) h+=chip('P '+g.precision.toFixed(2)+' R '+g.recall.toFixed(2),'neu');
-  if(g.exact_match!==undefined) h+=chip(g.exact_match?'exact match':'not exact', g.exact_match?'ok':'warn');
-  if(g.order_factor!==undefined) h+=chip(g.correct_order?'premise to claim':'out of order', g.correct_order?'ok':'bad');
+  if(dg.precision!==undefined) h+=chip('P '+dg.precision.toFixed(2)+' R '+dg.recall.toFixed(2),'neu');
+  if(dg.exact_match!==undefined) h+=chip(dg.exact_match?'exact match':'not exact', dg.exact_match?'ok':'warn');
+  if(dg.order_factor!==undefined) h+=chip(dg.correct_order?'premise to claim':'out of order', dg.correct_order?'ok':'bad');
   h+='<table><tr><th>diagnostic</th><th>value</th></tr>';
   ['n_lines','n_unparseable','n_used','minimum','n_predicted','n_gold',
    'n_survivor_included','n_wrong_status','n_contradicted','n_missed','n_spurious','n_quoted','n_gold',
@@ -312,7 +312,7 @@ def api_generate():
         ref = semquery.score(sq.reference, sq)
         return jsonify({"ok": True, "token": token, "task": semquery.TASK, "mode": SEMQUERY,
                         "level": sq.level, "ordering": sq.ordering, "prompt": sq.prompt,
-                        "reference": sq.reference, "ref_score": ref["score"],
+                        "reference": sq.reference, "ref_score": ref.score,
                         "min_directives": sq.metadata["n_queries"],
                         "goals": [{"claim": f"{c} under {s}", "current": "-",
                                    "want": sq.gold[(c, s)]} for c, s in sq.queries],
@@ -335,7 +335,7 @@ def api_generate():
         ref = statusquery.score(sq.reference, sq)
         return jsonify({"ok": True, "token": token, "task": statusquery.TASK, "mode": STATUSQUERY,
                         "level": sq.level, "ordering": sq.ordering, "prompt": sq.prompt,
-                        "reference": sq.reference, "ref_score": ref["score"],
+                        "reference": sq.reference, "ref_score": ref.score,
                         "min_directives": sq.metadata["n_queried"],
                         "goals": [{"claim": c, "current": "-", "want": sq.gold[c]}
                                   for c in sq.queried],
@@ -358,7 +358,7 @@ def api_generate():
         ref = formalize.score(fi.reference, fi)
         return jsonify({"ok": True, "token": token, "task": formalize.TASK, "mode": FORMALIZE,
                         "level": fi.level, "ordering": fi.ordering, "prompt": fi.prompt,
-                        "reference": fi.reference, "ref_score": ref["score"],
+                        "reference": fi.reference, "ref_score": ref.score,
                         "min_directives": fi.metadata["n_directives"],
                         "goals": [{"claim": l, "current": "-", "want": fi.gold_status[l]}
                                   for l in fi.queried],
@@ -381,7 +381,7 @@ def api_generate():
         ref = defeatdiag.score(dd.reference, dd)
         return jsonify({"ok": True, "token": token, "task": defeatdiag.TASK, "mode": DEFEATDIAG,
                         "level": dd.level, "ordering": dd.ordering, "prompt": dd.prompt,
-                        "reference": dd.reference, "ref_score": ref["score"],
+                        "reference": dd.reference, "ref_score": ref.score,
                         "min_directives": len(dd.diagnoses),
                         "goals": [{"claim": dd.claim, "current": dd.claim_status.lower(),
                                    "want": "diagnose every failure"}],
@@ -403,7 +403,7 @@ def api_generate():
         ref = claimchain.score(cc.reference, cc)
         return jsonify({"ok": True, "token": token, "task": claimchain.TASK, "mode": CLAIMCHAIN,
                         "level": cc.level, "ordering": cc.ordering, "prompt": cc.prompt,
-                        "reference": cc.reference, "ref_score": ref["score"],
+                        "reference": cc.reference, "ref_score": ref.score,
                         "min_directives": cc.metadata["line_length"],
                         "goals": [{"claim": cc.claim, "current": "justified",
                                    "want": "trace the line"}],
@@ -482,7 +482,7 @@ def api_generate():
         ref = perturb.score(pit.reference(), pit)
         return jsonify({"ok": True, "token": token, "task": perturb.TASK, "mode": PERTURB,
                         "level": pit.level, "ordering": pit.ordering, "prompt": pit.prompt,
-                        "reference": pit.reference(), "ref_score": ref["score"],
+                        "reference": pit.reference(), "ref_score": ref.score,
                         "min_directives": len(pit.gold),
                         "goals": [{"claim": k, "current": pit.before.get(k, "-"), "want": v}
                                   for k, v in sorted(pit.gold.items())],
@@ -565,11 +565,7 @@ def api_grade():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
-    # Four of the nine scorers return ScoreResult now; the rest still return
-    # dicts. Normalising here rather than in the scorers keeps the migration
-    # visible -- delete the branch once all twelve have moved.
-    return jsonify({"ok": True,
-                    "result": res.as_dict() if hasattr(res, "as_dict") else res})
+    return jsonify({"ok": True, "result": res.as_dict()})
 
 
 if __name__ == "__main__":

@@ -58,19 +58,19 @@ def _export_row(task: str, lv: int, o: str, s: int):
         it = claimchain.make_item(lv, s, o)
         if it is None:
             return None
-        return it, claimchain.score(it.reference, it)["score"], \
+        return it, claimchain.score(it.reference, it).score, \
             [{"claim": it.claim, "want": "trace the justifying line"}], it.metadata["line_length"]
     if task == "defeat_diagnosis":
         it = defeatdiag.make_item(lv, s, o)
         if it is None:
             return None
-        return it, defeatdiag.score(it.reference, it)["score"], \
+        return it, defeatdiag.score(it.reference, it).score, \
             [{"claim": it.claim, "want": it.claim_status}], len(it.diagnoses)
     if task == "formalization":
         it = formalize.make_item(lv, s, o)
         if it is None:
             return None
-        return it, formalize.score(it.reference, it)["score"], \
+        return it, formalize.score(it.reference, it).score, \
             [{"claim": l, "want": it.gold_status[l]} for l in it.queried], \
             it.metadata["n_directives"]
     if task == "semantics_query":
@@ -78,14 +78,14 @@ def _export_row(task: str, lv: int, o: str, s: int):
         it = semquery.make_item(lv, s, o)
         if it is None:
             return None
-        return it, semquery.score(it.reference, it)["score"], \
+        return it, semquery.score(it.reference, it).score, \
             [{"claim": f"{c} under {sm}", "want": it.gold[(c, sm)]} for c, sm in it.queries], \
             it.metadata["n_queries"]
     if task == "status_query":
         it = statusquery.make_item(lv, s, o)
         if it is None:
             return None
-        return it, statusquery.score(it.reference, it)["score"], \
+        return it, statusquery.score(it.reference, it).score, \
             [{"claim": c, "want": it.gold[c]} for c in it.queried], it.metadata["n_queried"]
     if task in (ATTACK, DEFENCE, MIXED):
         from arggym.tasks import attack_defense as attackdef
@@ -99,7 +99,7 @@ def _export_row(task: str, lv: int, o: str, s: int):
         it = perturb.make_item(lv, s, o)
         if it is None:
             return None
-        return it, perturb.score(it.reference(), it)["score"], \
+        return it, perturb.score(it.reference(), it).score, \
             [{"claim": k, "current": it.before.get(k, "-"), "want": v}
              for k, v in sorted(it.gold.items())], len(it.gold)
     return None

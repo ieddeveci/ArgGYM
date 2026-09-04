@@ -24,7 +24,7 @@ def test_every_cell_generates(cell):
 def test_reference_scores_one(cell, item):
     adapter = MODES[cell.mode]
     result = adapter.score(adapter.reference(item), item)
-    assert result["score"] == pytest.approx(1.0), f"{cell.short}: {result['reason']}"
+    assert result.score == pytest.approx(1.0), f"{cell.short}: {result.reason}"
 
 
 def test_generation_is_deterministic(cell, item):

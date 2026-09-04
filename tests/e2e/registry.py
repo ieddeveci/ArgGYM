@@ -25,40 +25,15 @@ UNPARSEABLE_LINES = "unparseable_lines"
 UNPARSEABLE_TOKENS = "unparseable_tokens"
 
 
-def as_dict(result) -> Dict:
-    """One shape for the e2e suite while the twelve scorers are mid-migration.
-
-    The shared construction scorer returns a `ScoreResult`; the other six still return a
-    dict of their own keys. Delete this once every scorer returns `ScoreResult`.
-    """
-    return result.as_dict() if isinstance(result, ScoreResult) else result
-
-
 @dataclass(frozen=True)
 class Adapter:
     family: str
     make: Callable[[int, int, str], Any]          # (level, seed, ordering) -> item | None
     reference: Callable[[Any], str]
-    score: Callable[[str, Any], Dict]
+    score: Callable[[str, Any], ScoreResult]
     theory_ops: Callable[[Any], List[Operation]]  # the theory the prompt shows
     prompt: Callable[[Any], str]
     junk_reason: str                               # UNPARSEABLE_LINES or UNPARSEABLE_TOKENS
-
-    def __post_init__(self):
-        """`adapter.score` always yields a mapping.
-
-        The scorers are mid-migration to `ScoreResult`, so a task returns either shape.
-        Normalizing here keeps every test written against one shape and means converting
-        a task module needs no edit in this file.
-        """
-        object.__setattr__(self, "score", _as_mapping(self.score))
-
-
-def _as_mapping(fn: Callable[[str, Any], Any]) -> Callable[[str, Any], Dict]:
-    def scored(text: str, item: Any) -> Dict:
-        result = fn(text, item)
-        return result.as_dict() if isinstance(result, ScoreResult) else result
-    return scored
 
 
 def _attack_defense(mode: str) -> Adapter:
@@ -66,7 +41,7 @@ def _attack_defense(mode: str) -> Adapter:
         family=CONSTRUCTION,
         make=lambda level, seed, ordering: attack_defense.make_item(level, seed, ordering, mode),
         reference=lambda it: it.reference,
-        score=lambda text, it: as_dict(score_item(text, it.as_score_input())),
+        score=lambda text, it: score_item(text, it.as_score_input()),
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
         junk_reason=UNPARSEABLE_LINES)
@@ -78,7 +53,7 @@ def _counter_argument(allow_strict: bool) -> Adapter:
         make=lambda level, seed, ordering: counter_argument.make_item(
             level, seed, ordering, allow_strict=allow_strict),
         reference=lambda it: it.reference,
-        score=lambda text, it: as_dict(score_item(text, counter_argument.as_score_input(it))),
+        score=lambda text, it: score_item(text, counter_argument.as_score_input(it)),
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
         junk_reason=UNPARSEABLE_LINES)
@@ -130,7 +105,7 @@ MODES: Dict[str, Adapter] = {
         family=CONSTRUCTION,
         make=preference_construction.make_item,
         reference=lambda it: it.reference,
-        score=lambda text, it: as_dict(score_item(text, it.as_score_input())),
+        score=lambda text, it: score_item(text, it.as_score_input()),
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
         junk_reason=UNPARSEABLE_LINES),
