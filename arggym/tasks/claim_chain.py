@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.curriculum import (junction_budget, JUNCTION_CAPS, PROFILES, wants_ternary,
                             junctions_for, negated_branch)
 from arggym.core.invariants import (split_atoms_and_rules, randomize_rule_names, negation_gadget,
@@ -310,7 +311,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     return CCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         line_ops=line_ops, ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(ref_lines) + "\n[/answer]",
+        reference="\n".join(ref_lines),
         metadata={
             "chain_depth": depth, "n_decoys": n_decoy, "tower_height_true": tower_true,
             "decoy_defeat_points": [d["defeat_at"] for d in decoy_info],
@@ -328,11 +329,7 @@ def _render_prompt(theory: str, claim: str, ordering: str) -> str:
             f"The claim {claim} is justified.\n"
             f"Write all and only the directives that form the argumentation line justifying {claim}, "
             "in order from the premise to the claim.\n\n"
-            "Answer format: one directive per line, copied exactly as it appears above, between "
-            "[answer] and [/answer].")
-
-
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+            "Answer format: one directive per line, copied exactly as it appears above.")
 
 
 def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:
@@ -359,12 +356,9 @@ def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:
     return ok, n_rules
 
 
-def score(answer_text: str, item: CCItem) -> Dict:
+def score(answer_text: str, item: CCItem) -> ScoreResult:
     diag: Dict = {"n_quoted": 0, "n_gold": len(item.line_ops), "extra": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = extract_answer(answer_text)
     quoted = re.findall(r"\[[^\]]*\]", body)
     if not quoted:
         quoted = [l.strip() for l in body.splitlines() if l.strip()]
@@ -375,11 +369,10 @@ def score(answer_text: str, item: CCItem) -> Dict:
         if junk:
             diag["n_unparseable"] = len(junk)
             diag["junk_tokens"] = junk[:6]
-            return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
-                    "diagnostics": diag}
+            return ScoreResult(0.0, False, f"unparseable_tokens:{len(junk)}", diag)
     diag["n_quoted"] = len(quoted)
     if not quoted:
-        return {"score": 0.0, "reason": "empty_answer", "diagnostics": diag}
+        return ScoreResult(0.0, False, "empty_answer", diag)
 
     gold_lines = [render_op(o) for o in item.line_ops]
     gold_set, pred_set = set(gold_lines), set(quoted)
@@ -416,14 +409,18 @@ def score(answer_text: str, item: CCItem) -> Dict:
                 justifies = False
     diag["behavioural_in_theory"] = justifies
 
-    return {"score": round(f1, 4), "reason": "ok",
-            "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
-            "exact_match": pred_set == gold_set,
-            "correct_order": order_factor == 1.0,
-            "matches_reference_order": quoted == gold_lines,
-            "order_factor": round(order_factor, 4),
-            "behaviourally_justifies": justifies,
-            "diagnostics": diag}
+    # "All and only the directives" is set equality; "in order from the premise to the
+    # claim" is the order constraint. `behaviourally_justifies` is deliberately out of the
+    # conjunction: it is computed on the resolved lines only, so it holds for an answer
+    # that also carries junk (docs/dataset-contract.md, section 5).
+    exact_match = pred_set == gold_set
+    correct_order = order_factor == 1.0
+    diag.update(f1=round(f1, 4), precision=round(precision, 4), recall=round(recall, 4),
+                exact_match=exact_match, correct_order=correct_order,
+                matches_reference_order=quoted == gold_lines,
+                order_factor=round(order_factor, 4),
+                behaviourally_justifies=justifies)
+    return ScoreResult(round(f1, 4), exact_match and correct_order, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",

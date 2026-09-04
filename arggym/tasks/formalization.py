@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.scoring import ARROW
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
 from arggym.core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
@@ -348,7 +349,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     prompt = _render_prompt(nl, concl, ordering, queried)
     return FItem(
         prompt=prompt, nl_text=nl, reference_ops=base,
-        reference="[answer]\n" + "\n".join(render_op(o) for o in base) + "\n[/answer]",
+        reference="\n".join(render_op(o) for o in base),
         queried=queried, gold_status=gold, ordering=ordering, level=level,
         metadata={
             "n_directives": len(base), "n_units": n_units,
@@ -371,10 +372,9 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -
             "[prefer_rule: r1 > r2], [prefer_premise: x > y]. Negation is written -x. "
             "Rule names are yours to choose: a name starts with a letter and continues with "
             "letters, digits or underscores, and is separated from the kind by a space.\n\n"
-            "Answer format: one directive per line, between [answer] and [/answer].")
+            "Answer format: one directive per line.")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _P = re.compile(r"^\[(premise|axiom):\s*(-?\w+)\]$")
 # The same shape the shared scorer uses: a name that starts with a letter, and the arrow
 # that kind uses. Written `[\w]+` with either arrow, it accepted `_x` and `1n` as names and
@@ -385,11 +385,8 @@ _F = re.compile(r"^\[prefer_(rule|premise):\s*(-?\w+)\s*>\s*(-?\w+)\]$")
 
 
 def parse(text: str) -> Tuple[List[Operation], int]:
-    m = _ANSWER.search(text or "")
-    if m is None:
-        return [], -1
     ops, bad = [], 0
-    body = m.group(1)
+    body = extract_answer(text)
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
     stray = [t for t in leftover.split()
@@ -417,24 +414,22 @@ def parse(text: str) -> Tuple[List[Operation], int]:
     return ops, bad
 
 
-def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
+def score(answer_text: str, item: FItem, strict_parse: bool = True) -> ScoreResult:
     diag: Dict = {"n_parsed": 0, "n_unparseable": 0, "behavioural": None,
                   "gold_status": item.gold_status}
     ops, bad = parse(answer_text)
-    if bad < 0:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     diag["n_parsed"], diag["n_unparseable"] = len(ops), bad
     if strict_parse and bad:
-        return {"score": 0.0, "reason": f"unparseable_lines:{bad}", "diagnostics": diag}
+        return ScoreResult(0.0, False, f"unparseable_lines:{bad}", diag)
     if not ops:
-        return {"score": 0.0, "reason": "no_directives", "diagnostics": diag}
+        return ScoreResult(0.0, False, "no_directives", diag)
 
     ordered = [o for o in ops if o.kind in ("premise", "axiom")] + \
               [o for o in ops if o.kind in ("defeasible", "strict")] + \
               [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
     got = status_map(ordered, item.queried, item.ordering)
     if not got:
-        return {"score": 0.0, "reason": "engine_rejected", "diagnostics": diag}
+        return ScoreResult(0.0, False, "engine_rejected", diag)
     gold_pairs = {(l, item.gold_status[l]) for l in item.queried}
     pred_pairs = {(l, got[l]) for l in item.queried if l in got and got[l] != "UNSATISFIABLE"}
     tp = len(gold_pairs & pred_pairs)
@@ -479,13 +474,17 @@ def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
         total = round(0.4 * behavioural + 0.6 * shape, 4)
     else:
         total = round(0.25 * behavioural + 0.35 * shape + 0.40 * type_score, 4)
-    return {"score": total, "reason": "ok",
-            "directives_f1": round(shape, 4),
-            "directives_correct": inter, "directives_gold": sum(gset.values()),
-            "directives_written": sum(pset.values()),
-            "type_score": None if type_score is None else round(type_score, 4),
-            "behavioural": round(behavioural, 4), "shape_f1": round(shape, 4),
-            "exact_behaviour": behavioural >= 0.999, "diagnostics": diag}
+    # Success is behavioural equivalence alone. The prompt states its own success
+    # condition behaviourally ("Under a correct formalization: ..."), so a theory that
+    # reproduces every queried status is what was asked for, whatever names and groupings
+    # it used; requiring shape_f1 == 1.0 would demand the reference's exact directive
+    # multiset (docs/dataset-contract.md, section 5).
+    exact_behaviour = behavioural >= 0.999
+    diag.update(directives_f1=round(shape, 4), directives_correct=inter,
+                directives_gold=sum(gset.values()), directives_written=sum(pset.values()),
+                type_score=None if type_score is None else round(type_score, 4),
+                shape_f1=round(shape, 4), exact_behaviour=exact_behaviour)
+    return ScoreResult(total, exact_behaviour, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,

@@ -12,8 +12,11 @@ STATUSES = ("justified", "overruled", "undecided")
 
 
 def body_lines(reference: str):
-    # A reference is stored raw for the construction tasks and still wrapped for the
-    # others, and `extract_answer` reads both.
+    """The reference's lines.
+
+    Every reference is stored raw now. `extract_answer` is still the way in,
+    because a test may hand this a model answer that arrived wrapped.
+    """
     return [l for l in extract_answer(reference).splitlines() if l.strip()]
 
 

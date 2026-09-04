@@ -58,7 +58,7 @@ def test_some_claim_is_answered_differently_by_two_semantics(level, ordering, se
 def test_the_reference_still_scores_itself(level, ordering, seed):
     it = sq.make_item(level, seed, ordering)
     assert it is not None
-    assert sq.score(it.reference, it)["score"] == pytest.approx(1.0)
+    assert sq.score(it.reference, it).score == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("level", GRID)

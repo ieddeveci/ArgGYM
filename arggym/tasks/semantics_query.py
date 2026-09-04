@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.pairs import collect, pair_f1
 
 from arggym.aspic.engine import Operation, UNSATISFIABLE
@@ -475,7 +476,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         prompt=_render_prompt(render_ops(base), queries, ordering),
         theory_text=render_ops(base), base_ops=base, queries=queries, gold=gold,
         ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         metadata={"n_items": len(base), "n_queries": len(queries),
                   "n_clusters": n_cluster, "semantics": list(sems),
                   "n_diverging_claims": len(diverging),
@@ -493,21 +494,16 @@ def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: st
             + ("Under stable semantics, if the theory has no stable extension, answer "
                "`no stable extension`.\n" if any(s == STABLE for _, s in queries) else "")
             + "\n"
-            "Answer format: one line per query, written as `claim under semantics: status`, "
-            "between [answer] and [/answer].")
+            "Answer format: one line per query, written as `claim under semantics: status`.")
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _PAIR = re.compile(r"(-?\w+)\s+under\s+([a-z ]+?)\s*[:=]\s*"
                    r"(justified|overruled|undecided|no stable extension)\b(?!\w)", re.I)
 
 
-def score(answer_text: str, item: SemItem) -> Dict:
+def score(answer_text: str, item: SemItem) -> ScoreResult:
     diag: Dict = {"n_gold": len(item.gold), "wrong": [], "missing": [], "contradicted": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+    body = extract_answer(answer_text)
     pred = collect(((claim.lower(), re.sub(r"\s+semantics$", "", sem.strip().lower())),
                     st.upper().replace(" ", "_"))
                    for claim, sem, st in _PAIR.findall(body))
@@ -516,9 +512,9 @@ def score(answer_text: str, item: SemItem) -> Dict:
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
     if junk:
         diag["junk_tokens"] = junk[:6]
-        return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}", "diagnostics": diag}
+        return ScoreResult(0.0, False, f"unparseable_tokens:{len(junk)}", diag)
     if not pred:
-        return {"score": 0.0, "reason": "no_parseable_pairs", "diagnostics": diag}
+        return ScoreResult(0.0, False, "no_parseable_pairs", diag)
 
     gold = {(c, s.lower()): v for (c, s), v in item.gold.items()}
     r = pair_f1(pred, gold)
@@ -528,9 +524,9 @@ def score(answer_text: str, item: SemItem) -> Dict:
     diag["missing"] = sorted(f"{c} under {s}" for (c, s) in gold if (c, s) not in pred)[:6]
     diag["contradicted"] = [f"{c} under {s}" for c, s in r.contradicted][:6]
     diag["n_correct"] = r.tp
-    return {"score": round(r.f1, 4), "reason": "ok", "f1": round(r.f1, 4),
-            "precision": round(r.precision, 4), "recall": round(r.recall, 4),
-            "exact_match": r.exact_match, "diagnostics": diag}
+    diag.update(f1=round(r.f1, 4), precision=round(r.precision, 4),
+                recall=round(r.recall, 4), exact_match=r.exact_match)
+    return ScoreResult(round(r.f1, 4), r.exact_match, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
