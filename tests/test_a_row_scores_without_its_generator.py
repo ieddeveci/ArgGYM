@@ -223,3 +223,35 @@ def test_the_same_holds_a_level_up(task, ordering):
     item, row = cell(task, ordering, level=6)
     for text in [row["reference_answer"], *wrong_answers(row["reference_answer"]).values()]:
         assert rows.score(text, row) == live_score(task, item, text)
+
+
+def test_a_row_built_against_another_engine_refuses_to_score():
+    """Contract section 11: a frozen row is re-scorable against the pinned engine.
+
+    Scoring the six engine-checked tasks runs PyArg at *scoring* time, not only
+    at generation time, so a different engine would return a quietly different
+    number. Refusing is the only honest reading.
+    """
+    import arggym
+    from arggym.core.rows import EngineMismatch, score
+
+    entry = arggym.create("status_query", level=3,
+                          ordering="last_link_elitist", size=1)[0]
+    assert entry["metadata"]["pyarg_version"]
+    assert score(entry["reference_answer"], entry).score == 1.0
+
+    entry["metadata"]["pyarg_version"] = "0.0.0-not-a-release"
+    with pytest.raises(EngineMismatch, match="0.0.0-not-a-release"):
+        score(entry["reference_answer"], entry)
+
+
+def test_a_row_from_before_the_check_still_scores():
+    # Refusing a row that simply predates the field would break every taskset
+    # frozen before it existed, for no gain.
+    import arggym
+    from arggym.core.rows import score
+
+    entry = arggym.create("status_query", level=3,
+                          ordering="last_link_elitist", size=1)[0]
+    entry["metadata"].pop("pyarg_version")
+    assert score(entry["reference_answer"], entry).score == 1.0

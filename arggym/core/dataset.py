@@ -30,6 +30,15 @@ from arggym.core.rows import score as score_row
 from arggym.core.serialize import THEORY_SCHEMA, ops_to_json
 
 
+def _pyarg_version() -> Optional[str]:
+    from importlib.metadata import PackageNotFoundError, version as _v
+
+    try:
+        return _v("python-argumentation")
+    except PackageNotFoundError:  # pragma: no cover - depends on the install
+        return None
+
+
 class BuildFailed(RuntimeError):
     """A cell produced no item at this seed."""
 
@@ -84,9 +93,11 @@ class TaskDataset:
             "ordering": self.ordering,
             "profile": self.profile,
             "theory_schema": THEORY_SCHEMA,
+            # Scoring the engine-checked tasks runs PyArg, so a row is
+            # re-scorable against the pinned engine and no other.
+            "pyarg_version": _pyarg_version(),
             "checker": self.spec.checker,
             "answer_shape": self.spec.answer_shape,
-            "stats": dict(getattr(item, "metadata", {}) or {}),
         }
         theory = [getattr(item, f) for f in self.spec.theory_fields]
         for f, ops in zip(self.spec.theory_fields, theory):

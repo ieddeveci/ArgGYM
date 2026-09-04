@@ -96,9 +96,17 @@ class TaskSpec:
         return mod.make_item(level, seed, ordering, **{**self.variant, **kwargs})
 
 
+#: On every task. `item.metadata` is the generator's own statistics, and most of
+#: it describes the reference: defeat_diagnosis records the gold status the
+#: answer must state, status_query the exact label distribution, and five tasks
+#: the answer's length. An allowlist of the safe keys would leak the first one
+#: somebody forgot, so the whole blob is gold by default.
+_STATS = ("metadata", PLAIN)
+
+
 def _spec(name, module, checker, shape, theory=("base_ops",), state=(), gold=(),
           scorer=MODULE, policy=None, **variant) -> Tuple[str, TaskSpec]:
-    return name, TaskSpec(name, module, checker, shape, variant, theory, state, gold,
+    return name, TaskSpec(name, module, checker, shape, variant, theory, state, tuple(gold) + (_STATS,),
                           scorer, dict(policy or {}))
 
 

@@ -34,12 +34,16 @@ from __future__ import annotations
 
 from importlib import import_module
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.engine import Operation
 from arggym.core import registry
 from arggym.core.answers import ScoreResult
 from arggym.core.serialize import check_schema, ops_from_json, ops_to_json
+
+
+class EngineMismatch(RuntimeError):
+    """A row was built against a different engine than this one."""
 
 
 class MissingField(KeyError):
@@ -196,6 +200,31 @@ def row_task(entry: Dict[str, Any]) -> str:
     return name
 
 
+def check_engine(want: Optional[str], task: str) -> None:
+    """Refuse a row this engine would score differently.
+
+    Scoring the six engine-checked tasks runs `python-argumentation` at scoring
+    time, not only at generation time, so a frozen row is re-scorable against
+    the pinned engine and no other. Returning a quietly different number is the
+    failure this exists to prevent (`docs/dataset-contract.md` section 11).
+
+    A row without the field predates it and is scored without the check.
+    """
+    if want is None:
+        return
+    from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+    try:
+        got = _pkg_version("python-argumentation")
+    except PackageNotFoundError:  # pragma: no cover - depends on the install
+        return
+    if got != want:
+        raise EngineMismatch(
+            f"{task}: this row was built against python-argumentation {want} and "
+            f"this environment has {got}. The score would be computed by a "
+            f"different engine than the one that verified the gold.")
+
+
 def score_input(entry: Dict[str, Any]) -> Tuple[registry.TaskSpec, Any]:
     """The row as the object its scorer takes.
 
@@ -209,6 +238,7 @@ def score_input(entry: Dict[str, Any]) -> Tuple[registry.TaskSpec, Any]:
     spec = registry.get(task)
     meta = entry["metadata"]
     check_schema(_require(meta, "theory_schema", task, ""))
+    check_engine(meta.get("pyarg_version"), task)
 
     theory: Dict[str, List[Operation]] = {
         f: ops_from_json(_require(meta, f, task, "")) for f in spec.theory_fields}
