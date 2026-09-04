@@ -17,7 +17,7 @@ from arggym.core.prompting import render
 from arggym.core.curriculum import PROFILES, ATTACK, DEFENCE, MIXED, spec_for
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
 from arggym.core.answers import ScoreResult
-from arggym.core.scoring import score_item
+from arggym.core.scoring import score_item, subgoals_from
 
 TASK = "attack_defense"
 _L = "abcdefghijklmnopqrstuvwxy"
@@ -60,16 +60,9 @@ class Item:
 
     @property
     def subgoals(self) -> List[str]:
-        out = []
-        for g in self.goals:
-            if g.get("want") != "OVERRULED":
-                continue
-            for o in self.base_ops:
-                if o.kind in ("defeasible", "strict") and o.consequent == g["claim"]:
-                    for a in (o.antecedents or ()):
-                        if a not in out:
-                            out.append(a)
-        return out
+        # Derived, so it is never written to a row: `core/rows.py` calls the
+        # same function when it scores one.
+        return subgoals_from(self.goals, self.base_ops)
 
 
 def _ops_ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:

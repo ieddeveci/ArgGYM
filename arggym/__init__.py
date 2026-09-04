@@ -11,6 +11,11 @@ pulling a task module, so `import arggym` stays cheap.
     text = my_model(entry["question"])  # your prompt template, your delimiters
     result = ds.score(arggym.extract_answer(text), entry)
 
+A row carries everything its scorer reads, so a line read back from a frozen
+JSONL scores without a dataset object at all:
+
+    result = arggym.score_row(text, json.loads(line))
+
 `extract_answer` is a convenience, not a contract: ArgGYM accepts a bare answer
 body, so an evaluator that already knows where its answer ends can skip it.
 See `docs/dataset-contract.md`.
@@ -22,6 +27,7 @@ from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.dataset import (BuildFailed, ConcatDataset, TaskDataset,
                                  create, from_spec)
 from arggym.core.registry import TaskSpec, get as get_task, task_names
+from arggym.core.rows import MissingField, score as score_row
 from arggym.core.serialize import THEORY_SCHEMA, ops_from_json, ops_to_json
 from arggym.core.spec import SeedPolicy, TasksetSpec, load as load_spec
 
@@ -32,7 +38,7 @@ __all__ = [
     # items
     "create", "from_spec", "TaskDataset", "ConcatDataset", "BuildFailed",
     # answers
-    "extract_answer", "ScoreResult",
+    "extract_answer", "ScoreResult", "score_row", "MissingField",
     # tasksets
     "TasksetSpec", "SeedPolicy", "load_spec",
     # serialization
