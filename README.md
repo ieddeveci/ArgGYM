@@ -1,24 +1,104 @@
 # ArgGYM
 
-A generator and grader for defeasible-argumentation tasks in ASPIC+. Every item is built by
-construction and checked against the engine, so the gold answer is never asserted, it is verified.
+A procedural benchmark and RL environment for defeasible reasoning, over ASPIC+ under grounded
+semantics. Every item is built by construction and checked against the engine, so the gold answer is
+never asserted, it is verified.
 
-Nine tasks, twelve modes, fifteen levels, two strength orderings.
+Twelve tasks, five evaluated levels, four strength orderings. The generator is the product; a frozen
+taskset is one dump of it.
 
 ```
-uv sync                           # install the package and its dependencies
-uv run arggym export-all          # generate every task as JSONL into data/
-uv run arggym export <task>       # generate one
-uv run arggym tasks               # list the exportable task names
-uv run arggym inspect             # read items in the browser
+pip install arggym
 ```
 
-`make setup`, `make test`, `make export` and `make inspect` wrap the common ones; `make` lists them.
+## Evaluate a model
 
-Without uv, `pip install -e .` then `arggym export-all`. The package also runs uninstalled from a
-checkout as `python -m arggym`, given `python-argumentation==2.0.2` and `flask`.
+```python
+import arggym
+
+ds = arggym.create("counter_argument", level=6,
+                   ordering="weakest_link_elitist", size=50)
+
+for entry in ds:
+    text = my_model(entry["question"])       # your template, your delimiters
+    result = ds.score(my_extract(text), entry)
+    print(result.score, result.success, result.reason)
+```
+
+ArgGYM owns **what a legal answer is**; you own **how it is delivered**. Nothing in the question names
+a delimiter, so wrap the answer in `<answer>` tags, a JSON field, a tool call, or nothing at all.
+`arggym.extract_answer(text)` is offered as a default, not a contract.
+
+`ds.score_answer(text, entry)` returns the float alone, so a reasoning-gym-shaped harness or an RL
+loop works unchanged.
+
+## Freeze a taskset
+
+```
+uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+```
+
+`tasksets/standard.yaml` is the evaluated grid, as an input you can check in, cite and diff. The
+manifest records the arggym and engine versions, the seeds used, and every seed skipped with its
+reason — so two exports can be compared by what they skipped, not only by their hash.
+
+## A row
+
+```jsonc
+{
+  "id": "status_query/L9/weakest_link_elitist/s0",
+  "task": "status_query",
+  "question": "<theory> <ask> <notation>",
+  "reference_answer": "<one correct answer>",
+  "metadata": {
+    "source_dataset": "status_query", "seed": 0, "level": 9,
+    "ordering": "weakest_link_elitist",
+    "checker": "graded", "answer_shape": "label_map",
+    "base_ops": [ ... ],     // the theory, so the row scores without the generator
+    "state":    { ... },     // what the question already gives away
+    "gold":     { ... }      // everything that gives the answer away
+  }
+}
+```
+
+A row scores on its own: `arggym.score_row(text, row)` needs no dataset object and no generator, so
+stored model outputs can be re-scored later. **Hide `metadata.gold` from the model and you have hidden
+the answer** — that is one rule, and a test enforces it across all twelve tasks.
+
+Six tasks have no oracle at all. `preference_construction`, both `counter_argument` variants,
+`attack`, `defence` and `attack_defense` are graded by running the engine on theory + answer, so any
+directive set reaching the goals is correct. `metadata.checker` says which kind a row is; comparing
+a model's text to `reference_answer` is wrong on those six.
+
+## Reading a score
+
+Per task, never as an unweighted mean, and against the chance floor. `docs/dataset-card.md` says why,
+and what a high score does *not* license.
+
+## Documentation
+
+| | |
+|---|---|
+| `docs/dataset-contract.md` | the interface, and why each part is the way it is |
+| `docs/dataset-card.md` | what the benchmark measures and what a score licenses |
+| `NOTATION.md` | the DSL, the semantics conventions, the answer formats |
+
+## Install
+
+```
+pip install arggym                # the library: generate, render, parse, score
+pip install "arggym[inspector]"   # + the browser inspector
+pip install "arggym[evals]"       # + the reference evaluator
+```
+
+A bare install pulls no web framework. From a checkout, `uv sync` then `uv run pytest`; `make` lists
+the shortcuts.
 
 ---
+
+# How it is built
+
+The rest of this file is the architecture tour, for anyone changing the generator.
 
 ## `arggym/aspic/` — the engine layer
 
@@ -44,7 +124,13 @@ rewriting these three files.
 | `curriculum.py` | Level shapes and the measured floors behind them. The numbers here were derived from generation sweeps, not chosen. |
 | `prompting.py` | The permitted-directive block, which states what `scoring.py` enforces: the legal forms, the naming rule, the antecedent rule and the minimality factor. It is identical on every item of a variant, so its content leaks nothing about the theory. `attack_defense` renders its whole prompt here; `counter_argument` renders the block. |
 | `nlforms.py` | Eighty-nine natural-language surface forms for `formalization`, taken from the ASPIC+ and argumentation-schemes literature. The giveaway words are deliberately shared between the constructs they used to separate. |
-| `export.py` | JSONL export with a manifest carrying `taskset_hash`, item counts, orderings, Python version and the minimality caveat. The hash covers prompt, reference and metadata together, so an edit that changes gold produces a new hash rather than silently overwriting a frozen taskset. |
+| `registry.py` | The task table: for each of the twelve, its module, its variant, how its answers are checked, and which item fields a row carries. Data rather than a branch, so adding a task cannot silently miss the export. |
+| `dataset.py` | `create(task, level, ordering, size)`. The index **is** the seed and a failed build raises, so an item depends on its coordinates and nothing else. |
+| `rows.py` | An item into a row and back. What makes a frozen line scorable without the generator that wrote it. |
+| `spec.py`, `freeze.py` | A taskset is a spec file. `freeze` fills each cell to the size asked for, refuses a cell it cannot fill, and records every skipped seed with its reason. |
+| `answers.py` | One answer extractor and one `ScoreResult`. Delimiters are accepted and never required. |
+| `serialize.py` | Operations to JSON and back, with `theory_schema` versioned apart from the package. |
+| `export.py` | The previous per-task export, kept while callers move to `freeze`. |
 
 ---
 
