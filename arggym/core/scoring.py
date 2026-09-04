@@ -155,6 +155,26 @@ def build_framework(base_ops: Sequence[Operation], kept: Sequence[Operation],
     return fw, reasons, details
 
 
+def subgoals_from(goals: Sequence[Dict], base_ops: Sequence[Operation]) -> List[str]:
+    """The literals an OVERRULED goal rests on.
+
+    Partial credit for the mixed task uses these: an answer that defeated the
+    supports of a claim without overruling the claim itself has done part of the
+    work. It is a function of the goals and the theory, so a row records neither
+    -- it recomputes here, and a stored copy cannot drift from the definition.
+    """
+    out: List[str] = []
+    for g in goals:
+        if g.get("want") != "OVERRULED":
+            continue
+        for o in base_ops:
+            if o.kind in ("defeasible", "strict") and o.consequent == g["claim"]:
+                for a in (o.antecedents or ()):
+                    if a not in out:
+                        out.append(a)
+    return out
+
+
 def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> ScoreResult:
     """Score one construction answer.
 

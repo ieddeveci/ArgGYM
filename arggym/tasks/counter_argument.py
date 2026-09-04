@@ -105,6 +105,17 @@ class CAItem:
     seed_lit: str
     metadata: Dict = field(default_factory=dict)
 
+    @property
+    def goals(self) -> List[Dict[str, str]]:
+        """What the prompt asks for, in the shape every other task states it.
+
+        The question names both halves -- make -target justified and target
+        overruled -- so the pair is the task's goals rather than a scorer's
+        private restatement of them.
+        """
+        return [{"claim": "-" + self.target, "want": "JUSTIFIED"},
+                {"claim": self.target, "want": "OVERRULED"}]
+
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           allow_strict: bool = False) -> Optional[CAItem]:
@@ -427,8 +438,7 @@ def _render_prompt(theory: str, target: str, ordering: str,
 
 def as_score_input(it: "CAItem") -> Dict:
     return {"base_ops": it.base_ops, "ordering": it.ordering,
-            "goals": [{"claim": "-" + it.target, "want": "JUSTIFIED"},
-                      {"claim": it.target, "want": "OVERRULED"}],
+            "goals": it.goals,
             "min_directives": it.min_directives,
             "allow_strict": it.metadata.get("allow_strict", False)}
 

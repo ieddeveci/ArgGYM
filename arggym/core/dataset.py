@@ -25,6 +25,8 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from arggym.core import registry
 from arggym.core.answers import ScoreResult
+from arggym.core.rows import encode_fields
+from arggym.core.rows import score as score_row
 from arggym.core.serialize import THEORY_SCHEMA, ops_to_json
 
 
@@ -65,13 +67,13 @@ class TaskDataset:
         return self.entry(item, seed, idx)
 
     def entry(self, item: Any, seed: int, index: int) -> Dict[str, Any]:
-        """One item as the row a harness reads."""
-        gold: Dict[str, Any] = {}
-        for f in self.spec.gold_op_fields:
-            ops = getattr(item, f, None)
-            if ops is not None:
-                gold[f] = ops_to_json(ops)
+        """One item as the row a harness reads.
 
+        Everything a scorer reads is written here, so `score` never needs the
+        item back. Which fields those are is the registry's table, and the split
+        between `state` and `gold` is what makes "do not show the model
+        `metadata.gold`" one rule rather than twelve.
+        """
         meta: Dict[str, Any] = {
             # The registered task name, not the package: a composite dispatches
             # scoring on this, so it has to be a registry key.
@@ -86,12 +88,12 @@ class TaskDataset:
             "answer_shape": self.spec.answer_shape,
             "stats": dict(getattr(item, "metadata", {}) or {}),
         }
-        for f in self.spec.theory_fields:
-            ops = getattr(item, f, None)
-            if ops is not None:
-                meta[f] = ops_to_json(ops)
-        if gold:
-            meta["gold"] = gold
+        theory = [getattr(item, f) for f in self.spec.theory_fields]
+        for f, ops in zip(self.spec.theory_fields, theory):
+            meta[f] = ops_to_json(ops)
+        base = theory[0] if theory else []
+        meta["state"] = encode_fields(self.spec.state_fields, item, base)
+        meta["gold"] = encode_fields(self.spec.gold_fields, item, base)
 
         ref = item.reference
         return {
@@ -103,9 +105,13 @@ class TaskDataset:
         }
 
     def score(self, answer: str, entry: Dict[str, Any]) -> ScoreResult:
-        raise NotImplementedError(
-            "scoring from a row alone lands with the value seam; "
-            "score through the task module until then")
+        """Score an answer against a row, not against this dataset.
+
+        The row says which task it belongs to, so a line read back from a
+        frozen JSONL scores the same whichever dataset object is holding the
+        method, and a concatenation scores each of its parts correctly.
+        """
+        return score_row(answer, entry)
 
     def score_answer(self, answer: str, entry: Dict[str, Any]) -> float:
         return self.score(answer, entry).score
