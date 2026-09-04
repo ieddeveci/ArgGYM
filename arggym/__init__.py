@@ -25,6 +25,7 @@ __version__ = "2.0.0"
 
 from arggym.core.answers import ScoreResult, extract_answer
 from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
+from arggym.core.floors import corrected, floors
 from arggym.core.registry import TaskSpec, task_names
 from arggym.core.registry import get as get_task
 from arggym.core.rows import MissingField
@@ -40,7 +41,9 @@ __all__ = [
     # items
     "create", "from_spec", "TaskDataset", "ConcatDataset", "BuildFailed",
     # answers
-    "extract_answer", "ScoreResult", "score_row", "MissingField",
+    "extract_answer", "ScoreResult", "score_row",
+    # reading a score
+    "floors", "corrected", "score_row", "MissingField",
     # tasksets
     "TasksetSpec", "SeedPolicy", "load_spec",
     # serialization

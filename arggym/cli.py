@@ -76,6 +76,33 @@ def freeze(
 
 
 @app.command()
+def floors(
+    taskset: Path = typer.Argument(..., help="A frozen taskset JSONL."),
+) -> None:
+    """What a constant answer scores on each task.
+
+    A score means nothing without the number an uninformed answer gets, and a
+    floor is a property of the scorer, so it moves whenever scoring policy does.
+    """
+    import json
+
+    from arggym.core.floors import floors as measure
+
+    rows = []
+    with open(taskset) as f:
+        first = json.loads(f.readline())
+        if "__manifest__" not in first:
+            rows.append(first)
+        rows.extend(json.loads(line) for line in f)
+
+    typer.echo(f"{'task':26s} {'n':>4s} {'floor':>7s}  best constant answer")
+    for task, v in measure(rows).items():
+        typer.echo(f"{task:26s} {v['n']:4d} {v['floor']:7.3f}  {v['strategy']}")
+    typer.echo("\nReport these beside the scores. A result below its floor is "
+               "worse than answering the same thing every time.")
+
+
+@app.command()
 def inspect() -> None:
     """Start the inspector on http://127.0.0.1:5000."""
     try:
