@@ -247,7 +247,12 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Score
         progress = (sum(per_goal) / len(per_goal)) if per_goal else 0.0
         diag["progress"] = round(progress, 4)
         partial = round(PARTIAL_CAP * progress, 4) if consistent else 0.0
-        return failed("goal_not_met", score=partial)
+        # An answer that reached every goal and broke the theory is not a
+        # goal failure, and reporting it as one sends a reader looking at the
+        # wrong half of their answer. The prompt states this rule; the reason
+        # string has to name it.
+        why = "inconsistent_theory" if all(met) else "goal_not_met"
+        return failed(why, score=partial)
     if not minimum:
         # Every goal met, so the task is done; the minimum is unknown, so economy cannot
         # be measured. Success without the efficiency half of the score.
