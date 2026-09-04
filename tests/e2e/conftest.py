@@ -39,10 +39,7 @@ FULL_GRID = [(level, ordering, seed) for level in (3, 6, 9, 12, 15)
 
 # Cells whose generator is known to return None. A listed cell that does generate fails
 # test_every_cell_generates, so the list cannot go stale silently.
-KNOWN_MISSING = {
-    Cell("status_query", 12, LAST_LINK, 0),   # #43
-    Cell("status_query", 12, LAST_LINK, 1),   # #43
-}
+KNOWN_MISSING: set = set()
 
 _CACHE: Dict[Cell, Any] = {}
 
