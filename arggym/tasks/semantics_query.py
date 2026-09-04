@@ -35,7 +35,7 @@ def _is_weakest(ordering: str) -> bool:
 
 def _is_last(ordering: str) -> bool:
     return str(ordering).startswith("last_link")
-EASY_LEVELS = 3
+EASY_LEVELS = 2  # every exported level must contain a claim the semantics disagree about
 MAX_DIRECTIVES = 26
 
 MAX_EAGER_ARGUMENTS = 32
@@ -52,9 +52,16 @@ CRED_PREF = "credulous preferred"
 STABLE = "stable"
 EAGER = "eager"
 
+# Additive: each level keeps every semantics the level below it had. `status_under`
+# implements all five, but only two were ever scheduled, so sceptical preferred,
+# credulous preferred and stable reached no item at any level, and level 3 asked one
+# semantics and was `status_query` reworded (#36).
 SEMANTICS_BY_LEVEL = {
     1: (GROUNDED,),
-    4: (GROUNDED, EAGER),
+    3: (GROUNDED, CRED_PREF),
+    4: (GROUNDED, CRED_PREF, EAGER),
+    6: (GROUNDED, CRED_PREF, STABLE, EAGER),
+    9: (GROUNDED, SCEPT_PREF, CRED_PREF, STABLE, EAGER),
 }
 
 
@@ -305,7 +312,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     ridx = [0]
     candidates: List[str] = []
 
-    kinds = ["defeated", "settled", "odd"]
     j_budget = junction_budget(level, JUNCTION_CAPS.get("semantics_query", 3))
     _lo = 3 + (1 if level >= 6 else 0)
     _hi = min(6, _lo + 1 + (1 if level >= 11 else 0))
@@ -483,8 +489,10 @@ def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: st
             f"{theory}\n\n"
             "State the status of each claim UNDER THE SEMANTICS NAMED BESIDE IT:\n"
             f"{asks}\n\n"
-            "Possible statuses: justified, overruled, undecided. Under stable semantics, if the "
-            "theory has no stable extension, answer `no stable extension`.\n\n"
+            "Possible statuses: justified, overruled, undecided.\n"
+            + ("Under stable semantics, if the theory has no stable extension, answer "
+               "`no stable extension`.\n" if any(s == STABLE for _, s in queries) else "")
+            + "\n"
             "Answer format: one line per query, written as `claim under semantics: status`, "
             "between [answer] and [/answer].")
 
