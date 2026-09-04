@@ -45,13 +45,13 @@ def _export_row(task: str, lv: int, o: str, s: int):
         it = prefcon.make_item(lv, s, o)
         if it is None:
             return None
-        return it, score_item(it.reference, it.as_score_input())["score"], \
+        return it, score_item(it.reference, it.as_score_input()).score, \
             [dict(g) for g in it.goals], it.min_directives
     if task.startswith("counter_argument"):
         it = counterarg.make_item(lv, s, o, allow_strict=task.endswith("_strict"))
         if it is None:
             return None
-        return it, score_item(it.reference, counterarg.as_score_input(it))["score"], \
+        return it, score_item(it.reference, counterarg.as_score_input(it)).score, \
             [{"claim": "-" + it.target, "want": "JUSTIFIED"},
              {"claim": it.target, "want": "OVERRULED"}], it.min_directives
     if task == "claim_chain":
@@ -92,7 +92,7 @@ def _export_row(task: str, lv: int, o: str, s: int):
         it = attackdef.make_item(lv, s, o, mode=task)
         if it is None:
             return None
-        return it, score_item(it.reference, it.as_score_input())["score"], \
+        return it, score_item(it.reference, it.as_score_input()).score, \
             [dict(g) for g in it.goals], it.min_directives
     if task == "perturbation":
         from arggym.tasks import perturbation as perturb

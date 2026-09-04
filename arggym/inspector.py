@@ -266,7 +266,7 @@ async function grade(){
   const g=d.result, dg=g.diagnostics||{};
   let h=chip('score '+g.score.toFixed(3), g.score>=0.999?'ok':(g.score>0?'warn':'bad'))
        +chip(g.reason, g.reason==='ok'?'ok':'bad');
-  if(g.efficiency!==undefined) h+=chip('efficiency '+g.efficiency.toFixed(3),'neu');
+  if(dg.efficiency!==undefined) h+=chip('efficiency '+dg.efficiency.toFixed(3),'neu');
   if(g.precision!==undefined) h+=chip('P '+g.precision.toFixed(2)+' R '+g.recall.toFixed(2),'neu');
   if(g.exact_match!==undefined) h+=chip(g.exact_match?'exact match':'not exact', g.exact_match?'ok':'warn');
   if(g.order_factor!==undefined) h+=chip(g.correct_order?'premise to claim':'out of order', g.correct_order?'ok':'bad');
@@ -426,7 +426,7 @@ def api_generate():
         ref = score_item(pc.reference, pc.as_score_input())
         return jsonify({"ok": True, "token": token, "task": prefcon.TASK, "mode": PREFCON,
                         "level": pc.level, "ordering": pc.ordering, "prompt": pc.prompt,
-                        "reference": pc.reference, "ref_score": ref["score"],
+                        "reference": pc.reference, "ref_score": ref.score,
                         "min_directives": pc.min_directives, "goals": pc.goals,
                         "meta": pc.metadata,
                         "spec": f"L{pc.level} preference_construction "
@@ -450,7 +450,7 @@ def api_generate():
         ref = score_item(cit.reference, counterarg.as_score_input(cit))
         return jsonify({"ok": True, "token": token, "task": counterarg.TASK, "mode": FORMALIZE,
                         "level": cit.level, "ordering": cit.ordering, "prompt": cit.prompt,
-                        "reference": cit.reference, "ref_score": ref["score"],
+                        "reference": cit.reference, "ref_score": ref.score,
                         "min_directives": cit.min_directives,
                         "goals": [{"claim": "-" + cit.target, "current": "not justified",
                                    "want": "JUSTIFIED"},
@@ -507,7 +507,7 @@ def api_generate():
     ref = score_item(it.reference, it.as_score_input())
     return jsonify({"ok": True, "token": token, "task": TASK, "mode": it.mode,
                     "level": it.level, "ordering": it.ordering, "prompt": it.prompt,
-                    "reference": it.reference, "ref_score": ref["score"],
+                    "reference": it.reference, "ref_score": ref.score,
                     "min_directives": it.min_directives, "goals": it.goals,
                     "meta": it.metadata, "spec": describe(spec_for(level, ordering, seed % 5))})
 
@@ -565,7 +565,11 @@ def api_grade():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
-    return jsonify({"ok": True, "result": res})
+    # Four of the nine scorers return ScoreResult now; the rest still return
+    # dicts. Normalising here rather than in the scorers keeps the migration
+    # visible -- delete the branch once all twelve have moved.
+    return jsonify({"ok": True,
+                    "result": res.as_dict() if hasattr(res, "as_dict") else res})
 
 
 if __name__ == "__main__":
