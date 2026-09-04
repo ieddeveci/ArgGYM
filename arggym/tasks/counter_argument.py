@@ -393,7 +393,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     return CAItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, target=target,
         ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         min_directives=len(lines), seed_lit=seed_lit,
         metadata={
             "allow_strict": allow_strict, "n_axiom_strict_chains": n_axiom_strict,
@@ -422,7 +422,7 @@ def _render_prompt(theory: str, target: str, ordering: str,
             f"What is the minimal set of directives that makes -{target} justified "
             f"and {target} overruled?\n\n"
             f"{permitted_block(allow_strict)}\n\n"
-            "Answer format: one directive per line, between [answer] and [/answer].")
+            "Answer format: one directive per line.")
 
 
 def as_score_input(it: "CAItem") -> Dict:

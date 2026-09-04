@@ -106,7 +106,7 @@ def test_counter_argument_rule_names_carry_no_role(level, ordering):
     assert set(names) <= set(RULE_POOL), f"rule not named from the pool: {sorted(set(names) - set(RULE_POOL))}"
     assert not _collisions(it.base_ops)
     ref = score_item(it.reference, counter_argument.as_score_input(it))
-    assert ref["score"] == pytest.approx(1.0), f"gold regrades at {ref['score']}: {ref.get('reason')}"
+    assert ref.score == pytest.approx(1.0), f"gold regrades at {ref.score}: {ref.reason}"
 
 
 @pytest.mark.parametrize("mode", sorted(MODES))

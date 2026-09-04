@@ -61,11 +61,11 @@ def test_a_malformed_rule_costs_the_answer_its_score():
     """The point of #19: it used to cost nothing."""
     it = ca.make_item(3, 0, "last_link_elitist")
     good = score_item(it.reference, ca.as_score_input(it))
-    assert good["score"] == pytest.approx(1.0)
-    sneaked = it.reference.replace("[/answer]", "[stricttest: a => b]\n[/answer]")
+    assert good.score == pytest.approx(1.0)
+    sneaked = it.reference + "\n[stricttest: a => b]"
     bad = score_item(sneaked, ca.as_score_input(it))
-    assert bad["score"] == 0.0
-    assert bad["reason"].startswith("unparseable_lines")
+    assert bad.score == 0.0
+    assert bad.reason.startswith("unparseable_lines")
 
 
 @pytest.mark.parametrize("line,kind,name", WELL_FORMED)
@@ -99,4 +99,4 @@ def test_the_cheap_references_are_well_formed(level, allow_strict):
             it = ca.make_item(level, s, o, allow_strict=allow_strict)
             assert it is not None
             assert parse_answer(it.reference).n_unparseable == 0, it.reference
-            assert score_item(it.reference, ca.as_score_input(it))["score"] == pytest.approx(1.0)
+            assert score_item(it.reference, ca.as_score_input(it)).score == pytest.approx(1.0)

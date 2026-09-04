@@ -16,6 +16,7 @@ from arggym.structures.interaction import build_mixed, check_interference, solve
 from arggym.core.prompting import render
 from arggym.core.curriculum import PROFILES, ATTACK, DEFENCE, MIXED, spec_for
 from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
+from arggym.core.answers import ScoreResult
 from arggym.core.scoring import score_item
 
 TASK = "attack_defense"
@@ -218,7 +219,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
         if not dfs:
             return None
         ref_lines.append(f"[defeasible k{i+1}: {src} => -{dfs[0]['name']}]")
-    ref = remap_text("[answer]\n" + "\n".join(ref_lines) + "\n[/answer]", _rmap)
+    ref = remap_text("\n".join(ref_lines), _rmap)
 
     goals = [{"claim": target, "current": "JUSTIFIED", "want": "OVERRULED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=ATTACK,
@@ -349,7 +350,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
     for i, a in enumerate(d.attackers):
         cut = (a.rules[0] if a.rules else a.name)
         ref_lines.append(f"[defeasible z{i}_0: {src} => -{cut}]")
-    ref = remap_text("[answer]\n" + "\n".join(ref_lines) + "\n[/answer]", _rmap)
+    ref = remap_text("\n".join(ref_lines), _rmap)
     goals = [{"claim": d.target, "current": d.status(), "want": "JUSTIFIED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=DEFENCE,
                 prompt=render(_render_ops(base), ordering, goals),
@@ -414,11 +415,10 @@ def build_mixed_item(level: int, seed: int, ordering: str,
             src = o.content
             break
     own = m.attack_own_rules[-1]
-    ref = "[answer]\n" + "\n".join(
+    ref = remap_text("\n".join(
         [f"[defeasible sa: {src} => -{own}]"]
         + [f"[defeasible sd{j}: {src} => -{x}]" for j, x in enumerate(m.attacker_rules)]
-    )
-    ref = remap_text(ref + "\n[/answer]", _rmap)
+    ), _rmap)
     goals = [{"claim": m.attack_target, "current": "JUSTIFIED", "want": "OVERRULED"},
              {"claim": m.defence_target, "current": m.status(m.defence_target),
               "want": "JUSTIFIED"}]
@@ -446,8 +446,8 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     return item
 
 
-def reference_ok(result: Dict) -> bool:
-    return result["score"] >= 0.999 and not result["diagnostics"]["illegal"]
+def reference_ok(result: ScoreResult) -> bool:
+    return result.score >= 0.999 and not result.diagnostics["illegal"]
 
 
 MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: build_mixed_item}
