@@ -47,6 +47,7 @@ report = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "flask" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -66,6 +67,7 @@ provides-extras = ["inspector", "evals", "report"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "flask", specifier = ">=3.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-xdist", specifier = ">=3.0" },
     { name = "ruff", specifier = ">=0.6" },

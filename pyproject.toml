@@ -22,7 +22,16 @@ report = ["matplotlib>=3.8"]
 [dependency-groups]
 # Groups are local-only and are never published. `uv sync` installs them by
 # default, so `uv run pytest` works from a fresh clone with no flag.
-dev = ["pytest>=8.0", "pytest-xdist>=3.0", "ruff>=0.6"]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.0",
+    "ruff>=0.6",
+    # The test suite exercises the inspector, so a dev checkout needs Flask
+    # even though an adopter does not. uv has no default-extras, so this is
+    # named here rather than pulled through the extra. CI's install job checks
+    # separately that a bare install gets none of it.
+    "flask>=3.0",
+]
 
 [project.scripts]
 arggym = "arggym.cli:main"
