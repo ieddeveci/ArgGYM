@@ -227,6 +227,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
                 reference=ref, min_directives=mn["required_moves"],
                 metadata={
                     "n_chains": n, "chain_depth": depth, "configs": picks,
+                    "junction_budget": j_budget, "n_junctions": _n_junctions(base),
                     "distinct_configs": len(set(picks)),
                     "n_chain_rules": sum(len(c.rules) for c in chains),
                     "n_theory_rules": sum(1 for o in base
@@ -254,6 +255,19 @@ def build_attack_item(level: int, seed: int, ordering: str,
     return item
 
 
+def _n_junctions(ops: Sequence[Operation]) -> int:
+    """Junctions in the theory as built, which is not always the budget asked for.
+
+    A junction is a rule that has to draw on more than one line at once. `build_defence`
+    hands its leftovers to the attackers, so it spends the whole budget. `build_mixed`
+    places junctions only on the shared stem, `j_points = {k % shared_depth}`, so it
+    silently keeps `min(budget, shared_depth)` of them and the stem is the binding
+    constraint from level 6 to level 12. Recording the budget alone would state a number
+    the item does not have.
+    """
+    return sum(1 for o in ops if o.kind in ("defeasible", "strict") and len(o.antecedents) > 1)
+
+
 def build_defence_item(level: int, seed: int, ordering: str,
                        profile: str = "FULL") -> Optional[Item]:
     n = max(2, min(5, 2 + level // 4))
@@ -262,8 +276,9 @@ def build_defence_item(level: int, seed: int, ordering: str,
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     sup = max(2, min(5, 2 + level // 4))
     atk_d = max(2, min(5, 2 + level // 4))
+    n_junc = junctions_for(level, max(1, n * 4))
     d = build_defence(n, ordering, it, support_depth=sup, junction=(level >= 6),
-                      n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
+                      n_junctions=n_junc,
                       ternary=wants_ternary(level, 0),
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
                       attacker_depth=atk_d)
@@ -311,6 +326,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
                 reference=ref, min_directives=mn["witness_moves"],
                 metadata={
                     "n_attackers": n, "n_strict_attackers": n_strict, "n_decoys": n_decoy,
+                    "junction_budget": n_junc, "n_junctions": _n_junctions(base),
                     "support_depth": sup, "attacker_depth": atk_d,
                     "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
                     "minimality_proven": mn.get("lower_bound_proven", mn.get("proven", True)),
@@ -332,9 +348,10 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
     stem = max(1, min(4, 1 + level // 5))
+    n_junc = junctions_for(level, max(1, n_atk * 4))
     m = build_mixed(it, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
                     depth=depth, shared_depth=stem, junction=(level >= 6),
-                    n_junctions=junctions_for(level, max(1, (n if "n" in dir() else 3) * 4)),
+                    n_junctions=n_junc,
                     ternary=wants_ternary(level, 0))
     if m is None:
         return None
@@ -382,6 +399,7 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                     "minimality_proven": sol.get("all_necessary", False),
                     "minimality_method": "interaction_all_necessary",
                     "n_attackers": n_atk, "shared_node": m.shared_node,
+                    "junction_budget": n_junc, "n_junctions": _n_junctions(base),
                     "branch_depth": depth, "stem_depth": stem,
                     "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
                     "minimality_proven": sol.get("all_necessary", False),
