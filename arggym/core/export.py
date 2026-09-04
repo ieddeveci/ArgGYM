@@ -13,6 +13,11 @@ LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
 ALL_ORDERINGS = ("last_link_elitist", "last_link_democratic",
                  "weakest_link_elitist", "weakest_link_democratic")
+# The evaluated grid. A generator whose curriculum disagrees with these levels has a
+# feature nothing exercises, which is how #30 stayed hidden, so read it from here
+# rather than restating it.
+LEVELS = (3, 6, 9, 12, 15)
+SEEDS = (0, 1)
 
 
 _EXPORTABLE = {
@@ -100,7 +105,7 @@ def _export_row(task: str, lv: int, o: str, s: int):
     return None
 
 
-def export_task(path: str, task: str, levels=(3, 6, 9, 12, 15), seeds=(0, 1),
+def export_task(path: str, task: str, levels=LEVELS, seeds=SEEDS,
                 allow_missing: bool = False) -> None:
     if task not in _EXPORTABLE:
         raise SystemExit(f"unknown task {task}; known: {sorted(_EXPORTABLE)}")

@@ -116,7 +116,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     if level >= 3:
         n_conf = min(10, n_conf + rng.randint(0, 1))
         depth = max(1, min(5, depth + rng.randint(-1 if level >= 8 else 0, 1)))
-    shared = level >= 5 and (level % 3 == 2)
+    # The grid steps by 3, so level is a multiple of 3 at every evaluated level and
+    # level % 3 is the constant 0 there. The old `level % 3 == 2` picked levels 5, 8, 11
+    # and 14, which the grid never evaluates, so no exported item ever shared a conflict.
+    # Divide the step out first, turning level into the index it is meant to be, and the
+    # alternation lands on the grid. Shared goes on 9 and 15 rather than 6 and 12 because
+    # the extra claim below has to fall where the base ramp is flat: n_claims steps up at
+    # 6 and 12, so sharing there makes L6 as wide as L9 and L12 as wide as L15, while
+    # sharing at 9 and 15 leaves the goal count strictly increasing across the grid.
+    shared = level >= 9 and (level // 3) % 2 == 1
     if shared:
         n_claims = min(8, n_claims + 1)
         n_conf = min(10, max(n_conf, n_claims + 1))
