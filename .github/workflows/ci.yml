@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor of requires-python and a current release. The generators are
+        # deterministic across versions only if nothing in them depends on
+        # dict or set iteration order, and this matrix is what checks that.
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --python ${{ matrix.python }}
+      - name: tests
+        run: uv run pytest -q -n auto
+
+  install:
+    # A bare install must not pull a web framework, and the console script must
+    # work from it. Both are easy to break from inside a synced dev checkout,
+    # where every extra is already present (#54).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install the package alone
+        run: |
+          uv venv
+          uv pip install .
+      - name: no web framework on a bare install
+        run: |
+          if .venv/bin/python -c 'import flask' 2>/dev/null; then
+            echo 'flask reached a bare install; it belongs in the inspector extra'
+            exit 1
+          fi
+      - name: the console script works
+        run: .venv/bin/arggym tasks
+
+  determinism:
+    # Two exports of one spec must agree. Comparing the skipped seeds before the
+    # hash says which layer moved: same skips and a different hash is a renderer
+    # or a scorer, different skips is a generator.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - name: export the same spec twice
+        run: |
+          uv run arggym export claim_chain /tmp/a.jsonl
+          uv run arggym export claim_chain /tmp/b.jsonl
+          uv run python - <<'PY'
+          import json
+          a = json.loads(open("/tmp/a.jsonl").readline())["__manifest__"]
+          b = json.loads(open("/tmp/b.jsonl").readline())["__manifest__"]
+          if a.get("missing_cells") != b.get("missing_cells"):
+              raise SystemExit("the generator is not deterministic: "
+                               f"{a.get('missing_cells')} vs {b.get('missing_cells')}")
+          if a["taskset_hash"] != b["taskset_hash"]:
+              raise SystemExit("same cells, different hash: a renderer or a scorer "
+                               f"is not deterministic ({a['taskset_hash']} vs {b['taskset_hash']})")
+          print("taskset_hash", a["taskset_hash"])
+          PY

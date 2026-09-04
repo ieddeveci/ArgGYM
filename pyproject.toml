@@ -22,7 +22,7 @@ report = ["matplotlib>=3.8"]
 [dependency-groups]
 # Groups are local-only and are never published. `uv sync` installs them by
 # default, so `uv run pytest` works from a fresh clone with no flag.
-dev = ["pytest>=8.0", "pytest-xdist>=3.0"]
+dev = ["pytest>=8.0", "pytest-xdist>=3.0", "ruff>=0.6"]
 
 [project.scripts]
 arggym = "arggym.cli:main"
@@ -43,3 +43,15 @@ markers = [
     "families(*names): restrict an e2e test to task families",
     "modes(*names): restrict an e2e test to modes",
 ]
+
+[tool.ruff]
+line-length = 100
+# The inspector embeds JavaScript in Python string literals; wrapping those
+# lines would break the markup rather than tidy it.
+extend-exclude = ["arggym/inspector.py"]
+
+[tool.ruff.lint]
+# E and F catch what a reader would call a mistake; I keeps imports ordered so a
+# merge of two branches touching the same header does not conflict on order.
+select = ["E", "F", "I"]
+ignore = ["E501"]  # long lines are checked by line-length above, not per-rule
