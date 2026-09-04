@@ -289,7 +289,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     return PCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, goals=goals,
         ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         min_directives=len(best),
         metadata={
             "n_claims": n_claims, "n_conflicts": n_conf, "chain_depth": depth,
@@ -329,7 +329,7 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
               "The answer must be minimal: one using more than twice the fewest directives "
               "that work scores zero.",
               TIE_NOTE, "",
-              "Answer format: one directive per line, between [answer] and [/answer]."]
+              "Answer format: one directive per line."]
     return "\n".join(lines)
 
 

@@ -91,15 +91,15 @@ def test_the_strict_answer_is_permitted_exactly_where_the_prompt_says_it_is():
         if strict.min_directives != 1:
             continue
         checked += 1
-        answer = f"[answer]\n[strict cs: {strict.seed_lit} -> -{strict.target}]\n[/answer]"
+        answer = f"[strict cs: {strict.seed_lit} -> -{strict.target}]"
 
         accepted = score_item(answer, ca.as_score_input(strict))
-        assert accepted["score"] == pytest.approx(1.0), (level, ordering, seed, accepted)
+        assert accepted.score == pytest.approx(1.0), (level, ordering, seed, accepted)
         assert STRICT_FORM in strict.prompt
 
         rejected = score_item(answer, ca.as_score_input(plain))
-        assert rejected["score"] == 0.0
-        assert "illegal" in rejected["reason"], rejected["reason"]
+        assert rejected.score == 0.0
+        assert "illegal" in rejected.reason, rejected.reason
         assert NO_STRICT in plain.prompt
     assert checked, "no cell at this level takes the strict shortcut; pick another level"
 

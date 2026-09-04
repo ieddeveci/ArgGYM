@@ -6,11 +6,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.engine import ASPICFramework, Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.core.answers import ScoreResult, extract_answer
 
 BLOAT_FACTOR = 2
 PARTIAL_CAP = 0.25
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _PREMISE = re.compile(r"^\[(premise|axiom)\s*:\s*(-?[A-Za-z]\w*)\]$")
 # The name is required and separated from the kind by whitespace, and the arrow has to
 # be the one that kind uses. Written `\s*` with an optional name, the pattern read
@@ -28,16 +28,17 @@ class ParsedAnswer:
     n_lines: int = 0
     n_unparseable: int = 0
     unparseable_examples: List[str] = field(default_factory=list)
-    no_region: bool = False
 
 
 def parse_answer(text: str) -> ParsedAnswer:
+    """The directives a submission carries, wrapped in delimiters or not.
+
+    `extract_answer` unwraps a wrapped answer and hands back anything else whole, so a
+    bare directive list and the same list between [answer] and [/answer] parse to the
+    same operations (`docs/dataset-contract.md` section 1).
+    """
     out = ParsedAnswer()
-    m = _ANSWER.search(text or "")
-    if m is None:
-        out.no_region = True
-        return out
-    body = m.group(1)
+    body = extract_answer(text)
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
     stray = [t for t in leftover.split()
@@ -154,7 +155,15 @@ def build_framework(base_ops: Sequence[Operation], kept: Sequence[Operation],
     return fw, reasons, details
 
 
-def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
+def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> ScoreResult:
+    """Score one construction answer.
+
+    `success` is the contract's definition for these six tasks -- every goal met and the
+    theory left consistent -- and it is returned on every path. An answer that never
+    reaches the goal check has not met the goals, so its `success` is False; returning
+    nothing there is what made `success_rate` an average over the rows that happened to
+    reach a late branch (`docs/dataset-contract.md` section 5).
+    """
     base_ops = item["base_ops"]
     ordering = item["ordering"]
     goals: List[Dict] = item["goals"]
@@ -163,15 +172,19 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [], "rejected_detail": [],
                   "goals_met": [], "n_used": 0, "minimum": minimum}
 
+    def failed(reason: str, score: float = 0.0) -> ScoreResult:
+        return ScoreResult(score=score, success=False, reason=reason, diagnostics=diag)
+
     p = parse_answer(answer_text)
     diag.update(n_lines=p.n_lines, n_unparseable=p.n_unparseable,
                 unparseable_examples=p.unparseable_examples)
-    if p.no_region:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
     if strict_parse and p.n_unparseable:
-        return {"score": 0.0, "reason": f"unparseable_lines:{p.n_unparseable}", "diagnostics": diag}
+        return failed(f"unparseable_lines:{p.n_unparseable}")
     if not p.ops:
-        return {"score": 0.0, "reason": "no_directives", "diagnostics": diag}
+        # An empty submission lands here too. It is an answer with nothing in it, not an
+        # answer that failed to arrive: delimiters are delivery and the evaluator owns
+        # them, so there is no such outcome as a missing answer region.
+        return failed("no_directives")
 
     kept, illegal = check_legality(p.ops, base_ops, item.get("allow_strict", False),
                                    item.get("preferences_only", False))
@@ -179,22 +192,21 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
     n_used = p.n_lines
     diag["n_used"] = n_used
     if not kept:
-        return {"score": 0.0, "reason": "all_directives_illegal", "diagnostics": diag}
+        return failed("all_directives_illegal")
     if minimum and n_used > BLOAT_FACTOR * max(minimum, 1):
         diag["bloat_ratio"] = round(n_used / max(minimum, 1), 2)
-        return {"score": 0.0, "reason": f"bloated:{n_used}_used_vs_{minimum}_minimum",
-                "diagnostics": diag}
+        return failed(f"bloated:{n_used}_used_vs_{minimum}_minimum")
 
     try:
         fw, rejected, detail = build_framework(base_ops, kept, ordering)
         illegal.extend(rejected)
         diag["rejected_detail"] = detail
         if len(rejected) == len(kept):
-            return {"score": 0.0, "reason": "all_directives_illegal", "diagnostics": diag}
+            return failed("all_directives_illegal")
         v = ASPICVerifier(fw, operations_applied=len(base_ops) + len(kept) - len(rejected))
         consistent = v.is_consistent()
     except Exception as e:
-        return {"score": 0.0, "reason": f"engine_rejected:{type(e).__name__}", "diagnostics": diag}
+        return failed(f"engine_rejected:{type(e).__name__}")
 
     met = []
     for g in goals:
@@ -233,21 +245,15 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Dict:
             else:
                 per_goal.append(0.0)
         progress = (sum(per_goal) / len(per_goal)) if per_goal else 0.0
+        diag["progress"] = round(progress, 4)
         partial = round(PARTIAL_CAP * progress, 4) if consistent else 0.0
-        return {"score": partial, "reason": "goal_not_met", "success": False,
-                "progress": round(progress, 4),
-                "achieved_status": diag["achieved_status"],
-                "deadlock_not_defeat": diag["deadlock_not_defeat"],
-                "diagnostics": diag}
+        return failed("goal_not_met", score=partial)
     if not minimum:
-        return {"score": 0.5, "reason": "success_but_minimum_unknown", "success": True,
-                "achieved_status": diag["achieved_status"],
-                "deadlock_not_defeat": diag["deadlock_not_defeat"],
-                "diagnostics": diag}
+        # Every goal met, so the task is done; the minimum is unknown, so economy cannot
+        # be measured. Success without the efficiency half of the score.
+        return ScoreResult(score=0.5, success=True, reason="success_but_minimum_unknown",
+                           diagnostics=diag)
     efficiency = min(1.0, minimum / max(n_used, 1))
-    score = round(0.5 + 0.5 * efficiency, 4)
-    return {"score": score, "reason": "ok", "success": True,
-            "efficiency": round(efficiency, 4),
-            "achieved_status": diag["achieved_status"],
-            "deadlock_not_defeat": diag["deadlock_not_defeat"],
-            "diagnostics": diag}
+    diag["efficiency"] = round(efficiency, 4)
+    return ScoreResult(score=round(0.5 + 0.5 * efficiency, 4), success=True, reason="ok",
+                       diagnostics=diag)

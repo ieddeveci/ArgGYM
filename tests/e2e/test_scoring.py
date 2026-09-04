@@ -1,19 +1,20 @@
 """Scorer properties on the fast-grid items: junk, hedges, surplus, case, order."""
 from __future__ import annotations
 
-import re
-
 import pytest
+
+from arggym.core.answers import extract_answer
 
 from .registry import CHAIN, CONSTRUCTION, DIAGNOSIS, LABEL_MAP, MODES
 from .test_wellformed import rule_names
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S)
 STATUSES = ("justified", "overruled", "undecided")
 
 
 def body_lines(reference: str):
-    return [l for l in _ANSWER.search(reference).group(1).splitlines() if l.strip()]
+    # A reference is stored raw for the construction tasks and still wrapped for the
+    # others, and `extract_answer` reads both.
+    return [l for l in extract_answer(reference).splitlines() if l.strip()]
 
 
 def wrap(lines) -> str:

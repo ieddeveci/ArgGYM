@@ -48,7 +48,7 @@ def permitted_block(allow_strict: bool = False) -> str:
             + _TAIL)
 
 
-_FORMAT = ("Answer format: one directive per line, between [answer] and [/answer].")
+_FORMAT = ("Answer format: one directive per line.")
 
 INCLUDE_NOTATION = True
 

@@ -59,8 +59,8 @@ def test_a_chain_through_an_invented_intermediate_no_longer_reaches_the_goal():
               f"[defeasible n2: nw1 => -{it.target}]\n"
               "[/answer]")
     r = score_item(answer, ca.as_score_input(it))
-    assert r["score"] == 0.0
-    assert "illegal_unknown_antecedent:nw1" in r["diagnostics"]["illegal"]
+    assert r.score == 0.0
+    assert "illegal_unknown_antecedent:nw1" in r.diagnostics["illegal"]
 
 
 def test_the_prompt_states_the_rule():
