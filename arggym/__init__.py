@@ -24,14 +24,21 @@ schema, constrained decoding, or a solver that returns the answer directly.
 If you would rather the question carried the delivery sentence, ask for one and
 it renders exactly one sentence more:
 
-    ds = arggym.create(..., template=arggym.XML_TAGS)     # or your own
-    text = my_model(entry["question"])
-    result = ds.score(arggym.extract_answer(text), entry)
+    ds = arggym.create("status_query", level=9, template=arggym.XML_TAGS)
+    text = my_model(ds[0]["question"])
+    result = ds.score(arggym.extract_answer(text), ds[0])
+
+An answer need not be text either. Every task takes the value directly, so a
+solver with a JSON schema or constrained decoding submits it and gets the same
+`ScoreResult` back:
+
+    result = ds.score_value({"ab1": "justified"}, entry)
 
 A row carries everything its scorer reads, so a line read back from a frozen
 JSONL scores without a dataset object at all:
 
     result = arggym.score_row(answer, json.loads(line))
+    result = arggym.score_row_value(value, json.loads(line))
 
 See `docs/dataset-contract.md`.
 """
