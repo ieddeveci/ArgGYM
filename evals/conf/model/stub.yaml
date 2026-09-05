@@ -1,0 +1,10 @@
+# A local stub, for checking the pipeline without spending a token. Point
+# base_url at anything that speaks the protocol; `tests/evals/conftest.py`
+# stands one up in-process.
+name: stub
+model: stub
+base_url: ${oc.env:ARGGYM_STUB_URL,http://127.0.0.1:8899/v1}
+api_key_env: ARGGYM_STUB_KEY
+sampling:
+  temperature: 0.0
+  max_tokens: 512

@@ -1,0 +1,4 @@
+# The submission convention, named once. `evals/prompt.py` reads both the
+# instruction sentence and the delimiters off the same AnswerTemplate, so what
+# the prompt asks for and what the scorer reads back cannot drift.
+name: xml_tags

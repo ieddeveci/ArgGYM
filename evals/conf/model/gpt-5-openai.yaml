@@ -1,0 +1,8 @@
+# OpenAI direct. base_url unset, so the SDK uses its own default.
+name: gpt-5-openai
+model: gpt-5
+base_url: null
+api_key_env: OPENAI_API_KEY
+sampling:
+  temperature: 0.0
+  max_completion_tokens: 32768

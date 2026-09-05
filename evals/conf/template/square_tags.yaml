@@ -1,0 +1,3 @@
+# The convention the v1 benchmark used. Kept so a run can be compared against
+# those numbers; new runs have no reason to choose it.
+name: square_tags

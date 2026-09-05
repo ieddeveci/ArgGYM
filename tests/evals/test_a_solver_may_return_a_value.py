@@ -1,0 +1,119 @@
+"""A solver that never wrote text still gets scored.
+
+Constrained decoding, a JSON schema, a tool call: a solver may produce the answer
+as a value, and asking it to render ArgGYM's DSL so the harness can parse it back
+would be the dataset dictating a serialization
+(`docs/dataset-contract.md` section 4). Setting `Attempt.value` routes scoring to
+`arggym.score_row_value` and skips extraction entirely.
+"""
+from __future__ import annotations
+
+import os
+
+import arggym
+from evals import artifacts, values
+from evals.run import generate
+from evals.score import score_one, score_run
+from evals.types import Attempt
+
+
+def parsed_value(row):
+    """The reference answer as the live value its scorer expects.
+
+    This reaches into the package on purpose. The four answer shapes include two
+    a harness cannot construct from the public API alone -- `semantics_query`
+    keys its map by a tuple, and an operation list is a list of `Operation`
+    objects -- and the encoding in `evals/values.py` exists precisely for them.
+    Testing it on anything less than all twelve tasks would leave the shapes it
+    was written for uncovered.
+    """
+    from importlib import import_module
+
+    from arggym.core import registry
+    from arggym.core.rows import score_input
+
+    spec, payload = score_input(row)
+    if spec.scorer == registry.ENGINE:
+        from arggym.core.scoring import parse
+        return parse(row["reference_answer"], payload)
+    return import_module(f"arggym.tasks.{spec.module}").parse(
+        row["reference_answer"], payload)
+
+
+def value_for(row):
+    """The row's own reference answer, as a JSON-carried value of its shape."""
+    return values.encode(parsed_value(row), row)
+
+
+def test_a_value_answer_scores_the_same_as_its_text(rows):
+    for row in rows:
+        by_text = arggym.score_row(row["reference_answer"], row)
+        record = score_one({"id": row["id"], "task": row["task"], "level": 3,
+                            "ordering": "last_link_elitist", "completion": "",
+                            "value": value_for(row)}, row, "xml_tags")
+        assert record["score"] == by_text.score == 1.0, row["task"]
+        # Nothing was extracted, so the flags that describe extraction say so
+        # rather than reporting a missing fence.
+        assert record["no_answer_region"] is False
+        assert record["answer_in_cot"] is False
+
+
+def test_a_value_solver_needs_no_endpoint(tmp_path, rows, taskset_file):
+    """The seam takes any callable. This one has no model in it at all."""
+    def perfect(row):
+        return Attempt(value=value_for(row), completion="")
+
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    manifest, _ = __import__("evals.taskset", fromlist=["load"]).load(taskset_file)
+    artifacts.write_json(os.path.join(run_dir, artifacts.RUN), {
+        "status": "completed", "taskset": taskset_file,
+        "taskset_hash": manifest["taskset_hash"], "template": "xml_tags"})
+    generate(rows, perfect, run_dir, concurrency=2, progress=False)
+
+    metrics = score_run(run_dir)
+    assert metrics["coverage"]["n_scored"] == len(rows)
+    for task, v in metrics["by_task"].items():
+        assert v["mean"] == 1.0, task
+
+
+def test_every_answer_shape_survives_the_trip_through_json():
+    """Generating and scoring are separate programs, so a value is JSON in between."""
+    import json
+
+    for task in sorted(arggym.task_names()):
+        row = arggym.TaskDataset(task, 3, "last_link_elitist", size=1, seed=0)[0]
+        value = parsed_value(row)
+        # Exactly what `run.py` writes and `score.py` reads back.
+        carried = json.loads(json.dumps(values.encode(value, row), default=str))
+        result = arggym.score_row_value(values.decode(carried, row), row)
+        assert result.score == 1.0, (task, row["metadata"]["answer_shape"], result)
+
+
+def test_a_value_that_is_not_json_is_an_error_and_not_a_zero(tmp_path, rows):
+    """`default=str` would stringify it, and the loss shows up only at scoring.
+
+    Recorded as an error on the row rather than raised out of the pool. Raising
+    ended the run *and* discarded the completion it was complaining about, which
+    had already been paid for, and left `run.json` reading `status: running` --
+    so a crashed run and one still in flight looked the same. A solver that does
+    this on one row does it on all of them, and `max_error_rate` ends the sweep.
+    """
+    import os
+
+    from evals import artifacts
+    from evals.run import generate
+
+    def unserialisable(row):
+        return Attempt(completion="<answer>x</answer>",
+                       value=parsed_value(row))  # live objects, never encoded
+
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    counts = generate(rows[:1], unserialisable, run_dir, concurrency=1,
+                      progress=False)
+    assert counts["errors"] == 1
+    record = artifacts.best_per_id(run_dir)[rows[0]["id"]]
+    assert "values.encode" in record["error"]
+    assert record["completion"] == "<answer>x</answer>", "threw away paid-for work"
+    assert record["value"] is None

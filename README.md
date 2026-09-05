@@ -64,6 +64,18 @@ loop works unchanged.
 any OpenAI-compatible endpoint, writes a scored JSONL. It reaches into no ArgGYM internal, which is
 the point of it.
 
+`evals/` is the harness for a real sweep -- resumable, offline scoring, per-task reporting against
+the chance floors -- and it talks to any OpenAI-compatible endpoint. Configs ship for OpenRouter,
+the OpenAI API, Gemini's compatibility endpoint and a local vLLM; anything else with that protocol,
+Vertex and Azure among them, is a config of its own naming a `base_url` and a key variable. It is
+not part of the wheel. `docs/evaluation.md` has it.
+
+```
+uv run python -m evals.run   taskset=data/taskset.jsonl model=claude-openrouter
+uv run python -m evals.score outputs/runs/<dir>
+uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
+```
+
 ## Freeze a taskset
 
 ```
@@ -116,6 +128,7 @@ measures what a constant answer gets, and `arggym.corrected` rescales a score so
 | | |
 |---|---|
 | `docs/dataset-contract.md` | the interface, and why each part is the way it is |
+| `docs/evaluation.md` | running a sweep: providers, solvers, and reading the output |
 | `docs/dataset-card.md` | what the benchmark measures and what a score licenses |
 | `NOTATION.md` | the DSL, the semantics conventions, the answer formats |
 
@@ -126,9 +139,10 @@ pip install arggym                # the library: generate, render, parse, score
 pip install "arggym[inspector]"   # + the browser inspector
 ```
 
-`examples/evaluate.py` needs nothing beyond the library: it is standard library only.
-A bare install pulls no web framework. From a checkout, `uv sync` then `uv run pytest`; `make` lists
-the shortcuts.
+`examples/evaluate.py` needs nothing beyond the library: it is standard library only. A bare
+install pulls neither a web framework nor an HTTP client -- `evals/` is not in the wheel, and its
+dependencies are a local group. From a checkout, `uv sync` then `uv run pytest`; `make` lists the
+shortcuts.
 
 ---
 

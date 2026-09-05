@@ -1,0 +1,6 @@
+# The question as frozen, with nothing added. The default, because anything
+# added here is the evaluator's intervention and belongs in a named condition.
+name: none
+system: ""
+prefix: ""
+suffix: ""

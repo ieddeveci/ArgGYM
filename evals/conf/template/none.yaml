@@ -1,0 +1,4 @@
+# No fence at all: the whole completion is the answer. Right for a solver that
+# returns a value, and for a base model that will not follow a format
+# instruction anyway.
+name: null
