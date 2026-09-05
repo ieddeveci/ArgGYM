@@ -109,11 +109,11 @@ to cite.
     "level": 9,
     "ordering": "weakest_link_elitist",
 
-    "arggym_version": "2.1.0",
+    "arggym_version": "2.0.0",
     "pyarg_version": "2.0.2",
     "prompt_version": 3,
     "theory_schema": 1,
-    "scoring_version": 1,
+    "scoring_version": 3,
 
     "checker": "graded",                  // exact | graded | verified
     "answer_shape": "label_map",          // see 4
@@ -390,11 +390,11 @@ frozen artifact is densified once, at export, where it is recorded.
 The spec is the whole input; the manifest records what happened.
 
 ```yaml
-arggym: "2.1.0"
+arggym: "2.0.0"
 pyarg: "2.0.2"
 prompt_version: 3
 theory_schema: 1
-scoring_version: 1
+scoring_version: 3
 profile: FULL
 tasks: [status_query, semantics_query, ...]
 levels: [3, 6, 9, 12, 15]

@@ -21,15 +21,16 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from arggym.core.dataset import BuildFailed, TaskDataset
+from arggym.core.prompting import MINIMALITY
 from arggym.core.rows import score as score_row
 from arggym.core.spec import TasksetSpec, check_versions
 
 #: Bumped when the rendered question changes for any reason. A prompt change is
 #: a different taskset even when the theory behind it is identical.
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
-SCORING_VERSION = 2
+SCORING_VERSION = 3
 
 
 @dataclass
@@ -60,6 +61,10 @@ class CellReport:
 
 class CellUnfilled(SystemExit):
     """A cell could not produce what the spec asked for."""
+
+
+class PromptClaimUnsupported(SystemExit):
+    """A question states a rule the row gives the scorer no way to apply."""
 
 
 class ReferenceNotVerified(SystemExit):
@@ -163,6 +168,19 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
         for r in got:
             r["metadata"]["source_index"] = len(rows)
             rows.append(r)
+        # The bloat rule is gated on `min_directives` in the scorer and asserted flatly
+        # by every prompt that carries it. All six construction generators do set one,
+        # but that was a property of six generators rather than a checked invariant, so
+        # a prompt could come to promise a rule the scorer would skip (#21).
+        unsupported = [r["id"] for r in got
+                       if MINIMALITY in r["question"]
+                       and not r["metadata"].get("gold", {}).get("min_directives")]
+        if unsupported:
+            raise PromptClaimUnsupported(
+                f"{report.key()}: {len(unsupported)} of {len(got)} rows state the "
+                f"minimality rule and carry no min_directives, so the scorer would not "
+                f"apply it ({', '.join(unsupported[:3])}). The question would be making "
+                f"a promise the row cannot keep.")
         unverified = [r["id"] for r in got
                       if r["metadata"]["reference_score"] < 0.999]
         if unverified:
