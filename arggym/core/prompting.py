@@ -16,7 +16,7 @@ _STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]\n"
 # Two rules that `score_item` applies to every task routed through it, including the
 # one that writes its own prompt. Naming them here is what stops a second wording
 # drifting into existence: `preference_construction` stated neither, and was scored by
-# both (#21).
+# both.
 MINIMALITY = ("The answer must be minimal: one using more than twice the fewest "
               "directives that work scores zero.")
 UNREADABLE = "A directive that cannot be read at all scores the whole answer zero"
@@ -33,7 +33,7 @@ _TAIL = ("Every rule needs a name, written after the kind and separated from it 
 # Two contraries are both JUSTIFIED under grounded semantics only if both are firm, and
 # firmness comes from an axiom through strict rules. No answer may add an axiom, so an
 # answer reaches this branch only where it may add a strict rule. On the other four
-# construction tasks the sentence described something their answers cannot do (#22).
+# construction tasks the sentence described something their answers cannot do.
 INCONSISTENT = ("An answer that reaches every goal while leaving the theory inconsistent "
                 "also scores zero.")
 

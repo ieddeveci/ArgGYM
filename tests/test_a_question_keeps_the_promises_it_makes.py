@@ -4,7 +4,7 @@ The bloat rule is the case that motivated this. `score_item` applies it only
 `if minimum`, and every construction prompt states it flatly. All six generators
 do set `min_directives`, so every shipped item was fine -- but that was a
 property of six generators rather than something checked, and nothing would have
-noticed a seventh task, or a level, that stopped setting it (#21).
+noticed a seventh task, or a level, that stopped setting it.
 
 `freeze` is the right place for the check: it is the step that decides what
 ships, and it already refuses a cell whose reference does not score 1.0.

@@ -389,7 +389,7 @@ def score(answer_text: str, item: PerturbItem) -> ScoreResult:
         # empty gold. No shipped item has one: `build` returns None when nothing changed,
         # and the status-diversity guards below it would reject such a draw anyway. The
         # prompt used to invite `none` regardless, which offered an answer that scores
-        # zero on every item in the benchmark (#23). It no longer does, and this arm
+        # zero on every item in the benchmark. It no longer does, and this arm
         # stays because it is what `none` means if no-change items are ever generated.
         diag["n_lines"] = 1
         diag.update(f1=0.0, exact_match=not item.gold)

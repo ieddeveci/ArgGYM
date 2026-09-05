@@ -134,7 +134,7 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, items):
         # It writes its own prompt but is scored by `score_item` like the other five,
         # so the two rules that scorer applies unconditionally have to be stated here
         # too, and the forms it accepts have to be shown rather than left inferable
-        # from the theory text (#21).
+        # from the theory text.
         assert "Permitted additions: preference directives only, written exactly in " \
                "these forms:" in it.prompt
         for form in ("   [prefer_rule: <rule> > <rule>]",

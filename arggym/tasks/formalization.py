@@ -406,7 +406,7 @@ def parse(text: str) -> Tuple[List[Operation], int]:
     `premise:` with no space where the scorer allows one; and it kept an empty
     antecedent that the scorer rejects. Generated atoms match `^[a-z]{2}\\d`, so the
     stricter class is the one every theory is written in, and a second definition of
-    the DSL is how the two fell out of step in the first place (#20).
+    the DSL is how the two fell out of step in the first place.
     """
     p = parse_answer(text)
     return p.ops, p.n_unparseable

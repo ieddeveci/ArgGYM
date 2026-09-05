@@ -171,7 +171,7 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
         # The bloat rule is gated on `min_directives` in the scorer and asserted flatly
         # by every prompt that carries it. All six construction generators do set one,
         # but that was a property of six generators rather than a checked invariant, so
-        # a prompt could come to promise a rule the scorer would skip (#21).
+        # a prompt could come to promise a rule the scorer would skip.
         unsupported = [r["id"] for r in got
                        if MINIMALITY in r["question"]
                        and not r["metadata"].get("gold", {}).get("min_directives")]
