@@ -8,20 +8,17 @@ item at all (#38, #18).
 """
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED
-from arggym.core.export import ALL_ORDERINGS, export_task
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import score_item
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import attack_defense as ad
 from arggym.tasks import counter_argument as ca
 from arggym.tasks import preference_construction as pc
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
+GRID = LEVELS
 CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 # The block is the same on every item of a variant, so sweeping the whole grid only
 # re-times generation. The cheap levels carry the default run; the sweep is marked slow.

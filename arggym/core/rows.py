@@ -26,9 +26,8 @@ row that scores differently, which is the failure this module exists to prevent,
 so every lookup raises `MissingField` naming the task and the key.
 
 Which fields a task carries is the table in `core/registry.py`, not a branch
-here. `core/export.py:39` still holds the if/elif ladder this replaces, whose
-default failure is a forgotten branch -- that is how two tasks went missing from
-the export (#23).
+here. The if/elif ladder this replaces had a default failure of a forgotten
+branch -- that is how two tasks went missing from the export (#23).
 """
 from __future__ import annotations
 

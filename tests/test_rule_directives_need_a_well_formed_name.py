@@ -7,14 +7,12 @@ None of it cost a point (#19). What a legal name looks like is now in the prompt
 """
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from arggym.core.answers import UnparseableAnswer
-from arggym.core.export import ALL_ORDERINGS, export_task
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import parse_answer, score_item
+from arggym.core.spec import ALL_ORDERINGS, SEEDS
 from arggym.tasks import counter_argument as ca
 from arggym.tasks import formalization as fz
 
@@ -30,9 +28,6 @@ def _fz_parse(line):
         return fz.parse(line), 0
     except UnparseableAnswer as e:
         return [], e.diagnostics["n_unparseable"]
-
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
 
 
 WELL_FORMED = [

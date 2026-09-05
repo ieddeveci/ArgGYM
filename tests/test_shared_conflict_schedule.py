@@ -7,14 +7,14 @@ levels 5, 8, 11 and 14, which the grid never evaluates, and so never reached an 
 item. These tests pin the property rather than the arithmetic. Whatever the schedule is,
 it has to vary across the evaluated levels, and both shapes have to generate.
 
-The grid comes from `arggym.core.export`. Restating it here would reintroduce exactly the
+The grid comes from `arggym.core.spec`. Restating it here would reintroduce exactly the
 disagreement between curriculum and grid that #30 was.
 """
 from __future__ import annotations
 
 import pytest
 
-from arggym.core.export import LEVELS, SEEDS
+from arggym.core.spec import LEVELS, SEEDS
 from arggym.tasks import preference_construction as pc
 
 # Named rather than taken from ALL_ORDERINGS by index: the economy property below holds
@@ -73,7 +73,7 @@ def test_a_shared_item_settles_two_goals_with_one_directive():
 @pytest.mark.slow
 def test_shared_levels_share_under_every_ordering_and_seed():
     """Slow: some cells take minutes under weakest_link_democratic."""
-    from arggym.core.export import ALL_ORDERINGS
+    from arggym.core.spec import ALL_ORDERINGS
     shared_levels = [l for l in LEVELS if shared_at(l)]
     assert shared_levels, "no level schedules a shared conflict"
     for level in shared_levels:

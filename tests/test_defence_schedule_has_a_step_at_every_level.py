@@ -8,16 +8,13 @@ could not be attributed to any of them (#31).
 """
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from arggym.core.curriculum import DEFENCE
-from arggym.core.export import ALL_ORDERINGS, export_task
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import attack_defense as ad
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
+GRID = LEVELS
 
 KNOBS = ("n_attackers", "support_depth", "attacker_depth",
          "n_strict_attackers", "n_decoys", "n_decoy_strict")

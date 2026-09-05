@@ -19,18 +19,17 @@ explain the convention rather than forbidding the tie.
 """
 from __future__ import annotations
 
-import inspect
 from typing import List
 
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.export import _EXPORTABLE, ALL_ORDERINGS, _export_row, export_task
+from arggym.core import registry
 from arggym.core.scoring import parse_answer
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
-TASKS = sorted(set(_EXPORTABLE))
+GRID = LEVELS
+TASKS = registry.task_names()
 CHEAP_LEVELS = (3, 6)
 
 # The two tasks whose generators reach a tie. `perturbation` ties from level 3, so the
@@ -79,9 +78,9 @@ def _items(task, levels):
     for lv in levels:
         for o in ALL_ORDERINGS:
             for s in SEEDS:
-                got = _export_row(task, lv, o, s)
-                if got is not None:
-                    yield lv, o, s, got[0]
+                item = registry.get(task).make_item(lv, s, o)
+                if item is not None:
+                    yield lv, o, s, item
 
 
 def _all_ops(item):

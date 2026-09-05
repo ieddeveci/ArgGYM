@@ -182,7 +182,6 @@ rewriting these files.
 | `spec.py`, `freeze.py` | A taskset is a spec file. `freeze` fills each cell to the size asked for, refuses a cell it cannot fill, and records every skipped seed with its reason. |
 | `floors.py` | What a constant answer scores, per task. A floor is a property of the scorer, so it is measured from rows rather than written down. |
 | `serialize.py` | Operations to JSON and back, with `theory_schema` versioned apart from the package. |
-| `export.py` | The pre-spec export path, kept for the tests that still read it. `arggym freeze` is how a taskset is written. |
 
 ---
 

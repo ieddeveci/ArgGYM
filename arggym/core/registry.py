@@ -1,10 +1,10 @@
 """The task list, as data.
 
-`core/export.py` reaches into a private dict and then dispatches through an
-if/elif ladder that restates each task's shape. That design's default failure is
-forgetting a branch, which is how two tasks went missing from the export (#23),
-and it is why nobody can write "for each task: generate, prompt, score" without
-special-casing every module.
+The pre-contract export reached into a private dict and then dispatched through
+an if/elif ladder that restated each task's shape. That design's default
+failure is forgetting a branch, which is how two tasks went missing from the
+export (#23), and it is why nobody can write "for each task: generate, prompt,
+score" without special-casing every module.
 
 Three tasks are variants rather than modules: `counter_argument_strict` differs
 from `counter_argument` by a flag, and `attack`, `defence` and `attack_defense`

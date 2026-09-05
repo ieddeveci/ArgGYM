@@ -18,16 +18,12 @@ happened to reach.
 """
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from arggym.core.curriculum import JUNCTION_START
-from arggym.core.export import ALL_ORDERINGS, export_task
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import status_query as sq
 
-LEVELS = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
 CELLS = [(lv, o, s) for lv in LEVELS for o in ALL_ORDERINGS for s in SEEDS]
 
 SHAPES = ("justified", "overruled", "undecided")

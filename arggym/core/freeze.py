@@ -77,9 +77,9 @@ def reference_score(entry: Dict[str, Any]) -> float:
     Scored through the row rather than through the item, so this is also the
     check that the row carries everything its scorer reads: a row that lost a
     field either refuses or scores its own gold below 1.0, and either way the
-    freeze stops. The old export computed the same number and counted how many
-    reached 1.0 (`core/export.py`); a count nobody reads is a check that has
-    already been lost, so this refuses instead.
+    freeze stops. The pre-contract export computed the same number and counted
+    how many reached 1.0; a count nobody reads is a check that has already been
+    lost, so this refuses instead.
     """
     return score_row(entry["reference_answer"], entry).score
 

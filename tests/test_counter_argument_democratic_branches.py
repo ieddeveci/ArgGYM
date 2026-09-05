@@ -19,8 +19,8 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.export import ALL_ORDERINGS
 from arggym.core.scoring import parse_answer
+from arggym.core.spec import ALL_ORDERINGS
 from arggym.tasks import counter_argument as ca
 
 # The cell that issue-level testing is really about. Named rather than searched for: it is

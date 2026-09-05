@@ -22,6 +22,11 @@ from typing import Any, Dict, Optional, Tuple
 
 ALL_ORDERINGS = ("last_link_elitist", "last_link_democratic",
                  "weakest_link_elitist", "weakest_link_democratic")
+# The evaluated grid. A generator whose curriculum disagrees with these levels has a
+# feature nothing exercises, which is how #30 stayed hidden, so read it from here
+# rather than restating it.
+LEVELS = (3, 6, 9, 12, 15)
+SEEDS = (0, 1)
 
 
 @dataclass(frozen=True)

@@ -35,8 +35,3 @@ def test_reference_answer_verifies(client, mode):
     assert graded["ok"], graded.get("error")
     score = graded["result"]["score"]
     assert score == pytest.approx(1.0), f"{mode}: gold regrades at {score}"
-
-
-def test_exportable_tasks_are_importable():
-    from arggym.core import export
-    assert export._EXPORTABLE, "no exportable tasks registered"

@@ -13,17 +13,15 @@ chains and loses the remainder. Both numbers are recorded, and the tests hold th
 from __future__ import annotations
 
 import ast
-import inspect
 import pathlib
 
 import pytest
 
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED, junctions_for
-from arggym.core.export import ALL_ORDERINGS, export_task
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import attack_defense as ad
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
+GRID = LEVELS
 CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 MODES = [ATTACK, DEFENCE, MIXED]
 
