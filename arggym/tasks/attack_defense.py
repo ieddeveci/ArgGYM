@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
+from arggym.core.answers import AnswerTemplate, ScoreResult
 from arggym.core.curriculum import (
     ATTACK,
     DEFENCE,
@@ -112,7 +112,7 @@ def _atoms_and_rules(ops: Sequence[Operation]) -> Tuple[set, set]:
 
 def build_attack_item(level: int, seed: int, ordering: str,
                       profile: str = "FULL",
-                      template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[Item]:
+                      template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     import random
     sp = spec_for(level, ordering, variant=seed % 5)
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
@@ -308,7 +308,7 @@ def _n_junctions(ops: Sequence[Operation]) -> int:
 
 def build_defence_item(level: int, seed: int, ordering: str,
                        profile: str = "FULL",
-                       template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[Item]:
+                       template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     n_junc = junctions_for(level, max(1, n * 4))
@@ -378,7 +378,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
 
 def build_mixed_item(level: int, seed: int, ordering: str,
                      profile: str = "FULL",
-                     template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[Item]:
+                     template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     n_atk = max(2, min(4, 2 + level // 5))
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
@@ -457,7 +457,7 @@ MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               mode: Optional[str] = None, profile: str = "FULL",
               tries: int = 12,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[Item]:
+              template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     if mode is None:
         mode = spec_for(level, ordering, variant=seed % 5).mode
     fn = MODE_BUILDERS.get(mode)

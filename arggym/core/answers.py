@@ -1,20 +1,17 @@
 """How an answer arrives, and what comes back when it is scored.
 
-Three things live here because every task needs them and each was previously
-decided per module: how a prompt asks for its answer to be fenced, how that
-fence is read back off a completion, and the shape of a score result.
+ArgGYM owns what a legal answer *is*. The harness owns how it gets one: it
+composes the prompt from the question, calls whatever solver it likes, and
+extracts the answer before handing it over. Nothing here is called by a scorer.
 
-The rule this module implements is that ArgGYM owns what a legal answer *is* and
-the evaluator owns how it is *delivered* (`docs/dataset-contract.md`). The fence
-is delivery. That is why it is a render-time choice rather than a property of
-the benchmark: `AnswerTemplate` says which delimiters a prompt asks for, the
-default matches reasoning-gym's `<answer>` tags, and a harness with another
-convention re-renders with its own template instead of editing prompt strings.
+So `AnswerTemplate` and `extract_answer` are conveniences for a harness that
+wants the common convention -- one names a fence in a prompt, the other reads it
+back -- and a harness with a JSON schema, constrained decoding or a symbolic
+solver uses neither.
 
-What the fence is *for* is the other half. Strict parsing means every line
-inside the fence has to be an answer line, so a model that reasons before or
-after its answer is not charged for the reasoning -- the fence is what separates
-the two, and without one the thinking would be read as a malformed answer.
+What the dataset does define is the shape of what comes back: `ScoreResult` for
+a score, and `UnparseableAnswer` for text that does not spell out an answer at
+all (`docs/dataset-contract.md`).
 """
 from __future__ import annotations
 
@@ -53,16 +50,17 @@ _FENCE = re.compile(r"<answer>\s?(.*?)\s?</answer>", re.S | re.I)
 
 
 def extract_answer(text: Optional[str]) -> str:
-    """The part of a completion that holds the answer.
+    """The part of a completion that holds the answer, for a harness that wants it.
 
-    A fenced answer yields its last region; an unfenced completion is returned
-    whole, which is the fallback for an evaluator that already cut the answer
-    out rather than the path the prompts describe.
+    Nothing in ArgGYM calls this. Pulling the answer out of a completion is the
+    harness's job, and this is offered because the convention below is a common
+    one, not because the dataset has an opinion. A harness using another fence
+    reads its own; one with a structured-output solver needs no extraction at all.
 
-    Only the fence the questions ask for is read. Accepting a second convention
-    would mean the scorer honours something no prompt requests, which is the
-    stated-versus-enforced mismatch this work keeps closing, and it forces a
-    precedence rule for answers carrying both.
+    A fenced answer yields its last region; unfenced text is returned whole.
+
+    Only one fence is read. Accepting several would need a precedence rule for a
+    completion carrying two of them, and there is no reason to prefer either.
 
     The last region rather than the first: a reasoning model drafts a candidate
     mid-thought and then revises it, so the first region is the draft. The v1
@@ -73,6 +71,21 @@ def extract_answer(text: Optional[str]) -> str:
         return ""
     found = _FENCE.findall(text)
     return found[-1] if found else text
+
+
+class UnparseableAnswer(ValueError):
+    """Text that does not spell out an answer of the shape the task expects.
+
+    Raised by `parse`, never by `score_value`: a solver that hands over a value
+    has already done its own parsing, and its failures are its own. `score` turns
+    this back into a zero `ScoreResult` so a harness scoring a whole taskset gets
+    a row rather than an exception.
+    """
+
+    def __init__(self, reason: str, diagnostics: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.diagnostics: Dict[str, Any] = dict(diagnostics or {})
 
 
 @dataclass(frozen=True)

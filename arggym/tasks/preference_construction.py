@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Sequence
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
+from arggym.core.answers import AnswerTemplate
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -117,7 +117,7 @@ class PCItem:
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL",
-          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[PCItem]:
+          template: Optional[AnswerTemplate] = None) -> Optional[PCItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pc"))
     n_claims = max(1, min(1 + (level * 8) // 15, 8))
     n_conf = max(n_claims + 1, min(n_claims + 1 + (level * 5) // 15, 10))
@@ -322,7 +322,7 @@ TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both direc
 
 
 def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
-                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     lines = [f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
              f"with {on}.", "", theory, ""]
@@ -347,7 +347,7 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 14,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[PCItem]:
+              template: Optional[AnswerTemplate] = None) -> Optional[PCItem]:
     for k in range(tries):
         it = build(level, seed * 61 + k, ordering, profile, template)
         if it is not None:

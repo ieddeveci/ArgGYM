@@ -20,22 +20,31 @@ ds = arggym.create("counter_argument", level=6,
                    ordering="weakest_link_elitist", size=50)
 
 for entry in ds:
-    text = my_model(entry["question"])       # the question asks for <answer> tags
-    result = ds.score(arggym.extract_answer(text), entry)
+    answer = my_solver(entry["question"])    # your prompt, your parsing
+    result = ds.score(answer, entry)
     print(result.score, result.success, result.reason)
 ```
 
-ArgGYM owns **what a legal answer is**; you own **how it is delivered**. The question asks for the
-answer between `<answer>` and `</answer>`, matching reasoning-gym, and `arggym.extract_answer(text)`
-reads that region back. Which delimiters the question names is a render-time choice, not a property
-of the benchmark: `arggym.create(..., template=AnswerTemplate("boxed", r"\boxed{", "}"))` asks for
-those instead, and each row records which template built its question. Scoring unwraps `<answer>`
-and nothing else, so a harness that renders its own template unwraps its own answers and hands the
-body to `score` -- which is what a harness with constrained decoding or a JSON schema already does.
+ArgGYM owns **what a legal answer is**. You own **how you get one**. A solver is anything that
+turns a question into an answer: a bare model, an agent with tools, a symbolic procedure. Composing
+the prompt, calling the thing, and pulling the answer out of what came back are all yours, so no
+convention of ours is in your way.
 
-The fence earns its place: the parser is strict, so every line inside it has to be an answer line.
-Without one, a model that reasons before writing its answer would have its reasoning read as a
-malformed answer.
+The question states the task and what a legal answer must contain, and says nothing about where to
+put it. If you want that sentence in the question, ask for it and you get exactly one more:
+
+```python
+ds = arggym.create(..., template=arggym.XML_TAGS)          # or your own AnswerTemplate
+text = my_model(entry["question"])
+result = ds.score(arggym.extract_answer(text), entry)      # a helper, not a requirement
+```
+
+An answer does not have to be text. Every task also takes the value directly, so a solver using a
+JSON schema or constrained decoding never writes a directive:
+
+```python
+result = ds.score_value([Operation(kind="prefer_rule", stronger="d1", weaker="d2")], entry)
+```
 
 `ds.score_answer(text, entry)` returns the float alone, so a reasoning-gym-shaped harness or an RL
 loop works unchanged.

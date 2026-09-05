@@ -1,17 +1,17 @@
-"""What the fence lets a label scorer accept, and what it still refuses.
+"""What a label scorer accepts in an answer, and what it still refuses.
 
-The fence -- `<answer>` by default -- is what separates a model's reasoning from
-its answer, so everything inside it is answer text and everything outside is
-delivery. That draws the line these tests pin.
+The scorer reads the answer the harness hands it, so every line of it is answer
+text: a sentence among the labels is an unreadable answer line, not reasoning
+that happened to come along. That draws the line these tests pin.
 
 Anchoring each pair to a whole line was tried and rejected. It stopped nothing:
-a prose decoy inside the fence already scored zero on its leftover token, and a
-*clean* decoy line matched the anchored pattern anyway. Its only real effect was
-to turn a correct answer written on one line into `unparseable_tokens`, which is
-format compliance charged to the reasoning score -- the confound #10 measures at
-0.180. `defeat_diagnosis` is different and its fix stayed: a `survives_because`
-written under a record that named no defeater was credited to the record above
-it, which is a wrong answer rather than a formatting choice.
+a prose decoy already scored zero on its leftover token, and a *clean* decoy
+line matched the anchored pattern anyway. Its only real effect was to turn a
+correct answer written on one line into `unparseable_tokens`, which is format
+compliance charged to the reasoning score -- the confound #10 measures at 0.180.
+`defeat_diagnosis` is different and its fix stayed: a `survives_because` written
+under a record that named no defeater was credited to the record above it, which
+is a wrong answer rather than a formatting choice.
 """
 from __future__ import annotations
 
@@ -48,12 +48,12 @@ def test_every_claim_on_one_line_is_still_a_correct_answer(sq_item):
     assert sq.score("  ".join(lines), sq_item).score == pytest.approx(1.0)
 
 
-def test_a_prose_line_inside_the_fence_is_still_junk(sq_item):
+def test_a_prose_line_among_the_labels_is_still_junk(sq_item):
     """Ignoring the sentence is not the same as accepting it.
 
-    Everything between the delimiters is answer, so a sentence there is an
-    unreadable line and the answer scores zero. What changed is that it can no
-    longer add a claim to the prediction on its way out.
+    Every line of the answer is answer text, so a sentence among the labels is
+    an unreadable line and the answer scores zero. It contributes no claim to
+    the prediction on its way out.
     """
     r = sq.score("\n".join(["My conclusion: overruled"] + gold_lines(sq_item)), sq_item)
     assert r.score == 0.0

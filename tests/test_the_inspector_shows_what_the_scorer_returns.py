@@ -49,10 +49,11 @@ def test_every_mode_in_the_dropdown_builds_an_item(items):
 
 
 @pytest.mark.parametrize("key", MODE_KEYS)
-def test_the_question_asks_for_the_default_template(key, items):
+def test_the_question_says_nothing_about_where_to_put_the_answer(key, items):
+    """Delivery is the harness's, so the question states the task and stops there."""
     prompt = items[key]["prompt"]
-    assert DEFAULT_TEMPLATE.instruction in prompt
-    assert prompt.count(DEFAULT_TEMPLATE.open) == 1
+    assert DEFAULT_TEMPLATE.instruction not in prompt
+    assert DEFAULT_TEMPLATE.open not in prompt
 
 
 @pytest.mark.parametrize("key", MODE_KEYS)
@@ -62,7 +63,11 @@ def test_the_reference_scores_one_in_the_panel(key, items):
 
 @pytest.mark.parametrize("key", MODE_KEYS)
 def test_a_pasted_reference_scores_the_same_bare_or_fenced(key, items, client):
-    """The two shapes a user pastes into the box: the answer, or a whole completion."""
+    """The two shapes a user pastes into the box: the answer, or a whole completion.
+
+    The page extracts, because it is the harness here. The dataset would read the
+    fenced form as an answer whose first and last lines are unreadable.
+    """
     d = items[key]
     bare = grade(client, d["token"], d["reference"])
     fenced = grade(client, d["token"],
@@ -93,4 +98,4 @@ def test_the_page_states_the_scoring_rules_it_actually_applies(client):
     page = client.get("/").get_data(as_text=True)
     assert "Construction tasks: score = 0.5" in page
     assert "Query tasks score their own way" in page
-    assert "&lt;answer&gt;" in page
+    assert "this page extracts it, as an evaluation harness would." in page

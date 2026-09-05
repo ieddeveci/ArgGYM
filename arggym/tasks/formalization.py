@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
 from arggym.core.curriculum import JUNCTION_CAPS, PROFILES, junction_budget
 from arggym.core.nlforms import (
     AXIOM,
@@ -167,7 +167,7 @@ class _Cycler:
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL",
-          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[FItem]:
+          template: Optional[AnswerTemplate] = None) -> Optional[FItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
     lo = 3 + int((level - 1) * (40 - 3) / 14)
@@ -384,7 +384,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str],
-                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following argumentation is described in words. Formalize it as an ASPIC+ theory, "
             f"to be evaluated under grounded semantics with {on}.\n\n{nl}\n\n"
@@ -396,8 +396,12 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str],
             + answer_format("Answer format: one directive per line.", template))
 
 
-def parse(text: str) -> Tuple[List[Operation], int]:
-    """One DSL, one parser.
+def parse(text: str, item: Optional[FItem] = None) -> List[Operation]:
+    """The theory an answer submits, as values. One DSL, one parser.
+
+    A solver emitting operations directly hands them to `score_value` and never
+    writes a directive (`docs/dataset-contract.md` section 4). `item` is accepted so
+    every task parses through the same signature; formalization needs nothing from it.
 
     This module carried its own copy of the three directive patterns and the same
     unit-and-stray scan, and the copy drifted. It read an atom as `-?\\w+` where the
@@ -409,16 +413,29 @@ def parse(text: str) -> Tuple[List[Operation], int]:
     the DSL is how the two fell out of step in the first place.
     """
     p = parse_answer(text)
-    return p.ops, p.n_unparseable
+    if p.n_unparseable:
+        raise UnparseableAnswer(f"unparseable_lines:{p.n_unparseable}",
+                                {"n_parsed": len(p.ops),
+                                 "n_unparseable": p.n_unparseable})
+    return p.ops
 
 
 def score(answer_text: str, item: FItem) -> ScoreResult:
-    diag: Dict = {"n_parsed": 0, "n_unparseable": 0, "behavioural": None,
+    """`score_value(parse(text, item), item)`, with a parse failure turned into a row."""
+    try:
+        ops = parse(answer_text, item)
+    except UnparseableAnswer as e:
+        diag: Dict = {"n_parsed": 0, "n_unparseable": 0, "behavioural": None,
+                      "gold_status": item.gold_status}
+        diag.update(e.diagnostics)
+        return ScoreResult(0.0, False, e.reason, diag)
+    return score_value(ops, item)
+
+
+def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
+    ops = list(ops)
+    diag: Dict = {"n_parsed": len(ops), "n_unparseable": 0, "behavioural": None,
                   "gold_status": item.gold_status}
-    ops, bad = parse(answer_text)
-    diag["n_parsed"], diag["n_unparseable"] = len(ops), bad
-    if bad:
-        return ScoreResult(0.0, False, f"unparseable_lines:{bad}", diag)
     if not ops:
         return ScoreResult(0.0, False, "no_directives", diag)
 
@@ -488,7 +505,7 @@ def score(answer_text: str, item: FItem) -> ScoreResult:
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               profile: str = "FULL",
               tries: int = 16,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[FItem]:
+              template: Optional[AnswerTemplate] = None) -> Optional[FItem]:
     for k in range(tries):
         it = build(level, seed * 89 + k, ordering, profile=profile, template=template)
         if it is not None:

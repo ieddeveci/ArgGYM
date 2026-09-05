@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
+from arggym.core.answers import AnswerTemplate
 
 SEMANTICS = "grounded semantics"
 ORDERING_NAME = {
@@ -66,14 +66,20 @@ def permitted_block(allow_strict: bool = False) -> str:
 _FORMAT = ("Answer format: one directive per line.")
 
 
-def answer_format(clause: str, template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
-    """The answer-format block: what the answer must say, then where to put it.
+def answer_format(clause: str, template: Optional[AnswerTemplate] = None) -> str:
+    """The answer-format block: what the answer must say, and optionally where to put it.
 
     The clause is the task's own and describes content -- one directive per line,
-    one line per claim. The sentence after it describes delivery and comes from
-    the template, so changing the fence is a render-time choice and never an edit
-    to a task's prompt string (`docs/dataset-contract.md` section 1).
+    one line per claim. Where the answer goes is delivery, and delivery belongs to
+    the harness: it composes the prompt from this question, calls whatever solver it
+    likes, and extracts the answer before handing it back. So by default the question
+    says nothing about a fence.
+
+    A caller that would rather have the sentence rendered here passes a template and
+    gets exactly one sentence more (`docs/dataset-contract.md` section 1).
     """
+    if template is None:
+        return clause.rstrip()
     return f"{clause.rstrip()}\n{template.instruction}"
 
 INCLUDE_NOTATION = True
@@ -90,7 +96,7 @@ def _goal_line(claim: str, current: str, want: str) -> str:
 
 def render(theory_text: str, ordering: str, goals: Sequence[Dict],
            include_notation: Optional[bool] = None, allow_strict: bool = False,
-           template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+           template: Optional[AnswerTemplate] = None) -> str:
     head = (f"The following is a defeasible argumentation theory, evaluated under {SEMANTICS} "
             f"with {ORDERING_NAME.get(ordering, ordering)}.")
     parts: List[str] = [head, "", theory_text, ""]

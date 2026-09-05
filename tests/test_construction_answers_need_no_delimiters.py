@@ -16,7 +16,12 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
+from arggym.core.answers import (
+    DEFAULT_TEMPLATE,
+    AnswerTemplate,
+    ScoreResult,
+    extract_answer,
+)
 from arggym.core.prompting import UNREADABLE, permitted_block
 from arggym.core.scoring import score_item
 from arggym.tasks import attack_defense as ad
@@ -60,7 +65,7 @@ VARIANTS = {
 def items():
     out = {}
     for task, (make, as_input) in VARIANTS.items():
-        it = make(DEFAULT_TEMPLATE)
+        it = make(None)
         assert it is not None, f"{task}: no item at level 3 seed 0"
         out[task] = (it, as_input(it))
     return out
@@ -83,44 +88,37 @@ def test_the_reference_scores_one_bare(task, items):
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_reference_scores_one_fenced_after_reasoning(task, items):
-    """What an evaluator actually sends: the answer after the model has thought aloud.
+def test_a_completion_is_not_an_answer(task, items):
+    """What a model returns is not what the scorer takes.
 
-    This is the shape that scored zero before the fence came back, on every task.
+    Turning the first into the second is the harness's job, and doing it here as
+    well would mean honouring one convention above every other -- which is what
+    stops a caller bringing their own.
     """
     it, score_input = items[task]
-    r = score_item(f"Here is my reasoning.\n{DEFAULT_TEMPLATE.wrap(it.reference)}",
-                   score_input)
+    completion = f"Here is my reasoning.\n{DEFAULT_TEMPLATE.wrap(it.reference)}"
+    assert score_item(completion, score_input).score == 0.0
+    r = score_item(extract_answer(completion), score_input)
     assert r.score == pytest.approx(1.0), (task, r.reason)
     assert r.success is True
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_prompt_names_the_fence_it_was_rendered_with(task, items):
-    """The prompt says where to put the answer, and the template decides what it says.
-
-    Both halves matter. Silence is what left a model guessing and a reasoning
-    completion unscoreable; a hard-coded sentence is what made our delimiters a
-    property of the benchmark instead of a property of one rendering.
-    """
+def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, items):
+    """The question states the task. Where the answer goes is the harness's sentence,
+    which is what lets one harness use XML tags and another a JSON schema."""
     it, _ = items[task]
-    assert DEFAULT_TEMPLATE.instruction in it.prompt
-    # The fence is named once, in the sentence the template contributed, and
-    # nowhere in the clause that says what the answer must contain.
-    assert it.prompt.count(DEFAULT_TEMPLATE.open) == 1
+    assert DEFAULT_TEMPLATE.instruction not in it.prompt
+    assert DEFAULT_TEMPLATE.open not in it.prompt
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_another_template_renders_another_sentence(task, items):
-    """A harness with its own convention re-renders; it does not edit prompt strings."""
+def test_asking_for_a_template_adds_that_sentence_and_nothing_else(task, items):
+    """A caller who would rather the question carried the sentence can have it."""
     make, _ = VARIANTS[task]
     other = make(OTHER_TEMPLATE)
-    assert OTHER_TEMPLATE.instruction in other.prompt
-    assert DEFAULT_TEMPLATE.instruction not in other.prompt
-    # And nothing but that sentence moved.
     default, _ = items[task]
-    assert (other.prompt.replace(OTHER_TEMPLATE.instruction, DEFAULT_TEMPLATE.instruction)
-            == default.prompt)
+    assert other.prompt == f"{default.prompt}\n{OTHER_TEMPLATE.instruction}"
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))

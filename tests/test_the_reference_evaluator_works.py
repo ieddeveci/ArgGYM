@@ -1,9 +1,12 @@
 """The example an adopter copies has to run.
 
 `docs/dataset-card.md` and #54 promise a path from install to a scored JSONL.
-The model call is stubbed; everything else -- reading the frozen file, finding
-the answer inside the fence the question asked for, scoring a row, and the
+The model call is stubbed; everything else -- reading the frozen file, composing
+the prompt, pulling the answer out of the completion, scoring a row, and the
 report -- is exercised.
+
+This file is also where the boundary is checked from the outside: the three jobs
+the example does are the three the dataset does not.
 """
 import json
 import subprocess
@@ -37,35 +40,48 @@ def test_the_manifest_line_is_not_read_as_an_item(taskset):
     assert all("question" in r for r in got)
 
 
-def test_the_example_reads_the_fence_the_question_asked_for(taskset):
-    """It does not define a second one.
+def test_the_example_names_one_convention_and_uses_it_for_both_halves(taskset):
+    """Stating a fence and reading one back are two chances to disagree.
 
-    The example used to carry its own tag regex, arrived at independently and
-    identical to the package's. Two copies of the rule that says where an answer
-    ends is how they come to disagree, so the example reads the region with
-    `arggym.extract_answer` and its own text says which convention that is.
+    The example used to carry its own tag regex alongside the package's. Here the
+    convention is named once and both halves are derived from it, so a reader who
+    swaps `TEMPLATE` gets an instruction and an extractor that still match.
     """
     src = (ROOT / "examples" / "evaluate.py").read_text()
     assert "arggym.extract_answer(" in src
     assert "re.compile" not in src, "the example defines a second answer-region regex"
+    assert evaluate.prompt_for("Q") == f"Q\n{evaluate.TEMPLATE.instruction}"
+    assert evaluate.answer_from(evaluate.TEMPLATE.wrap("body")) == "body"
 
 
-def test_every_question_in_the_taskset_names_the_fence(taskset):
+def test_no_question_in_the_taskset_says_where_to_put_the_answer(taskset):
+    """The dataset states the task. Where the answer goes is the harness's sentence."""
     from arggym.core.answers import DEFAULT_TEMPLATE
     rows = list(evaluate.rows(str(taskset)))
+    assert rows
     for row in rows:
-        assert DEFAULT_TEMPLATE.instruction in row["question"]
-        assert row["metadata"]["answer_template"] == DEFAULT_TEMPLATE.name
+        assert DEFAULT_TEMPLATE.instruction not in row["question"]
+        assert DEFAULT_TEMPLATE.open not in row["question"]
+        assert row["metadata"]["answer_template"] is None
+
+
+def test_the_prompt_the_example_sends_does_say_where(taskset):
+    rows = list(evaluate.rows(str(taskset)))
+    prompt = evaluate.prompt_for(rows[0]["question"])
+    assert prompt.startswith(rows[0]["question"])
+    assert prompt.endswith(evaluate.TEMPLATE.instruction)
 
 
 def test_a_perfect_model_scores_one_on_every_row(taskset, monkeypatch):
-    def stub(base_url, model, key, question, max_tokens, timeout):
-        # Answer with the reference for whichever row carries this question.
+    def stub(base_url, model, key, prompt, max_tokens, timeout):
+        # Reason out loud, then answer with the reference for whichever row carries
+        # this prompt. The reasoning is the reason the example extracts at all.
         for row in evaluate.rows(str(taskset)):
-            if row["question"] == question:
-                return {"text": "<answer>\n" + row["reference_answer"] + "\n</answer>",
+            if prompt == evaluate.prompt_for(row["question"]):
+                return {"text": "Let me work through it.\n"
+                                + evaluate.TEMPLATE.wrap(row["reference_answer"]),
                         "finish_reason": "stop"}
-        raise AssertionError("question not in the taskset")
+        raise AssertionError("prompt does not match any row")
 
     monkeypatch.setattr(evaluate, "complete", stub)
     monkeypatch.setattr(sys, "argv",

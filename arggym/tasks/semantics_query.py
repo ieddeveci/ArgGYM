@@ -5,11 +5,11 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import UNSATISFIABLE, Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import answer_format
@@ -303,7 +303,7 @@ def _negated_premise(it, ridx):
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[SemItem]:
+          template: Optional[AnswerTemplate] = None) -> Optional[SemItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
     n_cluster = 2
@@ -483,7 +483,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: str,
-                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     asks = "\n".join(f"   {c} under {s}" for c, s in queries)
     return (f"The following is a defeasible argumentation theory, evaluated with {on}.\n\n"
@@ -503,20 +503,53 @@ _PAIR = re.compile(r"(-?\w+)\s+under\s+([a-z ]+?)\s*[:=]\s*"
                    r"(justified|overruled|undecided|no stable extension)\b(?!\w)", re.I)
 
 
-def score(answer_text: str, item: SemItem) -> ScoreResult:
-    diag: Dict = {"n_gold": len(item.gold), "wrong": [], "missing": [], "contradicted": []}
-    body = extract_answer(answer_text)
-    pred = collect(((claim.lower(), re.sub(r"\s+semantics$", "", sem.strip().lower())),
-                    st.upper().replace(" ", "_"))
-                   for claim, sem, st in _PAIR.findall(body))
+#: A query -- claim and semantics -- keyed to the status the answer gives it. A sequence
+#: where the answer gave several statuses for one query: only text can contradict itself,
+#: so a solver that submits a mapping writes one status per query and a text answer that
+#: hedges is the only way to reach the `contradicted` diagnostic (`core/pairs.py:pair_f1`).
+Value = Dict[Tuple[str, str], Union[str, Sequence[str]]]
+
+
+def _key(claim: str, semantics: str) -> Tuple[str, str]:
+    """`x under grounded` and `X under grounded semantics` ask the same query."""
+    return claim.lower(), re.sub(r"\s+semantics$", "", semantics.strip().lower())
+
+
+def _diagnostics(item: SemItem) -> Dict:
+    return {"n_gold": len(item.gold), "wrong": [], "missing": [], "contradicted": []}
+
+
+def parse(answer_text: str, item: SemItem) -> Value:
+    """The query-status pairs the answer states, in the order it states them.
+
+    A status repeated for one query is kept rather than folded away here: whether saying
+    the same thing twice is one prediction is a scoring question, and `score_value`
+    answers it.
+    """
+    body = answer_text or ""
+    said: Dict[Tuple[str, str], List[str]] = {}
+    for claim, sem, st in _PAIR.findall(body):
+        said.setdefault(_key(claim, sem), []).append(st.upper().replace(" ", "_"))
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
     if junk:
-        diag["junk_tokens"] = junk[:6]
-        return ScoreResult(0.0, False, f"unparseable_tokens:{len(junk)}", diag)
-    if not pred:
-        return ScoreResult(0.0, False, "no_parseable_pairs", diag)
+        raise UnparseableAnswer(f"unparseable_tokens:{len(junk)}", {"junk_tokens": junk[:6]})
+    if not said:
+        raise UnparseableAnswer("no_parseable_pairs")
+    return said
+
+
+def score_value(value: Value, item: SemItem) -> ScoreResult:
+    """Grade a label map, whichever way it arrived.
+
+    A solver with constrained decoding, a JSON schema or a tool call submits one of these
+    and never imitates the line format (`docs/dataset-contract.md` section 4).
+    """
+    diag = _diagnostics(item)
+    pred = collect((_key(claim, sem), st.upper().replace(" ", "_"))
+                   for (claim, sem), statuses in value.items()
+                   for st in ((statuses,) if isinstance(statuses, str) else statuses))
 
     gold = {(c, s.lower()): v for (c, s), v in item.gold.items()}
     r = pair_f1(pred, gold)
@@ -531,9 +564,24 @@ def score(answer_text: str, item: SemItem) -> ScoreResult:
     return ScoreResult(round(r.f1, 4), r.exact_match, "ok", diag)
 
 
+def score(answer_text: str, item: SemItem) -> ScoreResult:
+    """Grade an answer written as text: read the value out of it, then grade the value.
+
+    The text arrives already extracted: composing the prompt and pulling the answer out
+    of whatever came back is the harness's job, so the dataset never unwraps a fence.
+    That is what lets a caller use any convention at all -- or none, with a solver that
+    submits the value itself (`docs/dataset-contract.md` sections 1 and 4).
+    """
+    try:
+        value = parse(answer_text, item)
+    except UnparseableAnswer as bad:
+        return ScoreResult(0.0, False, bad.reason, {**_diagnostics(item), **bad.diagnostics})
+    return score_value(value, item)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               tries: int = 24,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[SemItem]:
+              template: Optional[AnswerTemplate] = None) -> Optional[SemItem]:
     for k in range(tries):
         it = build(level, seed * 83 + k, ordering, template)
         if it is not None:

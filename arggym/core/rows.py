@@ -263,10 +263,27 @@ def score_input(entry: Dict[str, Any]) -> Tuple[registry.TaskSpec, Any]:
 
 
 def score(answer: str, entry: Dict[str, Any]) -> ScoreResult:
-    """Score a model's text against one row, with no generator in sight."""
+    """Score an answer written as text against one row, with no generator in sight."""
     spec, payload = score_input(entry)
     if spec.scorer == registry.ENGINE:
         from arggym.core.scoring import score_item
 
         return score_item(answer, payload)
     return import_module(f"arggym.tasks.{spec.module}").score(answer, payload)
+
+
+def score_value(value: Any, entry: Dict[str, Any]) -> ScoreResult:
+    """Score an answer that was never text.
+
+    A solver using a JSON schema, a tool call or constrained decoding produces the
+    answer directly, and asking it to render our DSL so we can parse it back would be
+    the dataset dictating a serialization (`docs/dataset-contract.md` section 4). The
+    shape `value` takes is the task's answer shape, recorded on the row as
+    `metadata.answer_shape`.
+    """
+    spec, payload = score_input(entry)
+    if spec.scorer == registry.ENGINE:
+        from arggym.core.scoring import score_value as score_ops
+
+        return score_ops(value, payload)
+    return import_module(f"arggym.tasks.{spec.module}").score_value(value, payload)

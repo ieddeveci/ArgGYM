@@ -77,25 +77,23 @@ def test_perturbation_carries_both_of_its_operation_lists():
     assert e["metadata"]["base_ops"] and e["metadata"]["pert_ops"]
 
 
-def test_a_row_records_the_template_its_question_was_rendered_with():
-    """A frozen taskset says what its questions asked for, rather than leaving a
-    reader to infer the convention from the prompt text."""
+def test_a_row_asks_for_no_convention_unless_one_was_requested():
+    """Where the answer goes is the harness's sentence, so the question omits it and
+    the row says so rather than leaving a reader to infer it from the prompt text."""
     e = create(**CHEAP, size=1)[0]
-    assert e["metadata"]["answer_template"] == DEFAULT_TEMPLATE.name == "xml_tags"
-    assert DEFAULT_TEMPLATE.instruction in e["question"]
+    assert e["metadata"]["answer_template"] is None
+    assert DEFAULT_TEMPLATE.instruction not in e["question"]
 
 
-def test_the_template_is_a_render_time_argument():
-    """Everything but the delivery sentence is the same question."""
-    default = create(**CHEAP, size=1)[0]
+def test_asking_for_a_template_adds_one_sentence_and_records_it():
+    """The same item either way: only the question is re-rendered."""
+    plain = create(**CHEAP, size=1)[0]
     boxed = AnswerTemplate("boxed", "\\boxed{", "}")
     other = create(**CHEAP, size=1, template=boxed)[0]
     assert other["metadata"]["answer_template"] == "boxed"
-    assert other["question"].replace(boxed.instruction,
-                                     DEFAULT_TEMPLATE.instruction) == default["question"]
-    # The item is the same item: only the question was re-rendered.
-    assert other["reference_answer"] == default["reference_answer"]
-    assert other["metadata"]["gold"] == default["metadata"]["gold"]
+    assert other["question"] == f"{plain['question']}\n{boxed.instruction}"
+    assert other["reference_answer"] == plain["reference_answer"]
+    assert other["metadata"]["gold"] == plain["metadata"]["gold"]
 
 
 def test_source_dataset_is_the_registry_key_so_a_composite_can_dispatch():

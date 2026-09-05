@@ -6,7 +6,7 @@ from typing import Dict, List, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import ASPICFramework, Operation
-from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.answers import ScoreResult, UnparseableAnswer
 
 BLOAT_FACTOR = 2
 PARTIAL_CAP = 0.25
@@ -31,14 +31,15 @@ class ParsedAnswer:
 
 
 def parse_answer(text: str) -> ParsedAnswer:
-    """The directives a submission carries, wrapped in delimiters or not.
+    """The directives an answer carries.
 
-    `extract_answer` unwraps a wrapped answer and hands back anything else whole, so a
-    bare directive list and the same list between <answer> and </answer> parse to the
-    same operations (`docs/dataset-contract.md` section 1).
+    The input is the answer, not a completion. Composing the prompt and pulling the
+    answer out of whatever the solver returned is the harness's job, so nothing here
+    unwraps a fence -- which is what lets a caller use any convention, or none at all
+    (`docs/dataset-contract.md` section 1).
     """
     out = ParsedAnswer()
-    body = extract_answer(text)
+    body = text or ""
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
     stray = [t for t in leftover.split()
@@ -175,8 +176,45 @@ def subgoals_from(goals: Sequence[Dict], base_ops: Sequence[Operation]) -> List[
     return out
 
 
+def parse(text: str, item: Dict) -> List[Operation]:
+    """The directives an answer submits, as values.
+
+    A solver that emits operations directly -- through a JSON schema, a tool call or
+    constrained decoding -- skips this and hands the list to `score_value`, which is
+    the point of the seam: submitting an answer must not mean imitating our
+    serialization (`docs/dataset-contract.md` section 4).
+
+    An empty list is an answer, not a failure: it says the solver submitted nothing,
+    and `score_value` reports that. Only text that cannot be read at all raises.
+    """
+    p = parse_answer(text)
+    if p.n_unparseable:
+        raise UnparseableAnswer(
+            f"unparseable_lines:{p.n_unparseable}",
+            {"n_lines": p.n_lines, "n_unparseable": p.n_unparseable,
+             "unparseable_examples": p.unparseable_examples})
+    return p.ops
+
+
 def score_item(answer_text: str, item: Dict) -> ScoreResult:
-    """Score one construction answer.
+    """Score one construction answer written as text.
+
+    `score_value(parse(text, item), item)`, with a parse failure turned back into the
+    zero result a harness scoring a whole taskset needs.
+    """
+    try:
+        ops = parse(answer_text, item)
+    except UnparseableAnswer as e:
+        diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [],
+                      "rejected_detail": [], "goals_met": [], "n_used": 0,
+                      "minimum": item.get("min_directives")}
+        diag.update(e.diagnostics)
+        return ScoreResult(score=0.0, success=False, reason=e.reason, diagnostics=diag)
+    return score_value(ops, item)
+
+
+def score_value(ops: Sequence[Operation], item: Dict) -> ScoreResult:
+    """Score one construction answer, however it was expressed.
 
     `success` is the contract's definition for these six tasks -- every goal met and the
     theory left consistent -- and it is returned on every path. An answer that never
@@ -184,32 +222,31 @@ def score_item(answer_text: str, item: Dict) -> ScoreResult:
     nothing there is what made `success_rate` an average over the rows that happened to
     reach a late branch (`docs/dataset-contract.md` section 5).
     """
+    ops = list(ops)
     base_ops = item["base_ops"]
     ordering = item["ordering"]
     goals: List[Dict] = item["goals"]
     minimum = item.get("min_directives")
 
-    diag: Dict = {"n_lines": 0, "n_unparseable": 0, "illegal": [], "rejected_detail": [],
-                  "goals_met": [], "n_used": 0, "minimum": minimum}
+    # Every directive submitted counts against economy, so a repeated one is not free.
+    # On the text path this equals the number of readable lines, since a line that could
+    # not be read has already raised.
+    n_used = len(ops)
+    diag: Dict = {"n_lines": n_used, "n_unparseable": 0, "unparseable_examples": [],
+                  "illegal": [], "rejected_detail": [], "goals_met": [], "n_used": 0,
+                  "minimum": minimum}
 
     def failed(reason: str, score: float = 0.0) -> ScoreResult:
         return ScoreResult(score=score, success=False, reason=reason, diagnostics=diag)
 
-    p = parse_answer(answer_text)
-    diag.update(n_lines=p.n_lines, n_unparseable=p.n_unparseable,
-                unparseable_examples=p.unparseable_examples)
-    if p.n_unparseable:
-        return failed(f"unparseable_lines:{p.n_unparseable}")
-    if not p.ops:
-        # An empty submission lands here too. It is an answer with nothing in it, not an
-        # answer that failed to arrive: delimiters are delivery and the evaluator owns
-        # them, so there is no such outcome as a missing answer region.
+    if not ops:
+        # An answer with nothing in it, rather than an answer that failed to arrive:
+        # the harness owns delivery, so there is no such outcome as a missing answer.
         return failed("no_directives")
 
-    kept, illegal = check_legality(p.ops, base_ops, item.get("allow_strict", False),
+    kept, illegal = check_legality(ops, base_ops, item.get("allow_strict", False),
                                    item.get("preferences_only", False))
     diag["illegal"] = illegal
-    n_used = p.n_lines
     diag["n_used"] = n_used
     if not kept:
         return failed("all_directives_illegal")

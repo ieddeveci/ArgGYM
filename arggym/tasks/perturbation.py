@@ -4,11 +4,11 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -124,7 +124,7 @@ class PerturbItem:
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL",
-          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[PerturbItem]:
+          template: Optional[AnswerTemplate] = None) -> Optional[PerturbItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pert"))
     n_comp = max(2, min(2 + (level * 7 + 5) // 15, 9))
     depth = max(2, min(2 + (level * 5) // 15, 7))
@@ -359,7 +359,7 @@ TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both direc
 
 
 def _render_prompt(theory: str, pert: str, ordering: str,
-                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -379,32 +379,67 @@ def _render_prompt(theory: str, pert: str, ordering: str,
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b", re.I)
 
 
-def score(answer_text: str, item: PerturbItem) -> ScoreResult:
-    diag: Dict = {"n_lines": 0, "n_unparseable": 0, "n_predicted": 0,
-                  "n_gold": len(item.gold), "wrong_status": [], "false_positives": [],
-                  "missed": [], "contradicted": []}
-    body = extract_answer(answer_text).strip()
+#: A changed claim keyed to its new status. A sequence where the answer gave several
+#: statuses for one claim: only text can contradict itself, so a solver that submits a
+#: mapping writes one status per claim and a text answer that hedges is the only way to
+#: reach the `contradicted` diagnostic (`core/pairs.py:pair_f1`). An empty map says no
+#: claim changed.
+Value = Dict[str, Union[str, Sequence[str]]]
+
+
+def _diagnostics(item: PerturbItem) -> Dict:
+    return {"n_lines": 0, "n_unparseable": 0, "n_predicted": 0,
+            "n_gold": len(item.gold), "wrong_status": [], "false_positives": [],
+            "missed": [], "contradicted": []}
+
+
+def parse(answer_text: str, item: PerturbItem) -> Value:
+    """The claim-status pairs the answer states, in the order it states them.
+
+    A status repeated for one claim is kept rather than folded away here: whether saying
+    the same thing twice is one prediction is a scoring question, and `score_value`
+    answers it.
+    """
+    body = (answer_text or "").strip()
+    # `none` is how text writes the empty label map: the answer names no changed claim.
     if body.lower() == "none":
+        return {}
+    matches = _PAIR.findall(body)
+    said: Dict[str, List[str]] = {}
+    for claim, stat in matches:
+        said.setdefault(claim.lower(), []).append(stat.upper())
+    residue = _PAIR.sub(" ", body)
+    junk = [t for t in residue.split()
+            if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
+    if junk:
+        raise UnparseableAnswer(f"unparseable_lines:{len(junk)}",
+                                {"n_lines": len(matches), "n_unparseable": len(junk)})
+    if not said:
+        raise UnparseableAnswer("no_pairs")
+    return said
+
+
+def score_value(value: Value, item: PerturbItem) -> ScoreResult:
+    """Grade a label map, whichever way it arrived.
+
+    A solver with constrained decoding, a JSON schema or a tool call submits one of these
+    and never imitates the line format (`docs/dataset-contract.md` section 4).
+    """
+    diag = _diagnostics(item)
+    said = [(claim.lower(), stat.upper())
+            for claim, statuses in value.items()
+            for stat in ((statuses,) if isinstance(statuses, str) else statuses)]
+    diag["n_lines"] = len(said)
+    pred = collect(said)
+    if not pred:
         # Success is exact match over the label map, so an empty prediction matches an
         # empty gold. No shipped item has one: `build` returns None when nothing changed,
         # and the status-diversity guards below it would reject such a draw anyway. The
         # prompt used to invite `none` regardless, which offered an answer that scores
-        # zero on every item in the benchmark. It no longer does, and this arm
-        # stays because it is what `none` means if no-change items are ever generated.
-        diag["n_lines"] = 1
+        # zero on every item in the benchmark. It no longer does, and this arm stays
+        # because it is what an empty answer means if no-change items are ever generated.
         diag.update(f1=0.0, exact_match=not item.gold)
         return ScoreResult(0.0, not item.gold, "predicted_none", diag)
-    matches = _PAIR.findall(body)
-    diag["n_lines"] = len(matches)
-    pred = collect((claim.lower(), stat.upper()) for claim, stat in matches)
-    residue = _PAIR.sub(" ", body)
-    for tok in residue.split():
-        if tok.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", tok):
-            diag["n_unparseable"] += 1
-    if diag["n_unparseable"]:
-        return ScoreResult(0.0, False, f"unparseable_lines:{diag['n_unparseable']}", diag)
-    if not pred:
-        return ScoreResult(0.0, False, "no_pairs", diag)
     diag["n_predicted"] = len(pred)
 
     gold = item.gold
@@ -426,9 +461,24 @@ def score(answer_text: str, item: PerturbItem) -> ScoreResult:
     return ScoreResult(round(r.f1, 4), r.exact_match, "ok", diag)
 
 
+def score(answer_text: str, item: PerturbItem) -> ScoreResult:
+    """Grade an answer written as text: read the value out of it, then grade the value.
+
+    The text arrives already extracted: composing the prompt and pulling the answer out
+    of whatever came back is the harness's job, so the dataset never unwraps a fence.
+    That is what lets a caller use any convention at all -- or none, with a solver that
+    submits the value itself (`docs/dataset-contract.md` sections 1 and 4).
+    """
+    try:
+        value = parse(answer_text, item)
+    except UnparseableAnswer as bad:
+        return ScoreResult(0.0, False, bad.reason, {**_diagnostics(item), **bad.diagnostics})
+    return score_value(value, item)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 40,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[PerturbItem]:
+              template: Optional[AnswerTemplate] = None) -> Optional[PerturbItem]:
     for k in range(tries):
         it = build(level, seed * 41 + k, ordering, profile, template)
         if it is not None:

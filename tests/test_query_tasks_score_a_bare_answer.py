@@ -17,7 +17,12 @@ from __future__ import annotations
 
 import pytest
 
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
+from arggym.core.answers import (
+    DEFAULT_TEMPLATE,
+    AnswerTemplate,
+    ScoreResult,
+    extract_answer,
+)
 from arggym.tasks import (
     claim_chain,
     defeat_diagnosis,
@@ -58,7 +63,7 @@ CONTENT_CLAUSES = {
         "Answer format:\n",
         "   first line: `status: overruled` or `status: undecided`\n",
         "   then one line per failure point, as\n",
-        "   `defeated_at: <target>; defeater: <defeater>; kind: undermine|undercut|rebut`\n"],
+        "   `defeated_at: <target>; defeater: <defeater>; kind: undermine|undercut|rebut`"],
     "formalization": ["Answer format: one directive per line."],
 }
 
@@ -98,43 +103,29 @@ def test_the_bare_reference_scores_one(task, item):
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
-@pytest.mark.parametrize("open_tag, close_tag",
-                         [("<answer>", "</answer>")])
-def test_the_fenced_reference_scores_the_same(task, item, open_tag, close_tag):
-    bare = MODULES[task].score(reference_of(item), item)
-    fenced = MODULES[task].score(
-        f"{open_tag}\n{reference_of(item)}\n{close_tag}", item)
-    assert fenced.score == pytest.approx(bare.score)
-    assert fenced.success is bare.success
+def test_a_completion_is_not_an_answer(task, item):
+    """The scorer reads what it is handed, so a wrapper is unreadable answer text.
 
-
-@pytest.mark.parametrize("task", sorted(MODULES))
-@pytest.mark.parametrize("open_tag, close_tag",
-                         [("<answer>", "</answer>")])
-def test_a_fence_around_reasoning_still_scores_one(task, item, open_tag, close_tag):
-    """What an evaluator actually sends: the answer after the model's working.
-
-    This is what the fence is for. Strict parsing reads everything inside it as an
-    answer line, so without a fence the working itself would arrive as malformed
-    answer and a reasoning model would score zero on every item.
+    Extracting here as well would mean honouring one convention above every other,
+    which is exactly what stops a caller bringing their own. `extract_answer` is
+    offered to a harness that wants the common one and called by nothing here.
     """
-    text = (f"Let me work through it.\nFirst pass, wrong.\n"
-            f"{open_tag}\n{reference_of(item)}\n{close_tag}")
-    assert MODULES[task].score(text, item).score == pytest.approx(1.0)
+    fenced = f"Let me work through it.\n{DEFAULT_TEMPLATE.wrap(reference_of(item))}"
+    assert MODULES[task].score(fenced, item).score == 0.0
+    assert MODULES[task].score(extract_answer(fenced), item).score == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
-def test_the_prompt_names_the_fence_it_was_rendered_with(task, item):
-    assert DEFAULT_TEMPLATE.instruction in item.prompt
-    assert item.prompt.count(DEFAULT_TEMPLATE.open) == 1
+def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, item):
+    assert DEFAULT_TEMPLATE.instruction not in item.prompt
+    assert DEFAULT_TEMPLATE.open not in item.prompt
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
-def test_another_template_moves_that_sentence_and_nothing_else(task, item):
+def test_asking_for_a_template_adds_that_sentence_and_nothing_else(task, item):
+    """A caller who would rather the question carried the sentence can have it."""
     other = MODULES[task].make_item(LEVEL, SEED, ORDERING, template=OTHER_TEMPLATE)
-    assert OTHER_TEMPLATE.instruction in other.prompt
-    assert (other.prompt.replace(OTHER_TEMPLATE.instruction, DEFAULT_TEMPLATE.instruction)
-            == item.prompt)
+    assert other.prompt == f"{item.prompt}\n{OTHER_TEMPLATE.instruction}"
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))

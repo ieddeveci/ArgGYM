@@ -5,11 +5,11 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
 from arggym.core.curriculum import PROFILES, junctions_for
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
@@ -178,7 +178,7 @@ def _tower(ops: List[Operation], names, ridx: List[int], target_lit: str, height
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL",
-          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[SQItem]:
+          template: Optional[AnswerTemplate] = None) -> Optional[SQItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "sq", profile))
     prof = PROFILES[profile]
     n_query = max(3, round(3 + (level - 1) * (40 - 3) / 14))
@@ -413,7 +413,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, queried: Sequence[str], ordering: str,
-                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -431,21 +431,52 @@ def _render_prompt(theory: str, queried: Sequence[str], ordering: str,
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b(?!\w)", re.I)
 
 
-def score(answer_text: str, item: SQItem) -> ScoreResult:
-    diag: Dict = {"n_predicted": 0, "n_gold": len(item.gold), "wrong": [], "missing": [],
-                  "contradicted": []}
-    body = extract_answer(answer_text)
-    pred = collect((claim.lower(), stat.upper()) for claim, stat in _PAIR.findall(body))
+#: A claim keyed to the status the answer gives it. A sequence where the answer gave
+#: several statuses for one claim: only text can contradict itself, so a solver that
+#: submits a mapping writes one status per claim and a text answer that hedges is the
+#: only way to reach the `contradicted` diagnostic (`core/pairs.py:pair_f1`).
+Value = Dict[str, Union[str, Sequence[str]]]
+
+
+def _diagnostics(item: SQItem) -> Dict:
+    """The keys every branch returns, so a harness never tests for one before reading it."""
+    return {"n_predicted": 0, "n_gold": len(item.gold), "wrong": [], "missing": [],
+            "contradicted": [], "n_unparseable": 0, "junk_tokens": []}
+
+
+def parse(answer_text: str, item: SQItem) -> Value:
+    """The claim-status pairs the answer states, in the order it states them.
+
+    A status repeated for one claim is kept rather than folded away here: whether saying
+    the same thing twice is one prediction is a scoring question, and `score_value`
+    answers it.
+    """
+    body = answer_text or ""
+    said: Dict[str, List[str]] = {}
+    for claim, stat in _PAIR.findall(body):
+        said.setdefault(claim.lower(), []).append(stat.upper())
     residue = _PAIR.sub(" ", body)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
-    diag["n_unparseable"] = len(junk)
-    diag["junk_tokens"] = junk[:6]
     if junk:
-        return ScoreResult(0.0, False, f"unparseable_tokens:{len(junk)}", diag)
+        raise UnparseableAnswer(f"unparseable_tokens:{len(junk)}",
+                                {"n_unparseable": len(junk), "junk_tokens": junk[:6]})
+    if not said:
+        raise UnparseableAnswer("no_parseable_lines")
+    return said
+
+
+def score_value(value: Value, item: SQItem) -> ScoreResult:
+    """Grade a label map, whichever way it arrived.
+
+    A solver with constrained decoding, a JSON schema or a tool call submits one of these
+    and never imitates the line format (`docs/dataset-contract.md` section 4).
+    """
+    diag = _diagnostics(item)
+    pred = collect((claim.lower(), stat.upper())
+                   for claim, statuses in value.items()
+                   for stat in ((statuses,) if isinstance(statuses, str) else statuses))
     diag["n_predicted"] = len(pred)
-    if not pred:
-        return ScoreResult(0.0, False, "no_parseable_lines", diag)
 
     r = pair_f1(pred, item.gold)
     diag["wrong"] = sorted(f"{k}:said {'/'.join(v)}, is {item.gold[k]}"
@@ -458,9 +489,24 @@ def score(answer_text: str, item: SQItem) -> ScoreResult:
     return ScoreResult(round(r.f1, 4), r.exact_match, "ok", diag)
 
 
+def score(answer_text: str, item: SQItem) -> ScoreResult:
+    """Grade an answer written as text: read the value out of it, then grade the value.
+
+    The text arrives already extracted: composing the prompt and pulling the answer out
+    of whatever came back is the harness's job, so the dataset never unwraps a fence.
+    That is what lets a caller use any convention at all -- or none, with a solver that
+    submits the value itself (`docs/dataset-contract.md` sections 1 and 4).
+    """
+    try:
+        value = parse(answer_text, item)
+    except UnparseableAnswer as bad:
+        return ScoreResult(0.0, False, bad.reason, {**_diagnostics(item), **bad.diagnostics})
+    return score_value(value, item)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               profile: str = "FULL", tries: int = 24,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[SQItem]:
+              template: Optional[AnswerTemplate] = None) -> Optional[SQItem]:
     for k in range(tries):
         it = build(level, seed * 97 + k, ordering, profile, template)
         if it is not None:

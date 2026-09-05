@@ -155,7 +155,7 @@ def test_the_check_sees_a_tie_outside_base_ops():
 def test_the_check_sees_a_tie_introduced_by_the_gold_answer():
     class Fake:
         prompt = ""
-        reference = "<answer>\n[prefer_rule: r2 > r1]\n</answer>"
+        reference = "[prefer_rule: r2 > r1]"
         base_ops = [Operation(kind="prefer_rule", stronger="r1", weaker="r2")]
 
     assert tied_pairs(_all_ops(Fake()), _reference_ops(Fake())) == [("r1", "r2")]

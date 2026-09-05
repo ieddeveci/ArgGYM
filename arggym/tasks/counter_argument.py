@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
+from arggym.core.answers import AnswerTemplate
 from arggym.core.curriculum import (
     junctions_for,
     negated_branch,
@@ -128,7 +128,7 @@ class CAItem:
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           allow_strict: bool = False,
-          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[CAItem]:
+          template: Optional[AnswerTemplate] = None) -> Optional[CAItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
     n_chain = max(1, min(1 + (level * 5) // 15, 6))
     depth = max(2, min(2 + (level * 3) // 15, 5))
@@ -436,7 +436,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 def _render_prompt(theory: str, target: str, ordering: str,
                    allow_strict: bool = False,
-                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -456,7 +456,7 @@ def as_score_input(it: "CAItem") -> Dict:
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               tries: int = 14, allow_strict: bool = False,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[CAItem]:
+              template: Optional[AnswerTemplate] = None) -> Optional[CAItem]:
     for k in range(tries):
         it = build(level, seed * 53 + k, ordering, allow_strict, template)
         if it is not None:

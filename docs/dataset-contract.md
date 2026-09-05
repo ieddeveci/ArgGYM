@@ -29,32 +29,33 @@ wrong thing.
 | An answer using more than twice the minimum scores zero | the subject: economy is a measured capability | keep |
 | Preference is a preorder, so declaring both directions settles nothing | the subject (Modgil & Prakken) | keep |
 | Grounded semantics, four strength orderings | the subject | keep, and do not make them swappable |
-| The answer is fenced, and the question says how | the subject, weakly: a strict parser must know where the answer ends | **state it, do not fix it** |
-| The fence is one particular pair of delimiters | our implementation | **remove** |
+| The answer must be fenced, and the question says how | our implementation | **remove** |
 | The answer is DSL *text* | our implementation | **remove** |
 
-The two fence rows are what this document exists for, and the economy row is
+The last two rows are what this document exists for, and the economy row is
 where the distinction is easy to get wrong.
 
-**A submission convention belongs in the prompt. Which convention it is does not
-belong to the dataset.** Those are different claims, and collapsing them breaks
-things in both directions. Drop the convention entirely and a model that thinks
-out loud has nowhere to put its answer, so the scorer reads its reasoning as a
-malformed answer. Fix the convention in the dataset and an evaluator using
-structured output, a tool call or constrained decoding cannot submit without
-imitating us.
+**ArgGYM owns what a legal answer is. The harness owns how it gets one.** The
+harness composes the prompt from the question, calls whatever solver it likes,
+and hands over the answer. The dataset receives an answer and scores it.
 
-So the renderer takes the convention as a parameter and states it in the
-question, and the row records which one it used. The default follows
-reasoning-gym, whose `SYSTEM_PROMPTS` and `extract_answer` both use
-`<answer>` and `</answer>` (`reasoning_gym/utils.py:8,25`), because an adopter
-who already runs that library should not have to learn a second convention for
-no reason.
+That boundary is drawn where it is because everything on the harness side is a
+choice we have no standing to make. A fence is one way to find an answer in a
+completion; a JSON schema, a tool call, constrained decoding and a solver that
+returns the answer directly are others, and a benchmark that reads back one
+particular pair of delimiters has quietly required its users to imitate it.
 
-Only the fence a question asks for is read back. Accepting a second convention
-would mean the scorer honours something no prompt requests, which is the
-stated-versus-enforced mismatch this document keeps closing, and it would need a
-precedence rule for an answer carrying both.
+So the question states the task and what a legal answer must contain, and stops.
+No sentence in it says where to put the answer, and no scorer unwraps anything.
+A caller who would rather the question carried that sentence passes a template
+and gets exactly one sentence more; the row records which one, or null.
+
+`AnswerTemplate` and `extract_answer` remain, as conveniences for a harness that
+wants the common convention -- the default follows reasoning-gym, whose
+`SYSTEM_PROMPTS` and `extract_answer` both use `<answer>` and `</answer>`
+(`reasoning_gym/utils.py:8,25`). Nothing in ArgGYM calls either of them.
+`examples/evaluate.py` names its convention once and derives both the
+instruction and the extraction from it, which is the shape a harness wants.
 
 ### The fence is stated, and it is still not the benchmark's
 
@@ -205,9 +206,8 @@ rendered into the question.
 
 ## 4. Answers are values; text is one serialization
 
-**Not built. This section is the design #10 asks for, and what exists today is
-the half of it that the transport work needed.** What ships is one shared
-`extract_answer` and one `ScoreResult`; the value seam below is still open.
+Every task exposes three functions, and `score` is the composition of the other
+two rather than a fourth implementation:
 
 ```python
 parse(text, item) -> Value          # text -> the answer, no scoring
@@ -215,17 +215,28 @@ score_value(value, item) -> ScoreResult
 score(text, item)  = score_value(parse(text, item), item)
 ```
 
-The scorer already works this way internally and hides it. For the seven operation-list
-tasks it converts DSL text into `Operation`s and grades the resulting engine
-state; the text is thrown away. Requiring text is therefore us making a user
+A solver with a JSON schema, a tool call or constrained decoding submits the
+value and never writes a directive. A solver returning text calls `parse` first.
+Both reach the same scorer, and the result is the same object -- which is the
+property worth having, rather than two scorers that happen to agree today.
+
+`parse` raises `UnparseableAnswer` on text that spells out no answer at all;
+`score_value` never raises it, because a solver that hands over a value has done
+its own parsing and its failures are its own. `score` turns the exception back
+into a zero row, so a harness scoring a whole taskset gets a row rather than a
+stack trace on one bad generation.
+
+Empty is a value, not a failure: submitting nothing is an answer, and the score
+says so.
+
+The seam was always there, unexposed. For the seven operation-list tasks the
+scorer converts DSL text into `Operation`s and grades the resulting engine
+state; the text is thrown away. Requiring text was therefore us making a user
 imitate our serialization, and the cost is measured (#10): across the pilot
 runs, `no_answer_region` reached 0.135 and `zero_score_with_valid_region` was
-**0.180** on qwen3.6-27b — answers that transported fine and died in the parser,
-some confirmed correct. That is larger than some level effects, which makes it a
-confound rather than a finding.
-
-With the seam, a user with constrained decoding or a JSON schema submits a
-value. A user with a plain completion submits text. Both reach the same scorer.
+**0.180** on qwen3.6-27b -- answers that transported fine and died in the
+parser, some confirmed correct. That is larger than some level effects, which
+makes it a confound rather than a finding.
 
 **Four answer shapes, not three.** #10 counted three across the v1 tasks; the v2
 twelve have four:
@@ -237,9 +248,15 @@ twelve have four:
 | ordered sequence | `claim_chain` | `List[str]`, order scored (`arggym/tasks/claim_chain.py:401-404`) |
 | record list | `defeat_diagnosis` | `status` + `List[{defeated_at, defeater, kind, survives_because?}]` |
 
-`claim_chain`'s parse resolves each quoted line against the theory, so its
-signature is `parse(text, item)` rather than `parse(text)`. Making the item
-available to every parser costs nothing and avoids a special case.
+Every parser takes `parse(text, item)`, including the ones that read nothing from
+the item. A uniform signature is what lets a harness loop over tasks without a
+table of exceptions, and it costs an unused parameter in the two tasks whose text
+can be read without knowing the theory.
+
+Resolving a quoted line against the theory is `claim_chain`'s *scoring*, not its
+parsing: `parse` returns the lines the answer gave, and `score_value` decides
+which of them the theory contains. Drawing it the other way would put a piece of
+grading in the half a solver is allowed to replace.
 
 ### One parser, not seven
 

@@ -39,7 +39,7 @@ def _item(**kw):
 
 
 def _ans(*lines):
-    return "<answer>\n" + "\n".join(lines) + "\n</answer>"
+    return "\n".join(lines)
 
 
 def test_gold_scores_one():

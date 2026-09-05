@@ -35,10 +35,6 @@ def _gold(item):
     return item.reference.splitlines()
 
 
-def _answer(lines):
-    return "<answer>\n" + "\n".join(lines) + "\n</answer>"
-
-
 def _split(item, gold):
     by = {render_op(o): o for o in item.base_ops}
     prem = [l for l in gold if by[l].kind in ("premise", "axiom")]
@@ -57,7 +53,7 @@ def test_any_premise_to_claim_order_scores_full(level, ordering, seed):
     """The point of the constraint. This order is not the generator's and is correct."""
     it = _item(level, seed, ordering)
     prem, rules = _split(it, _gold(it))
-    r = cc.score(_answer(prem + rules), it)
+    r = cc.score("\n".join(prem + rules), it)
     assert r.score == pytest.approx(1.0), r
     assert r.diagnostics["correct_order"] is True
 
@@ -66,7 +62,7 @@ def test_any_premise_to_claim_order_scores_full(level, ordering, seed):
 def test_the_reversed_line_no_longer_scores_full(level, ordering, seed):
     it = _item(level, seed, ordering)
     gold = _gold(it)
-    r = cc.score(_answer(list(reversed(gold))), it)
+    r = cc.score("\n".join(reversed(gold)), it)
     assert r.diagnostics["exact_match"] is True, "the content is still all and only the gold lines"
     assert r.diagnostics["correct_order"] is False
     assert r.score < 1.0
@@ -78,9 +74,9 @@ def test_a_shuffled_line_scores_below_the_ordered_one(level, ordering, seed):
     it = _item(level, seed, ordering)
     gold = _gold(it)
     shuffled = random.Random(f"{level}{ordering}{seed}").sample(gold, len(gold))
-    if cc.score(_answer(shuffled), it).diagnostics["correct_order"]:
+    if cc.score("\n".join(shuffled), it).diagnostics["correct_order"]:
         pytest.skip("the shuffle happened to land on a valid premise-to-claim order")
-    assert cc.score(_answer(shuffled), it).score < 1.0
+    assert cc.score("\n".join(shuffled), it).score < 1.0
 
 
 def test_one_misplaced_rule_costs_less_than_a_reversal():
@@ -88,12 +84,12 @@ def test_one_misplaced_rule_costs_less_than_a_reversal():
     it = _item(9, 0, "last_link_elitist")
     gold = _gold(it)
     swapped = gold[:-2] + [gold[-1], gold[-2]]
-    s_swap = cc.score(_answer(swapped), it).score
-    s_rev = cc.score(_answer(list(reversed(gold))), it).score
+    s_swap = cc.score("\n".join(swapped), it).score
+    s_rev = cc.score("\n".join(reversed(gold)), it).score
     assert s_rev < s_swap < 1.0, (s_rev, s_swap)
 
 
 def test_repeating_a_correct_line_is_not_free():
     it = _item(9, 0, "last_link_elitist")
     gold = _gold(it)
-    assert cc.score(_answer(gold + [gold[0]]), it).score < 1.0
+    assert cc.score("\n".join(gold + [gold[0]]), it).score < 1.0

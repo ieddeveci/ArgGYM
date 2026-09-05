@@ -1,14 +1,16 @@
 """Score a model against a frozen ArgGYM taskset.
 
-The seam this demonstrates is the point of it: ArgGYM never calls a model, and
-this file never reaches into ArgGYM's internals. It reads a JSONL, sends each
-`question` to an OpenAI-compatible endpoint however it likes, and hands the
-answer body back to `arggym.score_row`.
+This is one solver, written the way the contract expects: it turns a question
+into an answer, and ArgGYM scores the answer. Everything between those two ends
+is this file's business, and a different solver -- an agent with tools, a
+symbolic procedure, no model at all -- swaps in without ArgGYM noticing.
 
-The question already asks for the answer between `<answer>` and `</answer>`, so
-this file reads that region back with `arggym.extract_answer` and adds nothing.
-Another convention is a re-render, not an edit here: freeze with a different
-`AnswerTemplate` and read its region instead. Scoring is unaffected either way.
+Three things belong here rather than in the dataset, and this file does all
+three. It composes the prompt, adding the sentence that says where to put the
+answer. It calls the model. It extracts the answer from the completion. The
+question says nothing about a fence, so the convention is chosen here: swap
+`TEMPLATE` for `AnswerTemplate("boxed", r"\\boxed{", "}")` and both the
+instruction and the extraction follow it.
 
     uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
     python examples/evaluate.py data/taskset.jsonl \
@@ -29,17 +31,32 @@ from concurrent.futures import ThreadPoolExecutor
 
 import arggym
 
-# The question states the submission contract; this only tells the model it may
-# think first, which the question does not say either way.
+# The convention this solver uses. The dataset has no opinion: it is named here,
+# stated in the prompt by `prompt_for`, and read back by `answer_from`, so those
+# three can never disagree.
+TEMPLATE = arggym.XML_TAGS
+
+# This only tells the model it may think first, which the question does not say
+# either way.
 SYSTEM = "Work the problem out, then answer in the format the question asks for."
 
 
-def complete(base_url: str, model: str, key: str, question: str,
+def prompt_for(question: str) -> str:
+    """The question plus where to put the answer. Composing this is the harness's job."""
+    return f"{question}\n{TEMPLATE.instruction}"
+
+
+def answer_from(completion: str) -> str:
+    """The answer, pulled out of whatever the model wrote around it."""
+    return arggym.extract_answer(completion)
+
+
+def complete(base_url: str, model: str, key: str, prompt: str,
              max_tokens: int, timeout: int) -> dict:
     body = json.dumps({
         "model": model,
         "messages": [{"role": "system", "content": SYSTEM},
-                     {"role": "user", "content": question}],
+                     {"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "temperature": 0.0,
     }).encode()
@@ -93,7 +110,7 @@ def main() -> int:
     print(f"{len(items)} items from {a.taskset}", file=sys.stderr)
 
     def one(row: dict) -> dict:
-        gen = complete(a.base_url, a.model, a.api_key, row["question"],
+        gen = complete(a.base_url, a.model, a.api_key, prompt_for(row["question"]),
                        a.max_tokens, a.timeout)
         out = {"id": row["id"], "task": row["task"],
                "level": row["metadata"]["level"],
@@ -104,7 +121,7 @@ def main() -> int:
         if gen.get("error"):
             return out
         try:
-            result = arggym.score_row(arggym.extract_answer(gen["text"]), row)
+            result = arggym.score_row(answer_from(gen["text"]), row)
         except Exception as e:
             # score_row refuses a row it cannot score -- a different engine, a
             # missing field. One such row must not cost the whole run: every

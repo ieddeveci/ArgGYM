@@ -24,9 +24,10 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from arggym.core import registry
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
+from arggym.core.answers import AnswerTemplate, ScoreResult
 from arggym.core.rows import encode_fields
 from arggym.core.rows import score as score_row
+from arggym.core.rows import score_value as score_row_value
 from arggym.core.serialize import THEORY_SCHEMA, ops_to_json
 
 
@@ -49,7 +50,7 @@ class TaskDataset:
 
     def __init__(self, task: str, level: int, ordering: str, size: int = 100,
                  seed: int = 0, profile: str = "FULL",
-                 template: AnswerTemplate = DEFAULT_TEMPLATE) -> None:
+                 template: Optional[AnswerTemplate] = None) -> None:
         self.spec = registry.get(task)
         self.task = task
         self.level = level
@@ -68,10 +69,10 @@ class TaskDataset:
                 f"into its seed, so (level, ordering, seed) would not name the "
                 f"item. Track this on #51.")
         self.profile = profile
-        # How the question asks for the answer to be delivered. A render-time
-        # choice, not a property of the benchmark, so a harness with another
-        # convention builds a dataset with its own template rather than editing
-        # the question text (`docs/dataset-contract.md` section 1).
+        # Delivery belongs to the harness: it composes the prompt from the question,
+        # calls its solver, and extracts the answer before handing it back. So the
+        # question says nothing about a fence unless a caller asks for one here
+        # (`docs/dataset-contract.md` section 1).
         self.template = template
 
     def __len__(self) -> int:
@@ -115,9 +116,10 @@ class TaskDataset:
             "level": self.level,
             "ordering": self.ordering,
             "profile": self.profile,
-            # Which fence the question asked for, so a frozen taskset says what
-            # its questions promised instead of leaving it to be inferred.
-            "answer_template": self.template.name,
+            # Null unless the caller asked for a delivery sentence, so a frozen
+            # taskset says what its questions promised instead of leaving a reader
+            # to infer it from the prompt text.
+            "answer_template": self.template.name if self.template else None,
             "theory_schema": THEORY_SCHEMA,
             # Scoring the engine-checked tasks runs PyArg, so a row is
             # re-scorable against the pinned engine and no other.
@@ -149,6 +151,10 @@ class TaskDataset:
         method, and a concatenation scores each of its parts correctly.
         """
         return score_row(answer, entry)
+
+    def score_value(self, value: Any, entry: Dict[str, Any]) -> ScoreResult:
+        """Score an answer a solver produced as a value rather than as text."""
+        return score_row_value(value, entry)
 
     def score_answer(self, answer: str, entry: Dict[str, Any]) -> float:
         return self.score(answer, entry).score
@@ -194,13 +200,13 @@ class ConcatDataset:
 
 def create(task: str, level: int, ordering: str = "last_link_elitist",
            size: int = 100, seed: int = 0, profile: str = "FULL",
-           template: AnswerTemplate = DEFAULT_TEMPLATE) -> TaskDataset:
+           template: Optional[AnswerTemplate] = None) -> TaskDataset:
     return TaskDataset(task, level, ordering, size=size, seed=seed, profile=profile,
                        template=template)
 
 
 def from_spec(spec: Any, size: Optional[int] = None,
-              template: AnswerTemplate = DEFAULT_TEMPLATE) -> ConcatDataset:
+              template: Optional[AnswerTemplate] = None) -> ConcatDataset:
     """Every cell of a taskset spec, in a stable order."""
     n = size if size is not None else spec.seeds.take
     return ConcatDataset([

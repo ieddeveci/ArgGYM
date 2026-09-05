@@ -47,3 +47,25 @@ def test_a_row_can_be_rebuilt_into_operations_without_the_generator():
 def test_the_task_list_is_public():
     assert "status_query" in arggym.task_names()
     assert arggym.get_task("status_query").checker == "graded"
+
+
+def test_a_solver_may_hand_over_a_value_instead_of_text():
+    """The README shows this, so it has to work from the public surface alone.
+
+    A solver with a JSON schema or constrained decoding produces the answer; asking
+    it to render our DSL so we can parse it back would be the dataset dictating a
+    serialization (`docs/dataset-contract.md` section 4).
+    """
+    ds = arggym.create("status_query", level=3, ordering="last_link_elitist", size=1)
+    entry = ds[0]
+    from_value = ds.score_value(dict(entry["metadata"]["gold"]["gold"]), entry)
+    from_text = ds.score(entry["reference_answer"], entry)
+    assert from_value.as_dict() == from_text.as_dict()
+    assert from_value.score == 1.0 and from_value.success is True
+
+
+def test_a_frozen_row_scores_from_a_value_with_no_dataset_object():
+    ds = arggym.create("status_query", level=3, ordering="last_link_elitist", size=1)
+    entry = ds[0]
+    assert arggym.score_row_value(dict(entry["metadata"]["gold"]["gold"]),
+                                  entry).score == 1.0

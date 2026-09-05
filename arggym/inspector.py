@@ -14,6 +14,7 @@ from arggym.tasks import defeat_diagnosis as defeatdiag
 from arggym.tasks import formalization as formalize
 from arggym.tasks import status_query as statusquery
 from arggym.tasks import semantics_query as semquery
+from arggym.core.answers import extract_answer
 from arggym.core.scoring import score_item
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK, describe, spec_for
 
@@ -186,7 +187,8 @@ PAGE = """
     Query tasks score their own way; each reports its own diagnostics.<br>
     Success is the task's own bar, not score = 1.<br>
     Strict parsing: any malformed line scores 0.<br>
-    The answer may be bare or between &lt;answer&gt; and &lt;/answer&gt;.
+    Paste an answer, or a whole completion between &lt;answer&gt; and &lt;/answer&gt;:<br>
+    this page extracts it, as an evaluation harness would.
   </div></div>
 </aside>
 <section>
@@ -547,25 +549,29 @@ def api_grade():
     if entry is None:
         return jsonify({"ok": False, "error": "item expired - generate again"})
     kind, it = entry
+    # This page is a harness, so it does a harness's job: the box below the prompt
+    # takes an answer or a whole completion, and the answer is pulled out here. The
+    # dataset never unwraps anything (`docs/dataset-contract.md` section 1).
+    answer = extract_answer(b.get("answer", ""))
     try:
         if kind == "perturb":
-            res = perturb.score(b.get("answer", ""), it)
+            res = perturb.score(answer, it)
         elif kind == "counterarg":
-            res = score_item(b.get("answer", ""), counterarg.as_score_input(it))
+            res = score_item(answer, counterarg.as_score_input(it))
         elif kind == "prefcon":
-            res = score_item(b.get("answer", ""), it.as_score_input())
+            res = score_item(answer, it.as_score_input())
         elif kind == "claimchain":
-            res = claimchain.score(b.get("answer", ""), it)
+            res = claimchain.score(answer, it)
         elif kind == "defeatdiag":
-            res = defeatdiag.score(b.get("answer", ""), it)
+            res = defeatdiag.score(answer, it)
         elif kind == "formalize":
-            res = formalize.score(b.get("answer", ""), it)
+            res = formalize.score(answer, it)
         elif kind == "semquery":
-            res = semquery.score(b.get("answer", ""), it)
+            res = semquery.score(answer, it)
         elif kind == "statusquery":
-            res = statusquery.score(b.get("answer", ""), it)
+            res = statusquery.score(answer, it)
         else:
-            res = score_item(b.get("answer", ""), it.as_score_input())
+            res = score_item(answer, it.as_score_input())
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
