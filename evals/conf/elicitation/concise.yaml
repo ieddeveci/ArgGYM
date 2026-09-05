@@ -1,7 +1,0 @@
-# For a model that loops. On the August sweep half of all truncated generations
-# ended in a repetition loop, and one burned 61,440 tokens repeating a single
-# vacuous line 1,654 times without ever writing an answer.
-name: concise
-system: "Answer directly. Keep any working brief."
-prefix: ""
-suffix: ""
