@@ -13,7 +13,7 @@ import argparse
 import json
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import arggym
 from evals import artifacts, taskset, values
@@ -120,6 +120,10 @@ def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float]) -> Dict[st
         # model scored 0.598 raw and 0.765 censored, and only the pair says why.
         "mean_untruncated": (round(sum(r["score"] for r in untrunc) / len(untrunc), 4)
                              if untrunc else None),
+        # Its own denominator. `mean` is over `n_scored` and this one is not, so
+        # printing the two beside a single count says a mean of four items was
+        # a mean of forty.
+        "n_untruncated": len(untrunc),
         "success_rate": _rate(sum(bool(r["success"]) for r in ok), len(ok)),
         "zero_with_region": sum(bool(r.get("zero_with_region")) for r in ok),
     }
@@ -138,9 +142,9 @@ def coverage(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     """What was not measured. No score in here, deliberately.
 
     A pooled mean over every record is a mean across tasks, which is the one
-    number `aggregate` refuses to produce three lines below. Publishing it in
-    the file the report reads would make the artifact contradict its own
-    docstring, and it is the obvious thing for a reader to quote.
+    number `aggregate` refuses to produce. Publishing it in the file the report
+    reads would make the artifact contradict its own docstring, and it is the
+    obvious thing for a reader to quote.
     """
     n = len(records)
     ok = [r for r in records if r["score"] is not None]
@@ -160,18 +164,24 @@ def _rate(numerator: int, denominator: int) -> Optional[float]:
     return round(numerator / denominator, 4) if denominator else None
 
 
-def _floors_of(rows: Sequence[Dict[str, Any]]) -> Dict[str, float]:
-    """Measured floors, or none at all if the scorer cannot grade these rows.
+def _floors_of(rows: Sequence[Dict[str, Any]]
+               ) -> Tuple[Dict[str, float], Optional[str]]:
+    """Measured floors, and why there are none when there are none.
 
     `arggym.floors` scores every row with each constant strategy and does not
     guard, so a single ungradeable row would abort the whole scoring pass --
     after `score_one` has already recorded that row politely. Losing every
     number to one bad row is the wrong trade.
+
+    The reason comes back with the result rather than being dropped. Without it
+    a group whose floor could not be measured is written exactly like a group
+    that has no floor at all, and the report renders both as `-`: one ungradeable
+    row would quietly remove a task's `corrected` column with nothing saying so.
     """
     try:
-        return {t: v["floor"] for t, v in arggym.floors(list(rows)).items()}
-    except Exception:  # noqa: BLE001 - reported in _meta, never silently zero
-        return {}
+        return {t: v["floor"] for t, v in arggym.floors(list(rows)).items()}, None
+    except Exception as e:  # noqa: BLE001 - recorded on the group and in _meta
+        return {}, f"{type(e).__name__}: {e}"
 
 
 def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
@@ -202,8 +212,11 @@ def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
         out[name] = {}
         for key, got in sorted(buckets.items()):
             mine = [rows[r["id"]] for r in got if r["id"] in rows]
-            floor = _floors_of(mine).get(key.split("|")[0])
+            floors, why = _floors_of(mine)
+            floor = floors.get(key.split("|")[0])
             out[name][key] = _stats(got, floor)
+            if floor is None and why:
+                out[name][key]["floor_error"] = why
     return out
 
 
@@ -244,6 +257,7 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
 
     artifacts.write_jsonl(os.path.join(run_dir, artifacts.SAMPLES), records)
 
+    grouped = aggregate(records, rows)
     metrics = {
         "_meta": {
             "run_dir": os.path.abspath(run_dir),
@@ -255,13 +269,23 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
             "arggym": arggym.__version__,
             "n_selected": run.get("n_selected"), "n_scored": len(records),
             # A run interrupted before it finished has fewer generations than
-            # it selected, and the difference is the only sign of it once
-            # `run.json` is out of view.
-            "n_not_generated": (run.get("n_selected") or len(records)) - len(records),
+            # it selected, and this is the only sign of it once `run.json` is
+            # out of view. Taken from the count `run.py` made by id where there
+            # is one: subtracting two set sizes goes negative as soon as the
+            # directory holds an id this run did not select.
+            "n_not_generated": (run["n_missing"] if run.get("n_missing") is not None
+                                else max(0, (run.get("n_selected") or len(records))
+                                         - len(records))),
+            # Groups whose chance floor could not be measured, so a `-` in the
+            # floor column is never read as "this task has no floor".
+            "floors_unmeasured": sorted({
+                v["floor_error"] for g in ("by_task", "by_task_level",
+                                           "by_task_ordering")
+                for v in grouped[g].values() if v.get("floor_error")}),
         },
         # What was not measured, before anything that was.
         "coverage": coverage(records),
-        **aggregate(records, rows),
+        **grouped,
     }
     artifacts.write_json(os.path.join(run_dir, artifacts.METRICS), metrics)
     return metrics
@@ -278,7 +302,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     c = m["coverage"]
     print(f"{c['n_scored']} scored, {c['n_api_error']} API errors, "
           f"{c['n_scorer_refused']} unscorable, {_pct(c['truncated_rate'])} truncated, "
-          f"{_pct(c['no_answer_region_rate'])} with no answer region\n")
+          f"{_pct(c['no_answer_region_rate'])} with no answer region, "
+          # Only ever raises a score: it credits an answer the model reached
+          # mid-thought and never submitted. A reader deciding whether a number
+          # is a measurement of argumentation needs to see how often that
+          # happened.
+          f"{_pct(c['answer_in_cot_rate'])} answered only in the reasoning\n")
+    if m["_meta"]["floors_unmeasured"]:
+        print(f"floors could not be measured for some groups "
+              f"({'; '.join(m['_meta']['floors_unmeasured'])}); their `corrected` "
+              f"column is absent rather than zero.\n")
     print(f"{'task':26s} {'n':>4s} {'scored':>6s} {'mean':>7s} {'untrunc':>8s} "
           f"{'floor':>7s} {'corr':>7s} {'succ':>7s}")
     for task, v in m["by_task"].items():

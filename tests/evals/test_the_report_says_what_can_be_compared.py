@@ -151,3 +151,68 @@ def test_the_csv_carries_every_grouping(tmp_path):
     text = open(os.path.join(out, "results.csv")).read()
     assert "L3" in text and "last_link_elitist" in text
     assert "floor" in text.splitlines()[0]
+
+
+def test_two_token_caps_of_one_model_get_different_columns(tmp_path):
+    """`run.py` treats a changed cap as a different run; a report must too.
+
+    Measured on this branch: one model at a 24,576-token cap scored eight of
+    twelve tasks at exactly 0.000, and at 57,344 six of those eight came back
+    at 1.000. Both columns were headed `Qwen/Qwen3.6-27B`, and `results.csv`
+    carried that one string in its `run` field for both.
+    """
+    a, b = a_metrics("qwen"), a_metrics("qwen")
+    a["_meta"]["endpoint"] = {"model": "qwen", "sampling": {"max_tokens": 24576}}
+    b["_meta"]["endpoint"] = {"model": "qwen", "sampling": {"max_tokens": 57344}}
+    got = [m["_label"] for m in written(tmp_path, a, b)]
+    assert len(set(got)) == 2, got
+    assert any("24576" in x for x in got) and any("57344" in x for x in got)
+    # Only what differs. Temperature is the same in both, so it is not noise in
+    # the header.
+    assert not any("temperature" in x for x in got)
+
+
+def test_one_run_keeps_a_plain_column_name(tmp_path):
+    """Disambiguation is for collisions, not a tax on the common case."""
+    m = a_metrics("gpt-5")
+    m["_meta"]["endpoint"] = {"model": "gpt-5", "sampling": {"max_tokens": 4096}}
+    assert [x["_label"] for x in written(tmp_path, m)] == ["gpt-5"]
+
+
+def test_the_untruncated_mean_is_counted_over_untruncated_items(tmp_path):
+    """A mean of one printed as `(4)` is the confusion the bracket exists to stop."""
+    m = a_metrics("model-a")
+    m["by_task"]["status_query"].update(n_scored=4, n_untruncated=1,
+                                        mean_untruncated=0.5)
+    text = render(written(tmp_path, m))
+    untruncated = text[text.index("## Mean over untruncated"):]
+    assert "0.500 (1)" in untruncated, untruncated
+    assert "0.500 (4)" not in untruncated
+
+
+def test_a_floor_one_run_could_not_measure_is_marked(tmp_path):
+    """A borrowed floor makes `corrected` unreproducible from the table it is in.
+
+    One ungradeable row leaves a run with no floor for that task, and the column
+    then showed the *other* run's floor with nothing saying so.
+    """
+    a, b = a_metrics("model-a"), a_metrics("model-b")
+    b["by_task"]["status_query"].pop("floor")
+    b["by_task"]["status_query"].pop("corrected")
+    text = render(written(tmp_path, a, b))
+    assert "0.375*" in text
+    assert "could not measure a floor" in text
+
+
+def test_a_stat_missing_from_the_csv_fails_loudly(tmp_path):
+    """The artifact people load into a dataframe must not drop a flag quietly.
+
+    The comment claimed `extrasaction` would catch this; the row was filtered to
+    the field list first, so the check could not fire.
+    """
+    m = a_metrics("model-a")
+    m["by_task"]["status_query"]["a_stat_nobody_added_here"] = 1
+    with pytest.raises(ValueError) as e:
+        write_csv(written(tmp_path, m),
+                  os.path.join(os.fspath(tmp_path / "report"), "results.csv"))
+    assert "a_stat_nobody_added_here" in str(e.value)

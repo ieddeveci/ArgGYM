@@ -8,39 +8,84 @@ flight and not the run -- one did, and 439 generations were nearly lost.
 And keep the raw completion forever, because scoring reads it again every time
 the scorer changes.
 
-    runs/<stamp>__<model>/
-        run.json          manifest; status running -> completed | failed
+    runs/<model>__<template>__<elicitation>/
+        run.json          manifest; status running -> completed | failed | crashed
+        run.lock          held for the length of a run
         prompts.jsonl     written before inference
         generations.jsonl appended as results land
         samples.jsonl     written by score.py
         metrics.json      written by score.py
+
+The directory is named by the configuration rather than by a timestamp, so
+running the same command twice resumes rather than starting a second copy. That
+makes a double launch the natural accident instead of an impossible one, hence
+`exclusive`.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import sys
 import threading
 from typing import Any, Dict, Iterator, Set
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no flock
+    fcntl = None  # type: ignore[assignment]
+
 RUN = "run.json"
+LOCK = "run.lock"
 PROMPTS = "prompts.jsonl"
 GENERATIONS = "generations.jsonl"
 SAMPLES = "samples.jsonl"
 METRICS = "metrics.json"
 
 
+class Torn(SystemExit):
+    """A JSONL file is damaged somewhere other than its last line."""
+
+
+class Busy(SystemExit):
+    """A run directory is already held by another process."""
+
+
 def read_jsonl(path: str) -> Iterator[Dict[str, Any]]:
+    """Every record, tolerating a half-written final line and nothing else.
+
+    A machine that dies mid-append leaves the last line truncated, and that is
+    the failure this module exists for: raising there would let one torn line
+    cost `best_per_id`, resume, scoring and the manifest's error rate -- the
+    whole run, to save the item in flight. A damaged line anywhere *earlier*
+    is not a torn write, so it is refused rather than skipped.
+    """
     if not os.path.exists(path):
         return
     with open(path) as f:
-        for line in f:
-            if line.strip():
-                yield json.loads(line)
+        lines = [ln for ln in f if ln.strip()]
+    for i, line in enumerate(lines):
+        try:
+            yield json.loads(line)
+        except json.JSONDecodeError as e:
+            if i != len(lines) - 1:
+                raise Torn(
+                    f"{path} line {i + 1} of {len(lines)} is not JSON ({e}). "
+                    f"Only the last line of an appended file can be a torn "
+                    f"write; damage before it means the file was rewritten by "
+                    f"something other than this harness, and skipping the line "
+                    f"would silently drop a generation that was paid for."
+                ) from None
+            print(f"{path}: dropping a truncated last line ({e}); the item in "
+                  f"flight when the writer stopped will be generated again.",
+                  file=sys.stderr)
 
 
 def write_json(path: str, obj: Any) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
+    # Per process: `run.json.tmp` is one fixed name, so two writers would
+    # interleave into one file and `os.replace` would publish the mixture.
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w") as f:
         json.dump(obj, f, indent=2, default=str)
         f.flush()
@@ -62,7 +107,7 @@ def write_jsonl(path: str, rows: Any) -> None:
     the two.
     """
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w") as f:
         for r in rows:
             f.write(json.dumps(r, default=str) + "\n")
@@ -84,6 +129,12 @@ class Appender:
         with self._lock:
             self._f.write(line + "\n")
             self._f.flush()
+            # To the device, not just out of Python's buffer, for the same
+            # reason `write_json` does it: a flushed line survives a killed
+            # process but not a reboot, and a reboot is what cost the previous
+            # harness 439 generations. One fsync per item is nothing beside the
+            # seconds of inference that produced it.
+            os.fsync(self._f.fileno())
 
     def close(self) -> None:
         self._f.close()
@@ -130,3 +181,37 @@ def restart(run_dir: str) -> None:
         path = os.path.join(run_dir, name)
         if os.path.exists(path):
             os.remove(path)
+
+
+@contextlib.contextmanager
+def exclusive(run_dir: str) -> Iterator[None]:
+    """Hold a run directory for the length of a run.
+
+    The directory is named by the configuration, so launching the same command
+    twice is an ordinary accident rather than a contrived one -- and both
+    invocations would read `completed_ids` before either wrote, generate the
+    same items, and append two records per id.
+
+    An advisory `flock`, released when the process exits however it exits.
+    Where there is no `fcntl` there is no lock; the run proceeds, because
+    refusing to run at all on such a platform is a worse trade than the race.
+    """
+    os.makedirs(run_dir, exist_ok=True)
+    if fcntl is None:  # pragma: no cover - Windows
+        yield
+        return
+    f = open(os.path.join(run_dir, LOCK), "w")
+    try:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise Busy(
+                f"{run_dir} is already held by another run (see "
+                f"{LOCK}). Two runs sharing a directory both skip the ids the "
+                f"other is generating and both append to the same file. Wait "
+                f"for it, or pass a different run_id=.") from None
+        f.write(f"pid {os.getpid()}\n")
+        f.flush()
+        yield
+    finally:
+        f.close()

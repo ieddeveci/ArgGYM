@@ -105,3 +105,40 @@ def test_a_manifest_is_never_left_half_written(tmp_path):
     import json
     assert json.load(open(path))["status"] == "completed"
     assert not os.path.exists(path + ".tmp")
+
+
+def test_a_torn_last_line_costs_the_item_and_not_the_run(tmp_path):
+    """A reboot mid-append leaves half a line, and that is the case this is for.
+
+    `json.loads` raising there took down `best_per_id`, resume, scoring and the
+    manifest's error rate together -- the whole run, to save the item in flight.
+    """
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    path = os.path.join(run_dir, artifacts.GENERATIONS)
+    with artifacts.Appender(path) as a:
+        a.write({"id": "x", "error": None, "completion": "<answer>ok</answer>"})
+    with open(path, "a") as f:
+        f.write('{"id": "y", "error": null, "compl')
+
+    assert artifacts.completed_ids(run_dir) == {"x"}
+    assert artifacts.best_per_id(run_dir)["x"]["completion"] == "<answer>ok</answer>"
+
+
+def test_damage_anywhere_but_the_last_line_is_refused(tmp_path):
+    """Only the end of an appended file can be a torn write.
+
+    Skipping a broken line in the middle would drop a generation that was paid
+    for and report the run as one item shorter, with nothing saying so.
+    """
+    import pytest
+
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    path = os.path.join(run_dir, artifacts.GENERATIONS)
+    with open(path, "w") as f:
+        f.write('{"id": "x", "err\n')
+        f.write('{"id": "y", "error": null, "completion": "ok"}\n')
+    with pytest.raises(artifacts.Torn) as e:
+        artifacts.completed_ids(run_dir)
+    assert "line 1 of 2" in str(e.value)

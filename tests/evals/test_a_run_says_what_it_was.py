@@ -20,6 +20,12 @@ def test_a_filter_that_matches_nothing_is_refused(rows):
     with pytest.raises(ValueError):
         taskset.select(rows, tasks=["no_such_task"])
 
+    # Zero is not "no limit". It generates nothing and would be written down as
+    # a completed run with an error rate of 0.0.
+    with pytest.raises(ValueError) as e:
+        taskset.select(rows, limit=0)
+    assert "selects no rows" in str(e.value)
+
 
 def test_a_filter_slices_without_rebuilding(rows):
     one = taskset.select(rows, tasks=[rows[0]["task"]])
@@ -35,11 +41,22 @@ def test_a_taskset_carries_its_manifest(taskset_file, rows):
     assert [r["id"] for r in loaded] == [r["id"] for r in rows]
 
 
-def test_a_file_with_no_manifest_still_loads(tmp_path, rows):
+def test_a_file_with_no_manifest_is_refused(tmp_path, rows):
+    """A taskset with no hash turns off every check downstream, quietly.
+
+    `score.py` compares the run's `taskset_hash` against the file's, and two
+    `None`s are equal: yesterday's completions get scored against today's gold
+    with nothing to notice. Row ids are stable across regenerations, so the
+    unknown-id check cannot catch it either.
+    """
     import json
     p = tmp_path / "bare.jsonl"
     p.write_text("\n".join(json.dumps(r, default=str) for r in rows))
-    manifest, loaded = taskset.load(str(p))
+    with pytest.raises(taskset.TasksetCorrupt) as e:
+        taskset.load(str(p))
+    assert "no manifest" in str(e.value)
+    # Deliberately, and then the scores name no questions.
+    manifest, loaded = taskset.load(str(p), verify=False)
     assert manifest == {}
     assert len(loaded) == len(rows)
 

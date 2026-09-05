@@ -17,7 +17,7 @@ class TasksetCorrupt(SystemExit):
 
 
 def load(path: str, verify: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """The manifest and the rows. A file with no manifest line yields `{}`.
+    """The manifest and the rows.
 
     The hash is recomputed from the rows rather than read out of the manifest.
     Comparing the manifest against a copy of itself answers "do these two
@@ -25,6 +25,13 @@ def load(path: str, verify: bool = True) -> Tuple[Dict[str, Any], List[Dict[str,
     truncated to eight lines loads seven rows, passes a string comparison, and
     gets a full taskset's hash printed beside numbers measured on seven items.
     Blake2b over 480 rows costs milliseconds.
+
+    A file with no manifest line is refused, because a taskset with no hash
+    disables every check downstream at once and does it quietly: `score.py`
+    compares the run's `None` against the file's `None`, finds them equal, and
+    scores completions against whatever gold the file now holds. Row ids are
+    stable across regenerations, so the unknown-id check cannot catch it either.
+    `verify=False` reads such a file deliberately.
     """
     rows: List[Dict[str, Any]] = []
     with open(path) as f:
@@ -33,7 +40,14 @@ def load(path: str, verify: bool = True) -> Tuple[Dict[str, Any], List[Dict[str,
         if manifest is None:
             manifest, _ = {}, rows.append(first)
         rows.extend(json.loads(line) for line in f if line.strip())
-    if verify and manifest:
+    if verify:
+        if not manifest:
+            raise TasksetCorrupt(
+                f"{path} has no manifest line, so it names no taskset_hash and "
+                f"nothing downstream can tell it from the taskset a run was "
+                f"actually generated against. Freeze it with `arggym freeze`, "
+                f"or load it with verify=False and accept that its scores name "
+                f"no questions.")
         check(path, manifest, rows)
     return manifest, rows
 
@@ -88,6 +102,13 @@ def select(rows: Sequence[Dict[str, Any]], tasks: Optional[Sequence[str]] = None
         out = [r for r in out if key(r) in wanted]
     if limit is None:
         return out
-    if limit < 0:
-        raise ValueError(f"limit={limit} is not a number of items.")
+    if limit <= 0:
+        # Zero is not "no limit", it is a filter that matches nothing -- and it
+        # would generate nothing, then be written down as a completed run with
+        # an error rate of 0.0. Same refusal as a task name that is in no row,
+        # for the same reason.
+        raise ValueError(
+            f"limit={limit} selects no rows. A run of zero items would be "
+            f"recorded as a clean completed run; leave limit unset for all of "
+            f"them.")
     return out[:limit]

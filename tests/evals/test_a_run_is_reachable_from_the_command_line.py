@@ -170,3 +170,76 @@ def test_a_directory_will_not_take_a_second_sampling_configuration(tmp_path, row
         execute(cfg_for(taskset_file, p.url,
                         **{"model.sampling.max_tokens": 4096}), run_dir)
     assert "endpoint.sampling" in str(e.value)
+
+
+def test_a_directory_will_not_take_a_second_elicitation_text(tmp_path, rows,
+                                                             taskset_file, provider):
+    """The name is a label on the system prompt, not the system prompt.
+
+    `elicitation.system=...` changes what every model in the directory was told
+    while leaving `name: none` alone, so the guard that compared names let two
+    system prompts pool into one manifest and rewrote it to describe the later
+    one.
+    """
+    p = provider(answering(rows))
+    run_dir = os.fspath(tmp_path / "run")
+    execute(cfg_for(taskset_file, p.url), run_dir)
+
+    with pytest.raises(SystemExit) as e:
+        execute(cfg_for(taskset_file, p.url,
+                        **{"elicitation.system": "'think first'"}), run_dir)
+    assert "elicitation_config" in str(e.value)
+
+
+def test_a_directory_will_not_take_a_second_filter(tmp_path, rows, taskset_file,
+                                                   provider):
+    """A narrower filter over a full directory wrote a manifest describing neither.
+
+    `n_selected` counted the two rows this invocation asked for, `n_generated`
+    counted the twelve on disk, and `n_missing` came out at -10 -- the field
+    `score.py` propagates as the only sign of an interrupted run.
+    """
+    p = provider(answering(rows))
+    run_dir = os.fspath(tmp_path / "run")
+    first = execute(cfg_for(taskset_file, p.url), run_dir)
+    assert first["n_missing"] == 0
+
+    with pytest.raises(SystemExit) as e:
+        execute(cfg_for(taskset_file, p.url, **{"filter.limit": 2}), run_dir)
+    assert "filter" in str(e.value)
+
+
+def test_a_second_run_of_one_directory_is_refused_while_the_first_holds_it(
+        tmp_path, rows, taskset_file, provider):
+    """The directory is named by the config, so a double launch is the accident.
+
+    Both invocations read the resume list before either wrote to it, so both
+    generated every item and both appended.
+    """
+    from evals import artifacts as art
+
+    p = provider(answering(rows))
+    run_dir = os.fspath(tmp_path / "run")
+    with art.exclusive(run_dir):
+        with pytest.raises(art.Busy) as e:
+            execute(cfg_for(taskset_file, p.url), run_dir)
+    assert "run_id" in str(e.value)
+    # Released again once the first run is done.
+    execute(cfg_for(taskset_file, p.url), run_dir)
+
+
+def test_a_crashed_run_does_not_read_as_one_still_in_flight(tmp_path, rows,
+                                                            taskset_file, provider,
+                                                            monkeypatch):
+    """`status: running` on a dead run is indistinguishable from a slow one."""
+    def interrupted(*a, **k):
+        raise KeyboardInterrupt
+
+    p = provider(answering(rows))
+    monkeypatch.setattr("evals.run.generate", interrupted)
+    run_dir = os.fspath(tmp_path / "run")
+    with pytest.raises(KeyboardInterrupt):
+        execute(cfg_for(taskset_file, p.url), run_dir)
+
+    with open(os.path.join(run_dir, artifacts.RUN)) as f:
+        assert json.load(f)["status"] == "crashed"

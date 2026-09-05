@@ -90,19 +90,30 @@ def test_every_answer_shape_survives_the_trip_through_json():
         assert result.score == 1.0, (task, row["metadata"]["answer_shape"], result)
 
 
-def test_a_value_that_is_not_json_is_refused_at_the_first_row(tmp_path, rows):
-    """`default=str` would stringify it, and the loss shows up only at scoring."""
+def test_a_value_that_is_not_json_is_an_error_and_not_a_zero(tmp_path, rows):
+    """`default=str` would stringify it, and the loss shows up only at scoring.
+
+    Recorded as an error on the row rather than raised out of the pool. Raising
+    ended the run *and* discarded the completion it was complaining about, which
+    had already been paid for, and left `run.json` reading `status: running` --
+    so a crashed run and one still in flight looked the same. A solver that does
+    this on one row does it on all of them, and `max_error_rate` ends the sweep.
+    """
     import os
 
-    import pytest
-
+    from evals import artifacts
     from evals.run import generate
 
     def unserialisable(row):
-        return Attempt(value=parsed_value(row))  # live objects, never encoded
+        return Attempt(completion="<answer>x</answer>",
+                       value=parsed_value(row))  # live objects, never encoded
 
     run_dir = os.fspath(tmp_path / "run")
     os.makedirs(run_dir)
-    with pytest.raises(TypeError) as e:
-        generate(rows[:1], unserialisable, run_dir, concurrency=1, progress=False)
-    assert "values.encode" in str(e.value)
+    counts = generate(rows[:1], unserialisable, run_dir, concurrency=1,
+                      progress=False)
+    assert counts["errors"] == 1
+    record = artifacts.best_per_id(run_dir)[rows[0]["id"]]
+    assert "values.encode" in record["error"]
+    assert record["completion"] == "<answer>x</answer>", "threw away paid-for work"
+    assert record["value"] is None

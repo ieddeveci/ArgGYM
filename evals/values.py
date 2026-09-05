@@ -37,8 +37,12 @@ def check_json(value: Any, row_id: str) -> None:
     Generations are written with `default=str`, which would quietly turn a list
     of live `Operation` objects into a list of strings. `decode` then hands
     those strings to `score_row_value`, which at best refuses the row and at
-    worst grades it zero -- and by then the inference has been paid for. Raising
-    here costs the first row instead of the sweep.
+    worst grades it zero -- and by then the inference has been paid for.
+
+    `run.py` catches this per row and records the item as an error, keeping the
+    completion. A solver that does it on one row does it on all of them, so the
+    run ends on `max_error_rate` rather than on an exception out of the thread
+    pool that discarded the generation it was complaining about.
     """
     import json
 

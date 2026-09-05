@@ -10,6 +10,7 @@ rather than the hours of inference that produced the completions.
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 import platform
 import socket
@@ -44,10 +45,11 @@ def _plain(node: Any) -> Dict[str, Any]:
 def refuse_a_changed_run(run_dir: str, meta: Dict[str, Any]) -> None:
     """Refuse to add generations from one configuration to another's directory.
 
-    Resume keys on the row id alone, so a directory reused with a different
-    model or template ends up holding two models' completions under one
-    manifest, all extracted with whichever template was named last. Every other
-    guard passes: same taskset, same ids, same hash.
+    Resume keys on the row id alone, so a directory reused under a different
+    model, template, elicitation, filter or token cap ends up holding two
+    configurations' completions under one manifest, all extracted with whichever
+    template was named last. Every other guard passes: same taskset, same ids,
+    same hash.
     """
     path = os.path.join(run_dir, artifacts.RUN)
     if not os.path.exists(path):
@@ -56,14 +58,20 @@ def refuse_a_changed_run(run_dir: str, meta: Dict[str, Any]) -> None:
 
     with open(path) as f:
         before = json.load(f)
-    changed = [k for k in ("taskset_hash", "template", "elicitation")
+    # `elicitation` is a name and `filter` decides which rows exist, so both
+    # belong here: `elicitation.system=...` changes the system prompt while
+    # leaving the name alone, and a second invocation under a narrower filter
+    # leaves a manifest describing two items over a directory holding twelve.
+    changed = [k for k in ("taskset_hash", "template", "elicitation",
+                           "elicitation_config", "filter")
                if before.get(k) != meta.get(k)]
     # Sampling too, not just the model. Temperature and the token cap change
     # what the model was asked as surely as the prompt does -- on this box a
     # 24576-token cap scored eight of twelve tasks at exactly 0.000 and a larger
     # one did not -- so generations made under two caps must not pool.
     was, now = before.get("endpoint") or {}, meta["endpoint"]
-    changed += [f"endpoint.{k}" for k in ("model", "sampling", "extra_body")
+    changed += [f"endpoint.{k}" for k in ("model", "base_url", "sampling",
+                                          "extra_body")
                 if was.get(k) != now.get(k)]
     if changed:
         raise SystemExit(
@@ -121,7 +129,10 @@ def manifest(cfg: DictConfig, solver: ChatSolver, ts_manifest: Dict[str, Any],
         "endpoint": solver.client.endpoint.redacted(),
         "template": cfg.template.name,
         "elicitation": solver.elicitation.name,
-        "elicitation_summary": solver.elicitation.summary(),
+        # The text, not just the name. A name is what a config file happens to
+        # call a system prompt, and `refuse_a_changed_run` compares this so two
+        # different prompts under one name cannot pool into one directory.
+        "elicitation_config": dataclasses.asdict(solver.elicitation),
         "filter": _plain(cfg.filter),
         # Both numbers, so a report can tell a filtered run from a short one.
         "n_taskset_total": n_total,
@@ -150,7 +161,16 @@ def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
                 # not cost the rows already paid for.
                 attempt = Attempt(error=f"solver raised: {type(e).__name__}: {e}")
             if attempt.value is not None:
-                values.check_json(attempt.value, row["id"])
+                try:
+                    values.check_json(attempt.value, row["id"])
+                except TypeError as e:
+                    # Inside the pool, and the completion is kept. Raising here
+                    # killed the run *and* threw away the generation it was
+                    # complaining about, which was already paid for. The record
+                    # carries an error, so the item is unmeasured rather than
+                    # zero, and `max_error_rate` ends a sweep whose solver does
+                    # this on every row.
+                    attempt = dataclasses.replace(attempt, value=None, error=str(e))
             out.write({"id": row["id"], "task": row["task"],
                        "level": row["metadata"]["level"],
                        "ordering": row["metadata"]["ordering"],
@@ -197,64 +217,82 @@ def execute(cfg: DictConfig, run_dir: str, origin: str = ".") -> Dict[str, Any]:
         tasks=cfg.filter.get("tasks"), levels=cfg.filter.get("levels"),
         orderings=cfg.filter.get("orderings"), limit=cfg.filter.get("limit"))
 
-    os.makedirs(run_dir, exist_ok=True)
-    solver = build_solver(cfg)
-    meta = manifest(cfg, solver, ts_manifest, ts_path, rows, len(all_rows), 0)
+    # Held for the whole run. The directory is named by the configuration, so
+    # two invocations of one command land in the same place and would each skip
+    # the ids the other is still generating.
+    with artifacts.exclusive(run_dir):
+        solver = build_solver(cfg)
+        meta = manifest(cfg, solver, ts_manifest, ts_path, rows, len(all_rows), 0)
 
-    if cfg.resume:
-        refuse_a_changed_run(run_dir, meta)
-    else:
-        artifacts.restart(run_dir)
-    done = artifacts.completed_ids(run_dir) if cfg.resume else set()
-    todo = [r for r in rows if r["id"] not in done]
-    meta["n_resumed"] = len(done)
-    artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
+        if cfg.resume:
+            refuse_a_changed_run(run_dir, meta)
+        else:
+            artifacts.restart(run_dir)
+        done = artifacts.completed_ids(run_dir) if cfg.resume else set()
+        todo = [r for r in rows if r["id"] not in done]
+        meta["n_resumed"] = len(done)
+        artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
 
-    # Before any call, so a run that dies mid-flight still says what it asked.
-    with artifacts.Appender(os.path.join(run_dir, artifacts.PROMPTS)) as p:
-        for row in todo:
-            system, user = solver.prompt_of(row)
-            p.write({"id": row["id"], "system": system, "user": user})
+        # Before any call, so a run that dies mid-flight still says what it asked.
+        with artifacts.Appender(os.path.join(run_dir, artifacts.PROMPTS)) as p:
+            for row in todo:
+                system, user = solver.prompt_of(row)
+                p.write({"id": row["id"], "system": system, "user": user})
 
-    print(f"{len(todo)} of {len(rows)} items -> {run_dir}", file=sys.stderr)
-    started = time.monotonic()
-    counts = generate(todo, solver, run_dir, cfg.generation.concurrency)
-    elapsed = time.monotonic() - started
+        print(f"{len(todo)} of {len(rows)} items -> {run_dir}", file=sys.stderr)
+        started = time.monotonic()
+        try:
+            counts = generate(todo, solver, run_dir, cfg.generation.concurrency)
+        except BaseException:
+            # A manifest left at "running" cannot be told from a run still in
+            # flight, so a crash reads as work in progress for as long as
+            # anyone is willing to wait for it. The generations are on disk and
+            # the run resumes; only the status is corrected here.
+            meta["status"] = "crashed"
+            meta["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
+            raise
+        elapsed = time.monotonic() - started
 
-    # Counted over everything on disk, not over this invocation. A resumed run
-    # that generated one item would otherwise write `n_generated: 0` and an
-    # error rate measured on a single row over the record of a whole sweep --
-    # and this manifest is what the "not measured must not look like measured
-    # as failing" argument rests on.
-    final = artifacts.best_per_id(run_dir)
-    n_errors = sum(1 for r in final.values() if r.get("error"))
-    n_truncated = sum(1 for r in final.values() if r.get("truncated"))
-    error_rate = n_errors / len(final) if final else 0.0
-    meta.update(finished_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                elapsed_s=round(elapsed, 1),
-                n_generated=len(final), n_errors=n_errors, n_truncated=n_truncated,
-                n_this_invocation=counts["generated"],
-                n_missing=len(rows) - len(final),
-                error_rate=round(error_rate, 4))
-    # A run that mostly failed to reach the provider is not a measurement of a
-    # model. Saying so in the manifest keeps "not measured" from reading as
-    # "measured as failing" -- the previous harness lost two cells that way and
-    # the report could not tell.
-    meta["status"] = "failed" if error_rate > cfg.max_error_rate else "completed"
-    artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
+        # Counted over everything on disk, not over this invocation. A resumed
+        # run that generated one item would otherwise write `n_generated: 0` and
+        # an error rate measured on a single row over the record of a whole
+        # sweep -- and this manifest is what the "not measured must not look
+        # like measured as failing" argument rests on.
+        final = artifacts.best_per_id(run_dir)
+        n_errors = sum(1 for r in final.values() if r.get("error"))
+        n_truncated = sum(1 for r in final.values() if r.get("truncated"))
+        error_rate = n_errors / len(final) if final else 0.0
+        meta.update(finished_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    elapsed_s=round(elapsed, 1),
+                    n_generated=len(final), n_errors=n_errors,
+                    n_truncated=n_truncated,
+                    n_this_invocation=counts["generated"],
+                    # The selected rows that have no generation, counted by id.
+                    # `len(rows) - len(final)` counts one set against another and
+                    # goes negative the moment the directory holds an id this
+                    # invocation did not select.
+                    n_missing=sum(1 for r in rows if r["id"] not in final),
+                    error_rate=round(error_rate, 4))
+        # A run that mostly failed to reach the provider is not a measurement of
+        # a model. Saying so in the manifest keeps "not measured" from reading as
+        # "measured as failing" -- the previous harness lost two cells that way
+        # and the report could not tell.
+        meta["status"] = "failed" if error_rate > cfg.max_error_rate else "completed"
+        artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
 
-    print(f"{meta['status']}: {len(final)} of {len(rows)} generated, "
-          f"{n_errors} errors ({error_rate:.1%}), "
-          f"{n_truncated} truncated, {elapsed:.0f}s "
-          f"({counts['generated']} this run)", file=sys.stderr)
-    if meta["status"] == "failed":
-        raise RunFailed(
-            f"error rate {error_rate:.1%} is above max_error_rate "
-            f"{cfg.max_error_rate}. The generations are kept and the run is "
-            f"resumable; read the errors in {artifacts.GENERATIONS} before "
-            f"rerunning, because a dead endpoint and a rejected request look "
-            f"the same in a score.")
-    return meta
+        print(f"{meta['status']}: {len(final)} of {len(rows)} generated, "
+              f"{n_errors} errors ({error_rate:.1%}), "
+              f"{n_truncated} truncated, {elapsed:.0f}s "
+              f"({counts['generated']} this run)", file=sys.stderr)
+        if meta["status"] == "failed":
+            raise RunFailed(
+                f"error rate {error_rate:.1%} is above max_error_rate "
+                f"{cfg.max_error_rate}. The generations are kept and the run is "
+                f"resumable; read the errors in {artifacts.GENERATIONS} before "
+                f"rerunning, because a dead endpoint and a rejected request look "
+                f"the same in a score.")
+        return meta
 
 
 if __name__ == "__main__":

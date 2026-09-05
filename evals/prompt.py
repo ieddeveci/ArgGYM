@@ -17,9 +17,6 @@ from typing import Dict, Optional, Tuple
 
 import arggym
 
-#: Named templates a config may select. Adding a convention is adding a line:
-#: `AnswerTemplate(name, open, close)` carries its own instruction sentence and
-#: its own delimiters, so the extractor follows automatically.
 #: Named templates a config may select, one file each under `conf/template/`.
 #: Adding a convention is adding a line: `AnswerTemplate(name, open, close)`
 #: carries its own instruction sentence and its own delimiters, so the extractor
@@ -41,21 +38,17 @@ class Elicitation:
     """How the run asks for reasoning, kept apart from what it asks for.
 
     The question is the task. Everything here is the evaluator's choice about
-    how to put it, and it is recorded in the run manifest so two runs that
-    differ only in this are comparable as an experiment rather than confusable
-    as a result.
+    how to put it, and the whole of it -- not just `name` -- is recorded in the
+    run manifest, so two runs that differ only in this are comparable as an
+    experiment rather than confusable as a result. `run.py` compares it before
+    resuming: a name is what a config file happens to call a system prompt, and
+    `elicitation.system=...` changes the prompt while leaving the name alone.
     """
 
     name: str = "none"
     system: str = ""
     prefix: str = ""
     suffix: str = ""
-
-    def summary(self) -> str:
-        parts = [f"system={len(self.system)}c" if self.system else "",
-                 f"prefix={len(self.prefix)}c" if self.prefix else "",
-                 f"suffix={len(self.suffix)}c" if self.suffix else ""]
-        return f"{self.name}({','.join(p for p in parts if p) or 'bare'})"
 
 
 def compose(row: Dict, template_name: Optional[str],
@@ -93,8 +86,9 @@ def region(text: str, template_name: Optional[str]) -> Tuple[str, bool]:
     The *last* region, not the first: a reasoning model drafts a candidate
     mid-thought and then revises it. `arggym.extract_answer` settles this the
     same way for the `<answer>` convention, and
-    `tests/evals/test_extraction_agrees_with_the_package.py` pins the two
-    together so this one cannot drift.
+    `test_the_harness_owns_the_submission_convention.py::
+    test_extraction_agrees_with_the_package_on_the_shared_convention` pins the
+    two together so this one cannot drift.
 
     With no template the whole completion is the answer.
     """

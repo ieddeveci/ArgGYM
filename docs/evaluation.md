@@ -166,10 +166,13 @@ tasks.
 Two things follow from a floor being *measured* rather than given. Each
 breakdown measures its own — a level-15 group is corrected by a level-15 floor,
 not by one averaged over the grid. And a floor is measured over the rows a run
-actually scored, so a filtered run's floors are estimates from that filter; when
-two runs disagree about a task's floor the report marks it, because
-`(score - floor) / (1 - floor)` then cannot be reproduced from the single number
-in the column.
+actually scored, so a filtered run's floors are estimates from that filter. The
+report marks a task's floor with `*` when two runs disagree about it, and also
+when one of them could not measure it at all: `(score - floor) / (1 - floor)`
+then cannot be reproduced from the single number in the column. A floor that
+could not be measured -- `arggym.floors` refuses a row it cannot grade -- is
+named in `_meta.floors_unmeasured` rather than left as a blank cell that reads
+like a task with no floor.
 
 There is no floor column beside the success-rate table. A floor is the mean
 *score* of the best constant answer, not its success rate, and printing it there
@@ -184,10 +187,12 @@ run_id: ${model.name}__${template.name}__${elicitation.name}
 hydra.run.dir: outputs/runs/${run_id}
 ```
 
-So running the same command twice resumes rather than starting a second copy,
-and two configurations cannot land in one directory. That is the whole
-mechanism; there is nothing to pass. Give `run_id=` a value of your own for a
-deliberate second run of one configuration.
+So running the same command twice resumes rather than starting a second copy.
+That is the whole mechanism; there is nothing to pass. Give `run_id=` a value of
+your own for a deliberate second run of one configuration -- and for a filtered
+one, or a second token cap, since the name carries only the model, the template
+and the elicitation while the guard below compares everything that changes what
+the model was asked.
 
 A rerun skips ids that already have a good generation, so an interruption costs
 the item in flight. A failure and its retry both stay on disk and the good one
@@ -206,20 +211,33 @@ uv run python -m evals.run model=stub taskset=data/taskset.jsonl \
 A filter that matches nothing raises. Matching nothing silently would report a
 missing sweep as a clean run of zero items.
 
-Two more refusals, both for the same reason -- a wrong number that looks right is
-worse than an error:
+`filter.limit=0` is refused for the same reason: it is not "no limit", it is a
+filter that matches nothing, and it would be written down as a completed run
+with an error rate of zero.
+
+The rest of the refusals are all the same reason -- a wrong number that looks
+right is worse than an error:
 
 - **A taskset whose contents do not match its own manifest is refused on load.**
   The hash is recomputed from the rows, not read out of the manifest and
   compared against a copy of itself: a file truncated to eight lines loads seven
   rows and would otherwise pass, then get the full grid's hash printed beside
   seven items' numbers.
+- **A taskset with no manifest at all is refused too.** It names no hash, so
+  `score.py` compares the run's `None` against the file's `None`, finds them
+  equal, and scores yesterday's completions against today's gold. Row ids are
+  stable across regenerations, so nothing else catches it either.
 - **`score.py` refuses a taskset whose hash is not the one the run recorded.**
   Scoring answers against questions they were not asked is silent.
 - **A directory will not take a second configuration.** Resume keys on the row
-  id, so reusing one with a different model or template would mix two models'
-  completions under one manifest, all extracted with whichever template was
-  named last — and every other guard would pass.
+  id, so reusing one with a different model, template, elicitation, filter or
+  sampling would mix two configurations' completions under one manifest, all
+  extracted with whichever template was named last — and every other guard
+  would pass. The elicitation is compared by its text, not by its name.
+- **A directory will not take two runs at once.** It is named by the
+  configuration, so launching the same command twice is an ordinary accident;
+  both invocations would read the resume list before either wrote to it. The
+  second one exits saying the first holds the directory.
 - **A provider that did not answer is an error, not a zero.** A
   `finish_reason` of `content_filter`, or a refusal beside a null content,
   leaves an empty completion that would otherwise score zero on every task,

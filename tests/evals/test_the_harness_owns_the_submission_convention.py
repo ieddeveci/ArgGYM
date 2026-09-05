@@ -71,7 +71,6 @@ def test_elicitation_wraps_without_touching_the_question(rows):
     assert user.startswith("Before:")
     assert user.endswith("After:")
     assert rows[0]["question"] in user
-    assert "prefix" in e.summary() and "system" in e.summary()
 
 
 def test_an_answer_only_in_the_reasoning_is_found_and_labelled(rows):

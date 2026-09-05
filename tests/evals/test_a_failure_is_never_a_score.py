@@ -106,3 +106,33 @@ def test_a_retry_is_spent_only_where_it_could_help(rows, provider):
     attempt = solver(rows[0])
     assert attempt.error is not None
     assert seen["n"] == 1, f"retried a 400 {seen['n']} times"
+
+
+def test_a_floor_that_could_not_be_measured_is_reported_and_not_absorbed(
+        tmp_path, rows, taskset_file, provider, monkeypatch):
+    """`-` in the floor column must not mean two different things.
+
+    `arggym.floors` scores every row with each constant strategy and does not
+    guard, so it was called inside a bare `except` -- and one ungradeable row
+    then removed a task's floor and its `corrected` column silently, rendering
+    identically to a task that has no floor at all.
+    """
+    import arggym
+
+    p = provider(answering(rows))
+    run_dir = a_run(tmp_path, p.url, rows, taskset_file)
+
+    def refuses(_rows):
+        raise RuntimeError("engine version mismatch")
+
+    monkeypatch.setattr(arggym, "floors", refuses)
+    metrics = score_run(run_dir)
+
+    assert metrics["_meta"]["floors_unmeasured"] == [
+        "RuntimeError: engine version mismatch"]
+    for v in metrics["by_task"].values():
+        assert "floor" not in v and "corrected" not in v
+        assert v["floor_error"] == "RuntimeError: engine version mismatch"
+        # The scores themselves are unaffected: a missing floor removes the
+        # correction, never the measurement.
+        assert v["mean"] == 1.0
