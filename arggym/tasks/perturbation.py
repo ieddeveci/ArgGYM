@@ -15,7 +15,7 @@ from arggym.core.curriculum import (
     negated_branch,
 )
 from arggym.core.invariants import language_enrichment, randomize_rule_names
-from arggym.core.pairs import LINE_END, LINE_START, collect, pair_f1
+from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import answer_format
 
 TASK = "perturbation"
@@ -376,8 +376,7 @@ def _render_prompt(theory: str, pert: str, ordering: str,
 
 
 # One whole line, as the format clause above asks for (`core/pairs.py`).
-_PAIR = re.compile(LINE_START + r"(-?\w+)[ \t]*[:=][ \t]*"
-                   r"(justified|overruled|undecided)" + LINE_END, re.I | re.M)
+_PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b", re.I)
 
 
 def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> ScoreResult:

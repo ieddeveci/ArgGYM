@@ -11,7 +11,7 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import UNSATISFIABLE, Operation
 from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
-from arggym.core.pairs import LINE_END, LINE_START, collect, pair_f1
+from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import answer_format
 
 TASK = "semantics_query"
@@ -499,9 +499,8 @@ def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: st
 
 
 # One whole line, as the format clause above asks for (`core/pairs.py`).
-_PAIR = re.compile(LINE_START + r"(-?\w+)[ \t]+under[ \t]+([a-z ]+?)[ \t]*[:=][ \t]*"
-                   r"(justified|overruled|undecided|no stable extension)" + LINE_END,
-                   re.I | re.M)
+_PAIR = re.compile(r"(-?\w+)\s+under\s+([a-z ]+?)\s*[:=]\s*"
+                   r"(justified|overruled|undecided|no stable extension)\b(?!\w)", re.I)
 
 
 def score(answer_text: str, item: SemItem) -> ScoreResult:

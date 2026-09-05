@@ -1,15 +1,17 @@
-"""A prediction comes from a line, not from anywhere a status word turns up.
+"""What the fence lets a label scorer accept, and what it still refuses.
 
-The three label-map scorers matched `claim: status` anywhere in the answer, so
-`re.findall` on "My conclusion: overruled" returned `("conclusion", "overruled")`
-and a sentence quietly became a claim the model never made. `defeat_diagnosis`
-had the same shape one level up: a `survives_because` written under a record that
-named no defeater was carried over to the record above it.
+The fence -- `<answer>` by default -- is what separates a model's reasoning from
+its answer, so everything inside it is answer text and everything outside is
+delivery. That draws the line these tests pin.
 
-Both patterns are now the line the prompt already asks for -- "one line per
-claim", "one line per failure point" -- with room for a bullet in front and a
-full stop behind, because those are how a model writes a list and neither
-changes what the line says.
+Anchoring each pair to a whole line was tried and rejected. It stopped nothing:
+a prose decoy inside the fence already scored zero on its leftover token, and a
+*clean* decoy line matched the anchored pattern anyway. Its only real effect was
+to turn a correct answer written on one line into `unparseable_tokens`, which is
+format compliance charged to the reasoning score -- the confound #10 measures at
+0.180. `defeat_diagnosis` is different and its fix stayed: a `survives_because`
+written under a record that named no defeater was credited to the record above
+it, which is a wrong answer rather than a formatting choice.
 """
 from __future__ import annotations
 
@@ -34,16 +36,16 @@ def gold_lines(item):
     return [f"{c}: {v.lower()}" for c, v in item.gold.items()]
 
 
-def test_a_sentence_that_ends_in_a_status_is_not_a_prediction(sq_item):
-    """The bug this file exists for.
+def test_every_claim_on_one_line_is_still_a_correct_answer(sq_item):
+    """A line-break choice is not a reasoning failure.
 
-    The claim `conclusion` is not in the theory, so the injected pair was a false
-    positive: it lowered precision on an answer whose every real line was right.
+    The prompt asks for one line per claim, and a model that ignores it has
+    ignored an instruction -- but it answered every claim correctly, and
+    reporting that as `unparseable_tokens` says it wrote gibberish.
     """
     lines = gold_lines(sq_item)
-    r = sq.score("\n".join(["My conclusion: overruled"] + lines), sq_item)
-    assert "conclusion" not in (r.diagnostics.get("false_positives") or [])
-    assert r.diagnostics.get("n_predicted", 0) <= len(sq_item.gold)
+    assert sq.score("\n".join(lines), sq_item).score == pytest.approx(1.0)
+    assert sq.score("  ".join(lines), sq_item).score == pytest.approx(1.0)
 
 
 def test_a_prose_line_inside_the_fence_is_still_junk(sq_item):
