@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
 from arggym.core.curriculum import (
     junctions_for,
     negated_branch,
@@ -20,7 +21,7 @@ from arggym.core.invariants import (
     randomize_rule_names,
     split_atoms_and_rules,
 )
-from arggym.core.prompting import permitted_block
+from arggym.core.prompting import answer_format, permitted_block
 
 TASK = "counter_argument"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -126,7 +127,8 @@ class CAItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          allow_strict: bool = False) -> Optional[CAItem]:
+          allow_strict: bool = False,
+          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[CAItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
     n_chain = max(1, min(1 + (level * 5) // 15, 6))
     depth = max(2, min(2 + (level * 3) // 15, 5))
@@ -408,7 +410,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             ref_ops, lines = cand_ops, cand_lines
             break
 
-    prompt = _render_prompt(render_ops(base), target, ordering, allow_strict)
+    prompt = _render_prompt(render_ops(base), target, ordering, allow_strict, template)
     return CAItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, target=target,
         ordering=ordering, level=level,
@@ -433,7 +435,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, target: str, ordering: str,
-                   allow_strict: bool = False) -> str:
+                   allow_strict: bool = False,
+                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -441,7 +444,7 @@ def _render_prompt(theory: str, target: str, ordering: str,
             f"What is the minimal set of directives that makes -{target} justified "
             f"and {target} overruled?\n\n"
             f"{permitted_block(allow_strict)}\n\n"
-            "Answer format: one directive per line.")
+            + answer_format("Answer format: one directive per line.", template))
 
 
 def as_score_input(it: "CAItem") -> Dict:
@@ -452,9 +455,10 @@ def as_score_input(it: "CAItem") -> Dict:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              tries: int = 14, allow_strict: bool = False) -> Optional[CAItem]:
+              tries: int = 14, allow_strict: bool = False,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[CAItem]:
     for k in range(tries):
-        it = build(level, seed * 53 + k, ordering, allow_strict)
+        it = build(level, seed * 53 + k, ordering, allow_strict, template)
         if it is not None:
             return it
     return None

@@ -20,14 +20,21 @@ ds = arggym.create("counter_argument", level=6,
                    ordering="weakest_link_elitist", size=50)
 
 for entry in ds:
-    text = my_model(entry["question"])       # your template, your delimiters
-    result = ds.score(my_extract(text), entry)
+    text = my_model(entry["question"])       # the question asks for <answer> tags
+    result = ds.score(arggym.extract_answer(text), entry)
     print(result.score, result.success, result.reason)
 ```
 
-ArgGYM owns **what a legal answer is**; you own **how it is delivered**. Nothing in the question names
-a delimiter, so wrap the answer in `<answer>` tags, a JSON field, a tool call, or nothing at all.
-`arggym.extract_answer(text)` is offered as a default, not a contract.
+ArgGYM owns **what a legal answer is**; you own **how it is delivered**. The question asks for the
+answer between `<answer>` and `</answer>`, matching reasoning-gym, and `arggym.extract_answer(text)`
+reads that region back. Which delimiters the question names is a render-time choice, not a property
+of the benchmark: `arggym.create(..., template=arggym.SQUARE_TAGS)` asks for the older pair instead,
+your own `AnswerTemplate` asks for anything else, and each row records which one built its question.
+A harness that already knows where its answer ends can hand the body straight to `score`.
+
+The fence earns its place: the parser is strict, so every line inside it has to be an answer line.
+Without one, a model that reasons before writing its answer would have its reasoning read as a
+malformed answer.
 
 `ds.score_answer(text, entry)` returns the float alone, so a reasoning-gym-shaped harness or an RL
 loop works unchanged.

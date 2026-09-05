@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
 from arggym.core.curriculum import JUNCTION_CAPS, PROFILES, junction_budget
 from arggym.core.nlforms import (
     AXIOM,
@@ -34,6 +34,7 @@ from arggym.core.nlforms import (
     STRICT_FROM_NEGATION,
     UNDERCUT,
 )
+from arggym.core.prompting import answer_format
 from arggym.core.scoring import ARROW
 
 TASK = "formalization"
@@ -165,7 +166,8 @@ class _Cycler:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[FItem]:
+          profile: str = "FULL",
+          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[FItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
     lo = 3 + int((level - 1) * (40 - 3) / 14)
@@ -364,7 +366,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     nl = " ".join(sentences)
     concl = "; ".join(f"{l} is {gold[l].lower()}" for l in queried)
-    prompt = _render_prompt(nl, concl, ordering, queried)
+    prompt = _render_prompt(nl, concl, ordering, queried, template)
     return FItem(
         prompt=prompt, nl_text=nl, reference_ops=base,
         reference="\n".join(render_op(o) for o in base),
@@ -381,7 +383,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -> str:
+def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str],
+                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following argumentation is described in words. Formalize it as an ASPIC+ theory, "
             f"to be evaluated under grounded semantics with {on}.\n\n{nl}\n\n"
@@ -390,7 +393,7 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -
             "[prefer_rule: r1 > r2], [prefer_premise: x > y]. Negation is written -x. "
             "Rule names are yours to choose: a name starts with a letter and continues with "
             "letters, digits or underscores, and is separated from the kind by a space.\n\n"
-            "Answer format: one directive per line.")
+            + answer_format("Answer format: one directive per line.", template))
 
 
 _P = re.compile(r"^\[(premise|axiom):\s*(-?\w+)\]$")
@@ -507,9 +510,10 @@ def score(answer_text: str, item: FItem, strict_parse: bool = True) -> ScoreResu
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               profile: str = "FULL",
-              tries: int = 16) -> Optional[FItem]:
+              tries: int = 16,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[FItem]:
     for k in range(tries):
-        it = build(level, seed * 89 + k, ordering, profile=profile)
+        it = build(level, seed * 89 + k, ordering, profile=profile, template=template)
         if it is not None:
             return it
     return None

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
 from arggym.core.curriculum import (
     JUNCTION_CAPS,
     PROFILES,
@@ -22,6 +22,7 @@ from arggym.core.invariants import (
     randomize_rule_names,
     split_atoms_and_rules,
 )
+from arggym.core.prompting import answer_format
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -119,7 +120,8 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[CCItem]:
+          profile: str = "FULL",
+          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[CCItem]:
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
     tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)
@@ -315,7 +317,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         return None
 
     ref_lines = [render_op(o) for o in line_ops]
-    prompt = _render_prompt(render_ops(base), claim, ordering)
+    prompt = _render_prompt(render_ops(base), claim, ordering, template)
     return CCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         line_ops=line_ops, ordering=ordering, level=level,
@@ -330,14 +332,16 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(theory: str, claim: str, ordering: str) -> str:
+def _render_prompt(theory: str, claim: str, ordering: str,
+                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is justified.\n"
             f"Write all and only the directives that form the argumentation line justifying {claim}, "
             "in order from the premise to the claim.\n\n"
-            "Answer format: one directive per line, copied exactly as it appears above.")
+            + answer_format("Answer format: one directive per line, copied exactly as it "
+                            "appears above.", template))
 
 
 def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:
@@ -432,9 +436,10 @@ def score(answer_text: str, item: CCItem) -> ScoreResult:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14) -> Optional[CCItem]:
+              tries: int = 14,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[CCItem]:
     for k in range(tries):
-        it = build(level, seed * 71 + k, ordering, profile)
+        it = build(level, seed * 71 + k, ordering, profile, template)
         if it is not None:
             return it
     return None

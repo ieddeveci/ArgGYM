@@ -5,8 +5,10 @@ this file never reaches into ArgGYM's internals. It reads a JSONL, sends each
 `question` to an OpenAI-compatible endpoint however it likes, and hands the
 answer body back to `arggym.score_row`.
 
-The delimiters here are this file's choice, not ArgGYM's. Swap the tag pair for
-a JSON schema, a tool call, or constrained decoding, and scoring is unaffected.
+The question already asks for the answer between `<answer>` and `</answer>`, so
+this file reads that region back with `arggym.extract_answer` and adds nothing.
+Another convention is a re-render, not an edit here: freeze with a different
+`AnswerTemplate` and read its region instead. Scoring is unaffected either way.
 
     uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
     python examples/evaluate.py data/taskset.jsonl \
@@ -19,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.request
@@ -28,20 +29,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import arggym
 
-# This evaluator's own submission contract. ArgGYM does not know about it.
-SYSTEM = ("Work the problem out, then give your final answer between "
-          "<answer> and </answer>.")
-_REGION = re.compile(r"<answer>(.*?)</answer>", re.S | re.I)
-
-
-def extract(text: str) -> str:
-    """The answer body, by this evaluator's convention.
-
-    The *last* region, not the first: a reasoning model drafts a candidate
-    mid-thought and then revises it, so the first region is the draft.
-    """
-    found = _REGION.findall(text or "")
-    return found[-1] if found else (text or "")
+# The question states the submission contract; this only tells the model it may
+# think first, which the question does not say either way.
+SYSTEM = "Work the problem out, then answer in the format the question asks for."
 
 
 def complete(base_url: str, model: str, key: str, question: str,
@@ -114,7 +104,7 @@ def main() -> int:
         if gen.get("error"):
             return out
         try:
-            result = arggym.score_row(extract(gen["text"]), row)
+            result = arggym.score_row(arggym.extract_answer(gen["text"]), row)
         except Exception as e:
             # score_row refuses a row it cannot score -- a different engine, a
             # missing field. One such row must not cost the whole run: every

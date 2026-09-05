@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
+
 SEMANTICS = "grounded semantics"
 ORDERING_NAME = {
     "last_link_elitist": "the last-link elitist strength ordering",
@@ -50,6 +52,17 @@ def permitted_block(allow_strict: bool = False) -> str:
 
 _FORMAT = ("Answer format: one directive per line.")
 
+
+def answer_format(clause: str, template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
+    """The answer-format block: what the answer must say, then where to put it.
+
+    The clause is the task's own and describes content -- one directive per line,
+    one line per claim. The sentence after it describes delivery and comes from
+    the template, so changing the fence is a render-time choice and never an edit
+    to a task's prompt string (`docs/dataset-contract.md` section 1).
+    """
+    return f"{clause.rstrip()}\n{template.instruction}"
+
 INCLUDE_NOTATION = True
 
 _STATUS_WORD = {"JUSTIFIED": "justified", "OVERRULED": "overruled", "UNDECIDED": "undecided"}
@@ -63,7 +76,8 @@ def _goal_line(claim: str, current: str, want: str) -> str:
 
 
 def render(theory_text: str, ordering: str, goals: Sequence[Dict],
-           include_notation: Optional[bool] = None, allow_strict: bool = False) -> str:
+           include_notation: Optional[bool] = None, allow_strict: bool = False,
+           template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     head = (f"The following is a defeasible argumentation theory, evaluated under {SEMANTICS} "
             f"with {ORDERING_NAME.get(ordering, ordering)}.")
     parts: List[str] = [head, "", theory_text, ""]
@@ -80,5 +94,5 @@ def render(theory_text: str, ordering: str, goals: Sequence[Dict],
                      f"{wants}?")
     if INCLUDE_NOTATION if include_notation is None else include_notation:
         parts += ["", permitted_block(allow_strict)]
-    parts += ["", _FORMAT]
+    parts += ["", answer_format(_FORMAT, template)]
     return "\n".join(parts)

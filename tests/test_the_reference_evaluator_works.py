@@ -1,8 +1,9 @@
 """The example an adopter copies has to run.
 
 `docs/dataset-card.md` and #54 promise a path from install to a scored JSONL.
-The model call is stubbed; everything else -- reading the frozen file, the
-evaluator's own delimiters, scoring a row, and the report -- is exercised.
+The model call is stubbed; everything else -- reading the frozen file, finding
+the answer inside the fence the question asked for, scoring a row, and the
+report -- is exercised.
 """
 import json
 import subprocess
@@ -36,15 +37,25 @@ def test_the_manifest_line_is_not_read_as_an_item(taskset):
     assert all("question" in r for r in got)
 
 
-def test_the_evaluators_own_delimiters_are_its_business(taskset):
-    # ArgGYM names none of these. Changing them here changes no score.
-    assert evaluate.extract("<answer>\nBODY\n</answer>").strip() == "BODY"
-    assert evaluate.extract("BODY") == "BODY"
+def test_the_example_reads_the_fence_the_question_asked_for(taskset):
+    """It does not define a second one.
+
+    The example used to carry its own tag regex, arrived at independently and
+    identical to the package's. Two copies of the rule that says where an answer
+    ends is how they come to disagree, so the example reads the region with
+    `arggym.extract_answer` and its own text says which convention that is.
+    """
+    src = (ROOT / "examples" / "evaluate.py").read_text()
+    assert "arggym.extract_answer(" in src
+    assert "re.compile" not in src, "the example defines a second answer-region regex"
 
 
-def test_the_last_region_wins_because_the_first_is_the_draft():
-    text = "<answer>draft</answer> on reflection, no. <answer>final</answer>"
-    assert evaluate.extract(text) == "final"
+def test_every_question_in_the_taskset_names_the_fence(taskset):
+    from arggym.core.answers import DEFAULT_TEMPLATE
+    rows = list(evaluate.rows(str(taskset)))
+    for row in rows:
+        assert DEFAULT_TEMPLATE.instruction in row["question"]
+        assert row["metadata"]["answer_template"] == DEFAULT_TEMPLATE.name
 
 
 def test_a_perfect_model_scores_one_on_every_row(taskset, monkeypatch):

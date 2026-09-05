@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Sequence
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -18,6 +19,7 @@ from arggym.core.invariants import (
     randomize_rule_names,
     split_atoms_and_rules,
 )
+from arggym.core.prompting import answer_format
 
 TASK = "preference_construction"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -114,7 +116,8 @@ class PCItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[PCItem]:
+          profile: str = "FULL",
+          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[PCItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pc"))
     n_claims = max(1, min(1 + (level * 8) // 15, 8))
     n_conf = max(n_claims + 1, min(n_claims + 1 + (level * 5) // 15, 10))
@@ -290,7 +293,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             best = found
 
     lines = [f"[{o.kind}: {o.stronger} > {o.weaker}]" for o in best]
-    prompt = _render_prompt(render_ops(base), goals, ordering)
+    prompt = _render_prompt(render_ops(base), goals, ordering, template)
     return PCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, goals=goals,
         ordering=ordering, level=level,
@@ -318,7 +321,8 @@ TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both direc
             "equally preferred and settles nothing between them.")
 
 
-def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
+def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
+                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     on = _ordering_phrase(ordering)
     lines = [f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
              f"with {on}.", "", theory, ""]
@@ -334,14 +338,15 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
               "The answer must be minimal: one using more than twice the fewest directives "
               "that work scores zero.",
               TIE_NOTE, "",
-              "Answer format: one directive per line."]
+              answer_format("Answer format: one directive per line.", template)]
     return "\n".join(lines)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14) -> Optional[PCItem]:
+              tries: int = 14,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[PCItem]:
     for k in range(tries):
-        it = build(level, seed * 61 + k, ordering, profile)
+        it = build(level, seed * 61 + k, ordering, profile, template)
         if it is not None:
             return it
     return None

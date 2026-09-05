@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
 from arggym.core.curriculum import (
     JUNCTION_CAPS,
     PROFILES,
@@ -18,6 +18,7 @@ from arggym.core.curriculum import (
     wants_ternary,
 )
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.prompting import answer_format
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -103,7 +104,8 @@ class DDItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[DDItem]:
+          profile: str = "FULL",
+          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[DDItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "dd"))
     n_routes = 1 if level <= EASY_LEVELS else 3
     depth = max(2, min(2 + level // 3, 7))
@@ -314,7 +316,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             parts.append(f"survives_because: {d['survives_because']}")
         lines.append("; ".join(parts))
 
-    prompt = _render_prompt(render_ops(base), claim, ordering, bool(tower))
+    prompt = _render_prompt(render_ops(base), claim, ordering, bool(tower), template)
     return DDItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         claim_status=st, diagnoses=diagnoses, ordering=ordering, level=level,
@@ -332,18 +334,19 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
+def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool,
+                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     on = _ordering_phrase(ordering)
     extra = "   ...; survives_because: <rule>\n" if want_survival else ""
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is not justified.\n"
             f"State its status, and identify every point at which its support fails.\n\n"
-            "Answer format:\n"
-            "   first line: `status: overruled` or `status: undecided`\n"
-            "   then one line per failure point, as\n"
-            "   `defeated_at: <target>; defeater: <defeater>; "
-            "kind: undermine|undercut|rebut`\n" + extra)
+            + answer_format("Answer format:\n"
+                            "   first line: `status: overruled` or `status: undecided`\n"
+                            "   then one line per failure point, as\n"
+                            "   `defeated_at: <target>; defeater: <defeater>; "
+                            "kind: undermine|undercut|rebut`\n" + extra, template))
 
 
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
@@ -386,12 +389,18 @@ def score(answer_text: str, item: DDItem) -> ScoreResult:
         if _STATUS.search(line) and "defeated_at" not in line:
             continue
         fields = {k.lower(): v.strip().strip(",;.") for k, v in _FIELD.findall(line)}
-        if "defeated_at" in fields and "defeater" in fields:
-            key = (fields["defeated_at"], fields["defeater"])
-            pred.setdefault(key, set()).add(fields.get("kind", "").lower())
-            last_key = key
-            if fields.get("survives_because"):
-                pred_surv[key] = fields["survives_because"].strip()
+        if "defeated_at" in fields:
+            # A new record starts here, so the one above it stops collecting. Without
+            # the reset, a record that named a target but no defeater fell through to
+            # the carry-over below and credited its `survives_because` to the record
+            # before it: a reason the model wrote about one failure point, scored
+            # against another.
+            last_key = None
+            if "defeater" in fields:
+                last_key = (fields["defeated_at"], fields["defeater"])
+                pred.setdefault(last_key, set()).add(fields.get("kind", "").lower())
+                if fields.get("survives_because"):
+                    pred_surv[last_key] = fields["survives_because"].strip()
         elif "survives_because" in fields and last_key is not None:
             pred_surv[last_key] = fields["survives_because"].strip()
     diag["n_quoted"] = len(pred)
@@ -439,9 +448,10 @@ def score(answer_text: str, item: DDItem) -> ScoreResult:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14) -> Optional[DDItem]:
+              tries: int = 14,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[DDItem]:
     for k in range(tries):
-        it = build(level, seed * 83 + k, ordering, profile)
+        it = build(level, seed * 83 + k, ordering, profile, template)
         if it is not None:
             return it
     return None
