@@ -3,8 +3,9 @@
 Each of these modules used to define its own `[answer]`/`[/answer]` regex and score 0.0
 when it did not match, and each fused the delimiter phrase into the sentence that states
 what the answer has to contain. `docs/dataset-contract.md` section 1 puts delivery on the
-evaluator's side and content on ours, so the delimiters are optional everywhere and named
-nowhere, while every content clause is still in the prompt word for word.
+evaluator's side and content on ours, so the two are separate sentences now: the content
+clause is the task's and never moves, and the sentence naming the fence comes from the
+render-time template. A fenced answer and a bare one score the same.
 
 Section 5 defines `success` per task. It is always returned, and it is not `score == 1.0`:
 `formalization` succeeds on behavioural equivalence alone, so a correct theory written with
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from arggym.core.answers import ScoreResult
+from arggym.core.answers import DEFAULT_TEMPLATE, SQUARE_TAGS, ScoreResult
 from arggym.tasks import (
     claim_chain,
     defeat_diagnosis,
@@ -80,7 +81,8 @@ def item(request, items):
 @pytest.mark.parametrize("task", sorted(MODULES))
 def test_the_stored_reference_carries_no_delimiters(task, item):
     ref = reference_of(item)
-    assert "[answer]" not in ref and "[/answer]" not in ref
+    for d in ("[answer]", "[/answer]", "<answer>", "</answer>"):
+        assert d not in ref, f"{task}: the stored reference carries {d}"
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
@@ -92,24 +94,43 @@ def test_the_bare_reference_scores_one(task, item):
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
-def test_the_wrapped_reference_scores_the_same(task, item):
+@pytest.mark.parametrize("open_tag, close_tag",
+                         [("<answer>", "</answer>"), ("[answer]", "[/answer]")])
+def test_the_fenced_reference_scores_the_same(task, item, open_tag, close_tag):
     bare = MODULES[task].score(reference_of(item), item)
-    wrapped = MODULES[task].score(
-        f"[answer]\n{reference_of(item)}\n[/answer]", item)
-    assert wrapped.score == pytest.approx(bare.score)
-    assert wrapped.success is bare.success
+    fenced = MODULES[task].score(
+        f"{open_tag}\n{reference_of(item)}\n{close_tag}", item)
+    assert fenced.score == pytest.approx(bare.score)
+    assert fenced.success is bare.success
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
-def test_a_wrapper_around_reasoning_still_scores_one(task, item):
-    """What an evaluator actually sends: the answer after the model's working."""
-    text = f"Let me work through it.\nFirst pass, wrong.\n[answer]\n{reference_of(item)}\n[/answer]"
+@pytest.mark.parametrize("open_tag, close_tag",
+                         [("<answer>", "</answer>"), ("[answer]", "[/answer]")])
+def test_a_fence_around_reasoning_still_scores_one(task, item, open_tag, close_tag):
+    """What an evaluator actually sends: the answer after the model's working.
+
+    This is what the fence is for. Strict parsing reads everything inside it as an
+    answer line, so without a fence the working itself would arrive as malformed
+    answer and a reasoning model would score zero on every item.
+    """
+    text = (f"Let me work through it.\nFirst pass, wrong.\n"
+            f"{open_tag}\n{reference_of(item)}\n{close_tag}")
     assert MODULES[task].score(text, item).score == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
-def test_the_prompt_names_no_delimiter(task, item):
+def test_the_prompt_names_the_fence_it_was_rendered_with(task, item):
+    assert DEFAULT_TEMPLATE.instruction in item.prompt
     assert "[answer]" not in item.prompt and "[/answer]" not in item.prompt
+
+
+@pytest.mark.parametrize("task", sorted(MODULES))
+def test_another_template_moves_that_sentence_and_nothing_else(task, item):
+    other = MODULES[task].make_item(LEVEL, SEED, ORDERING, template=SQUARE_TAGS)
+    assert SQUARE_TAGS.instruction in other.prompt
+    assert (other.prompt.replace(SQUARE_TAGS.instruction, DEFAULT_TEMPLATE.instruction)
+            == item.prompt)
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))

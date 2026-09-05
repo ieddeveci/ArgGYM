@@ -29,10 +29,34 @@ wrong thing.
 | An answer using more than twice the minimum scores zero | the subject: economy is a measured capability | keep |
 | Preference is a preorder, so declaring both directions settles nothing | the subject (Modgil & Prakken) | keep |
 | Grounded semantics, four strength orderings | the subject | keep, and do not make them swappable |
-| The answer sits between `[answer]` and `[/answer]` | our implementation | **remove** |
+| The answer sits between `[answer]` and `[/answer]`, always | our implementation | **remove** |
 | The answer is DSL *text* | our implementation | **remove** |
 
 The last two are why this document exists.
+
+### The fence is stated, and it is still not the benchmark's
+
+"Remove" above is about the word *always*, and the distinction is easy to lose.
+A submission convention has to be **in the prompt**: the parser is strict, so
+every line inside the fence must be an answer line, and a model that reasons
+before writing its answer needs somewhere to put the reasoning. Take the fence
+out of the prompt and a reasoning completion is read as a malformed answer,
+which scores zero for a reason that has nothing to do with argumentation.
+
+What must not happen is the fence becoming a fixed property of the dataset. So
+it is a render-time parameter. `AnswerTemplate` holds the pair and the sentence
+that asks for it, the default is `<answer>`/`</answer>` matching reasoning-gym
+(`reasoning_gym/utils.py:25` reads it back with `<{tag}>\s?(.*?)\s?</{tag}>`),
+and a harness with another convention re-renders instead of editing prompt
+strings. The row records `metadata.answer_template`, so a frozen taskset says
+what its questions asked for. `extract_answer` reads the current pair first, the
+older `[answer]` pair after it so recorded generations keep scoring, and returns
+a completion whole when neither is present.
+
+The content half of the answer-format block never moves: "one directive per
+line", "copied exactly as it appears above", "one line per claim, written as
+`claim: status`" are the task's, and the template only ever adds the sentence
+after them.
 
 ### What we refuse to generalize
 

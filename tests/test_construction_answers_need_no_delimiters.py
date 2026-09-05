@@ -1,10 +1,12 @@
 """The six construction tasks own what a legal answer is; the evaluator owns delivery.
 
-`docs/dataset-contract.md` section 1: `[answer]`/`[/answer]` is our implementation, not
-defeasible argumentation, so no prompt asks for it, the stored reference does not carry
-it, and an answer scores the same either way. Section 5 adds the second half: `score_item`
-returns a `ScoreResult` whose `success` is present on every branch, including the early
-zeros that never reach the goal check.
+`docs/dataset-contract.md` section 1: which delimiters fence an answer comes from our
+implementation, not from defeasible argumentation. So the fence is a render-time choice
+-- the question names the template it was rendered with, another template renders another
+sentence, the stored reference carries no fence at all, and an answer scores the same
+bare. Section 5 adds the second half: `score_item` returns a `ScoreResult` whose
+`success` is present on every branch, including the early zeros that never reach the goal
+check.
 
 One item per variant, not a grid: every property here is a function of a flag or of the
 scorer, and `tests/e2e/` already sweeps the grid.
@@ -14,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.answers import ScoreResult
+from arggym.core.answers import DEFAULT_TEMPLATE, SQUARE_TAGS, ScoreResult
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import score_item
 from arggym.tasks import attack_defense as ad
@@ -22,23 +24,29 @@ from arggym.tasks import counter_argument as ca
 from arggym.tasks import preference_construction as pc
 
 LAST_LINK = "last_link_elitist"
-DELIMITERS = ("[answer]", "[/answer]")
+DELIMITERS = ("[answer]", "[/answer]", "<answer>", "</answer>")
 
 # Level 3 is the cheapest cell that exists for all six, and each is a distinct code path:
 # preference_construction and counter_argument write their own prompt, the three
 # attack_defense modes share `core.prompting.render`.
+# `make` takes the answer template, because which fence the question asks for is a
+# render-time argument and one of the properties below is that changing it changes the
+# question and nothing else.
 VARIANTS = {
-    "preference_construction": (lambda: pc.make_item(3, 0, LAST_LINK),
+    "preference_construction": (lambda t: pc.make_item(3, 0, LAST_LINK, template=t),
                                 lambda it: it.as_score_input()),
-    "counter_argument": (lambda: ca.make_item(3, 0, LAST_LINK, allow_strict=False),
+    "counter_argument": (lambda t: ca.make_item(3, 0, LAST_LINK, allow_strict=False,
+                                                template=t),
                          ca.as_score_input),
-    "counter_argument_strict": (lambda: ca.make_item(3, 0, LAST_LINK, allow_strict=True),
+    "counter_argument_strict": (lambda t: ca.make_item(3, 0, LAST_LINK, allow_strict=True,
+                                                       template=t),
                                 ca.as_score_input),
-    "attack": (lambda: ad.make_item(3, 0, LAST_LINK, mode="attack"),
+    "attack": (lambda t: ad.make_item(3, 0, LAST_LINK, mode="attack", template=t),
                lambda it: it.as_score_input()),
-    "defence": (lambda: ad.make_item(3, 0, LAST_LINK, mode="defence"),
+    "defence": (lambda t: ad.make_item(3, 0, LAST_LINK, mode="defence", template=t),
                 lambda it: it.as_score_input()),
-    "attack_defense": (lambda: ad.make_item(3, 0, LAST_LINK, mode="attack_defense"),
+    "attack_defense": (lambda t: ad.make_item(3, 0, LAST_LINK, mode="attack_defense",
+                                              template=t),
                        lambda it: it.as_score_input()),
 }
 
@@ -47,7 +55,7 @@ VARIANTS = {
 def items():
     out = {}
     for task, (make, as_input) in VARIANTS.items():
-        it = make()
+        it = make(DEFAULT_TEMPLATE)
         assert it is not None, f"{task}: no item at level 3 seed 0"
         out[task] = (it, as_input(it))
     return out
@@ -70,19 +78,46 @@ def test_the_reference_scores_one_bare(task, items):
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_reference_scores_one_wrapped(task, items):
-    """An evaluator that still wraps loses nothing, including one that thinks out loud."""
+@pytest.mark.parametrize("open_tag, close_tag",
+                         [("<answer>", "</answer>"), ("[answer]", "[/answer]")])
+def test_the_reference_scores_one_fenced_after_reasoning(task, items, open_tag, close_tag):
+    """What an evaluator actually sends: the answer after the model has thought aloud.
+
+    Both fences, because the older pair still has to read: a generation recorded
+    against an earlier prompt scores the same number today.
+    """
     it, score_input = items[task]
-    r = score_item(f"Here is my reasoning.\n[answer]\n{it.reference}\n[/answer]", score_input)
+    r = score_item(f"Here is my reasoning.\n{open_tag}\n{it.reference}\n{close_tag}",
+                   score_input)
     assert r.score == pytest.approx(1.0), (task, r.reason)
     assert r.success is True
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_prompt_names_no_delimiter(task, items):
+def test_the_prompt_names_the_fence_it_was_rendered_with(task, items):
+    """The prompt says where to put the answer, and the template decides what it says.
+
+    Both halves matter. Silence is what left a model guessing and a reasoning
+    completion unscoreable; a hard-coded sentence is what made our delimiters a
+    property of the benchmark instead of a property of one rendering.
+    """
     it, _ = items[task]
-    for d in DELIMITERS:
+    assert DEFAULT_TEMPLATE.instruction in it.prompt
+    for d in ("[answer]", "[/answer]"):
         assert d not in it.prompt, f"{task}: prompt still asks for {d}"
+
+
+@pytest.mark.parametrize("task", sorted(VARIANTS))
+def test_another_template_renders_another_sentence(task, items):
+    """A harness with its own convention re-renders; it does not edit prompt strings."""
+    make, _ = VARIANTS[task]
+    other = make(SQUARE_TAGS)
+    assert SQUARE_TAGS.instruction in other.prompt
+    assert DEFAULT_TEMPLATE.instruction not in other.prompt
+    # And nothing but that sentence moved.
+    default, _ = items[task]
+    assert (other.prompt.replace(SQUARE_TAGS.instruction, DEFAULT_TEMPLATE.instruction)
+            == default.prompt)
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))

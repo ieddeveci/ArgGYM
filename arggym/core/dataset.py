@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from arggym.core import registry
-from arggym.core.answers import ScoreResult
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
 from arggym.core.rows import encode_fields
 from arggym.core.rows import score as score_row
 from arggym.core.serialize import THEORY_SCHEMA, ops_to_json
@@ -48,7 +48,8 @@ class TaskDataset:
     """Items of one task at one difficulty, addressed by seed."""
 
     def __init__(self, task: str, level: int, ordering: str, size: int = 100,
-                 seed: int = 0, profile: str = "FULL") -> None:
+                 seed: int = 0, profile: str = "FULL",
+                 template: AnswerTemplate = DEFAULT_TEMPLATE) -> None:
         self.spec = registry.get(task)
         self.task = task
         self.level = level
@@ -56,6 +57,11 @@ class TaskDataset:
         self.size = size
         self.seed = seed
         self.profile = profile
+        # How the question asks for the answer to be delivered. A render-time
+        # choice, not a property of the benchmark, so a harness with another
+        # convention builds a dataset with its own template rather than editing
+        # the question text (`docs/dataset-contract.md` section 1).
+        self.template = template
 
     def __len__(self) -> int:
         return self.size
@@ -68,7 +74,8 @@ class TaskDataset:
         if not 0 <= idx < self.size:
             raise IndexError(idx)
         seed = self.seed + idx
-        item = self.spec.make_item(self.level, seed, self.ordering)
+        item = self.spec.make_item(self.level, seed, self.ordering,
+                                   template=self.template)
         if item is None:
             raise BuildFailed(
                 f"{self.task} L{self.level} {self.ordering} seed {seed} built no item "
@@ -93,6 +100,9 @@ class TaskDataset:
             "level": self.level,
             "ordering": self.ordering,
             "profile": self.profile,
+            # Which fence the question asked for, so a frozen taskset says what
+            # its questions promised instead of leaving it to be inferred.
+            "answer_template": self.template.name,
             "theory_schema": THEORY_SCHEMA,
             # Scoring the engine-checked tasks runs PyArg, so a row is
             # re-scorable against the pinned engine and no other.
@@ -168,14 +178,17 @@ class ConcatDataset:
 
 
 def create(task: str, level: int, ordering: str = "last_link_elitist",
-           size: int = 100, seed: int = 0, profile: str = "FULL") -> TaskDataset:
-    return TaskDataset(task, level, ordering, size=size, seed=seed, profile=profile)
+           size: int = 100, seed: int = 0, profile: str = "FULL",
+           template: AnswerTemplate = DEFAULT_TEMPLATE) -> TaskDataset:
+    return TaskDataset(task, level, ordering, size=size, seed=seed, profile=profile,
+                       template=template)
 
 
-def from_spec(spec: Any, size: Optional[int] = None) -> ConcatDataset:
+def from_spec(spec: Any, size: Optional[int] = None,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> ConcatDataset:
     """Every cell of a taskset spec, in a stable order."""
     n = size if size is not None else spec.seeds.take
     return ConcatDataset([
         TaskDataset(task, level, ordering, size=n, seed=spec.seeds.start,
-                    profile=spec.profile)
+                    profile=spec.profile, template=template)
         for task, level, ordering in spec.cells])

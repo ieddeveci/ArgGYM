@@ -9,10 +9,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import UNSATISFIABLE, Operation
-from arggym.core.answers import ScoreResult, extract_answer
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
 from arggym.core.curriculum import JUNCTION_CAPS, junction_budget
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
-from arggym.core.pairs import collect, pair_f1
+from arggym.core.pairs import LINE_END, LINE_START, collect, pair_f1
+from arggym.core.prompting import answer_format
 
 TASK = "semantics_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -302,7 +303,8 @@ def _negated_premise(it, ridx):
     return ops, out
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK,
+          template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[SemItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
     n_cluster = 2
@@ -472,7 +474,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     lines = [f"{c} under {s}: {gold[(c, s)].lower().replace('_', ' ')}" for c, s in queries]
 
     return SemItem(
-        prompt=_render_prompt(render_ops(base), queries, ordering),
+        prompt=_render_prompt(render_ops(base), queries, ordering, template),
         theory_text=render_ops(base), base_ops=base, queries=queries, gold=gold,
         ordering=ordering, level=level,
         reference="\n".join(lines),
@@ -482,7 +484,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
                   "n_rules": len(rules)})
 
 
-def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: str) -> str:
+def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: str,
+                   template: AnswerTemplate = DEFAULT_TEMPLATE) -> str:
     on = _ordering_phrase(ordering)
     asks = "\n".join(f"   {c} under {s}" for c, s in queries)
     return (f"The following is a defeasible argumentation theory, evaluated with {on}.\n\n"
@@ -493,11 +496,14 @@ def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: st
             + ("Under stable semantics, if the theory has no stable extension, answer "
                "`no stable extension`.\n" if any(s == STABLE for _, s in queries) else "")
             + "\n"
-            "Answer format: one line per query, written as `claim under semantics: status`.")
+            + answer_format("Answer format: one line per query, written as "
+                            "`claim under semantics: status`.", template))
 
 
-_PAIR = re.compile(r"(-?\w+)\s+under\s+([a-z ]+?)\s*[:=]\s*"
-                   r"(justified|overruled|undecided|no stable extension)\b(?!\w)", re.I)
+# One whole line, as the format clause above asks for (`core/pairs.py`).
+_PAIR = re.compile(LINE_START + r"(-?\w+)[ \t]+under[ \t]+([a-z ]+?)[ \t]*[:=][ \t]*"
+                   r"(justified|overruled|undecided|no stable extension)" + LINE_END,
+                   re.I | re.M)
 
 
 def score(answer_text: str, item: SemItem) -> ScoreResult:
@@ -529,9 +535,10 @@ def score(answer_text: str, item: SemItem) -> ScoreResult:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              tries: int = 24) -> Optional[SemItem]:
+              tries: int = 24,
+              template: AnswerTemplate = DEFAULT_TEMPLATE) -> Optional[SemItem]:
     for k in range(tries):
-        it = build(level, seed * 83 + k, ordering)
+        it = build(level, seed * 83 + k, ordering, template)
         if it is not None:
             return it
     return None

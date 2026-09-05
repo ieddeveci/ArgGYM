@@ -1,12 +1,20 @@
 """How an answer arrives, and what comes back when it is scored.
 
-Two things live here because every task needs both and each was previously
-copied per module: the `[answer]` region regex was defined seven times, and the
-shape of a score result was decided independently by each scorer.
+Three things live here because every task needs them and each was previously
+decided per module: how a prompt asks for its answer to be fenced, how that
+fence is read back off a completion, and the shape of a score result.
 
 The rule this module implements is that ArgGYM owns what a legal answer *is* and
-the evaluator owns how it is *delivered* (`docs/dataset-contract.md`). Delimiters
-are delivery, so they are accepted and never required.
+the evaluator owns how it is *delivered* (`docs/dataset-contract.md`). The fence
+is delivery. That is why it is a render-time choice rather than a property of
+the benchmark: `AnswerTemplate` says which delimiters a prompt asks for, the
+default matches reasoning-gym's `<answer>` tags, and a harness with another
+convention re-renders with its own template instead of editing prompt strings.
+
+What the fence is *for* is the other half. Strict parsing means every line
+inside the fence has to be an answer line, so a model that reasons before or
+after its answer is not charged for the reasoning -- the fence is what separates
+the two, and without one the thinking would be read as a malformed answer.
 """
 from __future__ import annotations
 
@@ -14,15 +22,48 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-# Kept for evaluators that still wrap answers the old way, and for scoring
-# generations recorded before the delimiters were dropped from the prompts.
-_TAGGED = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+
+@dataclass(frozen=True)
+class AnswerTemplate:
+    """The delimiters a prompt asks for, and the sentence that asks for them.
+
+    `name` is what a frozen row records, so a taskset says what its questions
+    asked for rather than leaving a reader to infer it from the prompt text.
+    """
+
+    name: str
+    open: str
+    close: str
+
+    @property
+    def instruction(self) -> str:
+        return f"Give your final answer between {self.open} and {self.close}."
+
+    def wrap(self, body: str) -> str:
+        return f"{self.open}\n{body}\n{self.close}"
+
+
+#: The default, matching reasoning-gym: its system prompts ask for
+#: `<answer>answer here</answer>` and `reasoning_gym/utils.py:25` reads the
+#: region back with `<{tag}>\s?(.*?)\s?</{tag}>`.
+XML_TAGS = AnswerTemplate("xml_tags", "<answer>", "</answer>")
+#: The convention ArgGYM asked for before this one. Kept so a harness can
+#: reproduce an older prompt without editing strings.
+SQUARE_TAGS = AnswerTemplate("square_tags", "[answer]", "[/answer]")
+DEFAULT_TEMPLATE = XML_TAGS
+
+_XML = re.compile(r"<answer>\s?(.*?)\s?</answer>", re.S | re.I)
+# Still read, so generations recorded against the older prompts keep scoring.
+_SQUARE = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 
 
 def extract_answer(text: Optional[str]) -> str:
     """The part of a completion that holds the answer.
 
-    A wrapped answer yields its last region; anything else is returned whole.
+    A fenced answer yields its last region, `<answer>` first and `[answer]`
+    after it; an unfenced completion is returned whole. The last case is a
+    fallback for an evaluator that already cut the answer out, not the path the
+    prompts describe.
 
     The last region rather than the first: a reasoning model drafts a candidate
     mid-thought and then revises it, so the first region is the draft. The v1
@@ -31,8 +72,11 @@ def extract_answer(text: Optional[str]) -> str:
     """
     if not text:
         return ""
-    found = _TAGGED.findall(text)
-    return found[-1] if found else text
+    for pattern in (_XML, _SQUARE):
+        found = pattern.findall(text)
+        if found:
+            return found[-1]
+    return text
 
 
 @dataclass(frozen=True)

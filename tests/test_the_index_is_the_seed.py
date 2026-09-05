@@ -6,6 +6,7 @@ order the caller asked in, not on how many items were requested.
 """
 import pytest
 
+from arggym.core.answers import DEFAULT_TEMPLATE, SQUARE_TAGS
 from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
 from arggym.core.spec import SeedPolicy, TasksetSpec
 
@@ -74,6 +75,26 @@ def test_formalization_publishes_no_theory_because_it_has_none():
 def test_perturbation_carries_both_of_its_operation_lists():
     e = create(task="perturbation", level=3, ordering="last_link_elitist", size=1)[0]
     assert e["metadata"]["base_ops"] and e["metadata"]["pert_ops"]
+
+
+def test_a_row_records_the_template_its_question_was_rendered_with():
+    """A frozen taskset says what its questions asked for, rather than leaving a
+    reader to infer the convention from the prompt text."""
+    e = create(**CHEAP, size=1)[0]
+    assert e["metadata"]["answer_template"] == DEFAULT_TEMPLATE.name == "xml_tags"
+    assert DEFAULT_TEMPLATE.instruction in e["question"]
+
+
+def test_the_template_is_a_render_time_argument():
+    """Everything but the delivery sentence is the same question."""
+    default = create(**CHEAP, size=1)[0]
+    other = create(**CHEAP, size=1, template=SQUARE_TAGS)[0]
+    assert other["metadata"]["answer_template"] == "square_tags"
+    assert other["question"].replace(SQUARE_TAGS.instruction,
+                                     DEFAULT_TEMPLATE.instruction) == default["question"]
+    # The item is the same item: only the question was re-rendered.
+    assert other["reference_answer"] == default["reference_answer"]
+    assert other["metadata"]["gold"] == default["metadata"]["gold"]
 
 
 def test_source_dataset_is_the_registry_key_so_a_composite_can_dispatch():
