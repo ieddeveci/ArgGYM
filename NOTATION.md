@@ -118,33 +118,36 @@ definition.
 
 ## 6. Answer formats
 
-Every answer goes between `[answer]` and `[/answer]`. Whitespace, blank lines, bullets and numbering
-are ignored; content is what is parsed.
+The shapes below are what an answer says. Where it goes is the evaluator's choice, not the
+benchmark's: ArgGYM renders a submission convention into each question and records which one it
+used, and the default follows reasoning-gym's `<answer>` and `</answer>`. An evaluator using
+structured output or a tool call can replace it. Whitespace, blank lines, bullets and numbering are
+ignored; content is what is parsed.
 
 **Status queries** -- one line per claim.
 ```
-[answer]
+<answer>
 ab1: justified
 cd2: undecided
-[/answer]
+</answer>
 ```
 
 **Semantics queries** -- one line per claim-and-semantics pair.
 ```
-[answer]
+<answer>
 ab1 under grounded: undecided
 ab1 under sceptical preferred: justified
-[/answer]
+</answer>
 ```
 
 **Directive answers** (attack, defence, counter-argument, preference construction) -- one directive per
 line, in the DSL of section 1.
 ```
-[answer]
+<answer>
 [premise: -ab1]
 [prefer_premise: -ab1 > ab1]
 [defeasible z1: cd2 => -r4]
-[/answer]
+</answer>
 ```
 
 Constraints on directive answers:
@@ -159,11 +162,11 @@ premise to claim.
 
 **Diagnosis answers** (defeat diagnosis) -- a status line, then one line per failure point.
 ```
-[answer]
+<answer>
 status: overruled
 defeated_at: <target>; defeater: <defeater>; kind: undermine|undercut|rebut
 defeated_at: <target>; defeater: <defeater>; kind: undercut; survives_because: <rule>
-[/answer]
+</answer>
 ```
 `defeated_at` is the CLAIM attacked for undermine and rebut, and the RULE switched off for undercut.
 `survives_because` names the rule that attacks that defeater and is itself defeated.

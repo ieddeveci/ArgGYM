@@ -136,7 +136,6 @@ def spec_for(level: int, ordering: str = LAST_LINK, variant: int = 0) -> ItemSpe
     td_min = 2
     td_max = d_max if L < 5 else max(2, d_max - 2)
     noise = 0 if L < 6 else min(1 + (L - 6) // 4, 3)
-    noise * 3
 
     return ItemSpec(
         level=L, ordering=ordering, mode=mode,

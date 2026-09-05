@@ -40,8 +40,12 @@ def _asked(row: Dict[str, Any]) -> List[str]:
     if m:  # semantics_query: "<claim> under <semantics>"
         return [line.strip() for line in m.group(1).splitlines() if line.strip()]
     # perturbation asks which claims changed, and does not list them. The
-    # uninformed answer is every literal the theory mentions.
+    # uninformed answer names every literal the theory mentions -- which is
+    # premises and axioms *and* rule consequents, since a rule's conclusion is
+    # a claim that can change status. Reading only the premises understates
+    # this floor.
     lits = re.findall(r"\[(?:premise|axiom):\s*(-?\w+)\]", q)
+    lits += re.findall(r"(?:=>|->)\s*(-?\w+)\]", q)
     return sorted(set(lits))
 
 
@@ -80,12 +84,13 @@ def floor_for(rows: Sequence[Dict[str, Any]]) -> Tuple[float, str, Dict[str, flo
     for name, make in STRATEGIES.items():
         total = 0.0
         for row in rows:
-            try:
-                total += score(make(row), row).score
-            except Exception:
-                # A strategy that cannot even be scored contributes nothing,
-                # which is the honest reading of "this answer is worthless".
-                pass
+            # Deliberately not guarded. A row this build cannot score -- a
+            # different engine, a missing field, an unknown schema -- must stop
+            # the measurement, not contribute a zero. Swallowing those made
+            # every task report a floor of 0.000 and exit successfully, which
+            # reads exactly like a task where guessing does not pay: the
+            # failure this module exists to prevent.
+            total += score(make(row), row).score
         means[name] = round(total / len(rows), 4) if rows else 0.0
     best = max(means, key=lambda k: means[k])
     return means[best], best, means

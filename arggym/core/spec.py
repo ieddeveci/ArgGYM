@@ -157,10 +157,17 @@ def check_versions(spec: TasksetSpec) -> None:
         except PackageNotFoundError:  # pragma: no cover - depends on the install
             return None
 
+    from arggym.core.freeze import PROMPT_VERSION, SCORING_VERSION
+
+    # Every constraint the spec can express is checked. Accepting a field and
+    # ignoring it is worse than not offering it: a spec pinning prompt_version
+    # would read as reproducible while guaranteeing nothing.
     for got, want, what in (
         (arggym.__version__, spec.arggym, "arggym"),
         (_installed("python-argumentation"), spec.pyarg, "python-argumentation"),
         (THEORY_SCHEMA, spec.theory_schema, "theory_schema"),
+        (PROMPT_VERSION, spec.prompt_version, "prompt_version"),
+        (SCORING_VERSION, spec.scoring_version, "scoring_version"),
     ):
         if want is not None and got is not None and str(got) != str(want):
             raise SystemExit(

@@ -92,9 +92,9 @@ and what a high score does *not* license.
 ```
 pip install arggym                # the library: generate, render, parse, score
 pip install "arggym[inspector]"   # + the browser inspector
-pip install "arggym[evals]"       # + the reference evaluator
 ```
 
+`examples/evaluate.py` needs nothing beyond the library: it is standard library only.
 A bare install pulls no web framework. From a checkout, `uv sync` then `uv run pytest`; `make` lists
 the shortcuts.
 

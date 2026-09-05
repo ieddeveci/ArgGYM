@@ -55,6 +55,17 @@ class TaskDataset:
         self.ordering = ordering
         self.size = size
         self.seed = seed
+        # Refused rather than recorded-and-ignored. Two tasks take no profile at
+        # all and only status_query mixes it into its seed, so a non-FULL
+        # dataset would report coordinates that do not name its items. The
+        # freeze path is guarded by TasksetSpec; create() is public, so it needs
+        # its own guard. See docs/dataset-contract.md section 7.
+        if profile != "FULL":
+            raise ValueError(
+                f"profile {profile!r} is not buildable yet: counter_argument and "
+                f"semantics_query take no profile, and only status_query mixes it "
+                f"into its seed, so (level, ordering, seed) would not name the "
+                f"item. Track this on #51.")
         self.profile = profile
 
     def __len__(self) -> int:
@@ -68,6 +79,10 @@ class TaskDataset:
         if not 0 <= idx < self.size:
             raise IndexError(idx)
         seed = self.seed + idx
+        # Not passed through: counter_argument and semantics_query take no
+        # profile at all. The constructor refuses anything but FULL, which is
+        # every generator's own default, so the recorded value is what built
+        # the item rather than what the caller hoped for.
         item = self.spec.make_item(self.level, seed, self.ordering)
         if item is None:
             raise BuildFailed(

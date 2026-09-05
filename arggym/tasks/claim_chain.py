@@ -120,7 +120,6 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL") -> Optional[CCItem]:
-    random.Random(stable_seed(seed, level, ordering, "cc"))
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
     tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)

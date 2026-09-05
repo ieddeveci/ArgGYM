@@ -162,7 +162,6 @@ def build_defence(n_attackers: int, ordering: str, names: Iterable[str],
 
 def defence_moves(item: DefenceItem) -> List[Tuple[str, int, List[Operation]]]:
     out: List[Tuple[str, int, List[Operation]]] = []
-    item.attackers[0].root if item.attackers else None
     base_root = None
     for o in item.ops:
         if o.kind == "premise":

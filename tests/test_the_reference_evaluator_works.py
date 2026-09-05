@@ -97,3 +97,36 @@ def test_the_example_is_syntactically_a_script():
                        capture_output=True, text=True)
     assert r.returncode == 0
     assert "--base-url" in r.stdout
+
+
+def test_one_unscorable_row_does_not_cost_the_whole_run(taskset, monkeypatch):
+    # Every completion has already been paid for by the time scoring runs, so
+    # losing them all to an unopened output file is the expensive failure.
+    def stub(base_url, model, key, question, max_tokens, timeout):
+        return {"text": "<answer>\nnonsense\n</answer>", "finish_reason": "stop"}
+
+    def boom(text, row):
+        raise RuntimeError("this row was built against another engine")
+
+    monkeypatch.setattr(evaluate, "complete", stub)
+    monkeypatch.setattr(evaluate.arggym, "score_row", boom)
+    out = taskset.parent / "unscorable.jsonl"
+    monkeypatch.setattr(sys, "argv",
+                        ["evaluate.py", str(taskset), "--model", "stub", "--out", str(out)])
+    assert evaluate.main() == 0
+    scored = [json.loads(x) for x in open(out)]
+    assert len(scored) == 4
+    assert all("unscorable row" in s["error"] for s in scored)
+    assert all(s["completion"] for s in scored), "the completions must be kept"
+
+
+def test_a_malformed_api_response_is_an_error_not_a_crash(monkeypatch):
+    class _Resp:
+        def read(self): return b'{"not_choices": []}'
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(evaluate.json, "load", lambda r: {"not_choices": []})
+    monkeypatch.setattr(evaluate.urllib.request, "urlopen", lambda *a, **k: _Resp())
+    got = evaluate.complete("http://x/v1", "m", "k", "q", 10, 1)
+    assert "malformed response" in got["error"]

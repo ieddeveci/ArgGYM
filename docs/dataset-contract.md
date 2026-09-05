@@ -29,10 +29,27 @@ wrong thing.
 | An answer using more than twice the minimum scores zero | the subject: economy is a measured capability | keep |
 | Preference is a preorder, so declaring both directions settles nothing | the subject (Modgil & Prakken) | keep |
 | Grounded semantics, four strength orderings | the subject | keep, and do not make them swappable |
-| The answer sits between `[answer]` and `[/answer]` | our implementation | **remove** |
+| The answer goes somewhere the evaluator can find it | the subject, weakly: a scorer must know where the answer ends | **state it, do not fix it** |
+| That somewhere is specifically `[answer]` and `[/answer]` | our implementation | **remove** |
 | The answer is DSL *text* | our implementation | **remove** |
 
-The last two are why this document exists.
+The third row is the one this document exists for, and the second row is where
+the distinction is easy to get wrong.
+
+**A submission convention belongs in the prompt. Which convention it is does not
+belong to the dataset.** Those are different claims, and collapsing them breaks
+things in both directions. Drop the convention entirely and a model that thinks
+out loud has nowhere to put its answer, so the scorer reads its reasoning as a
+malformed answer. Fix the convention in the dataset and an evaluator using
+structured output, a tool call or constrained decoding cannot submit without
+imitating us.
+
+So the renderer takes the convention as a parameter and states it in the
+question, and the row records which one it used. The default follows
+reasoning-gym, whose `SYSTEM_PROMPTS` and `extract_answer` both use
+`<answer>` and `</answer>` (`reasoning_gym/utils.py:8,25`), because an adopter
+who already runs that library should not have to learn a second convention for
+no reason.
 
 ### What we refuse to generalize
 
@@ -160,13 +177,17 @@ rendered into the question.
 
 ## 4. Answers are values; text is one serialization
 
+**Not built. This section is the design #10 asks for, and what exists today is
+the half of it that the transport work needed.** What ships is one shared
+`extract_answer` and one `ScoreResult`; the value seam below is still open.
+
 ```python
 parse(text, item) -> Value          # text -> the answer, no scoring
 score_value(value, item) -> ScoreResult
 score(text, item)  = score_value(parse(text, item), item)
 ```
 
-The scorer already works this way and hides it. For the seven operation-list
+The scorer already works this way internally and hides it. For the seven operation-list
 tasks it converts DSL text into `Operation`s and grades the resulting engine
 state; the text is thrown away. Requiring text is therefore us making a user
 imitate our serialization, and the cost is measured (#10): across the pilot
@@ -194,9 +215,10 @@ available to every parser costs nothing and avoids a special case.
 
 ### One parser, not seven
 
-The `[answer]` region regex is defined seven times, identically, in
-`core/scoring.py` and six task modules. The DSL rule regex is defined twice,
-in `core/scoring.py:19` and `tasks/formalization.py:383`.
+The answer-region regex used to be defined seven times, identically, in
+`core/scoring.py` and six task modules; it is now one function in
+`core/answers.py`. The DSL rule regex is still defined twice, in
+`core/scoring.py:19` and `tasks/formalization.py:383`.
 
 Until #81 those two disagreed: one made the rule name optional and invented one,
 the other required it, so the same answer text scored differently depending on
@@ -414,20 +436,31 @@ part of the id.
 ## 9. Where the harness sits
 
 ```
-arggym/            the package: generate, render, parse, score
-evals/             the reference evaluator: Hydra configs, a client, a report
+arggym/            the package: generate, render, score
+examples/          a reference evaluator, standard library only
 ```
 
-`evals/` never reaches into a private name, and a test enforces it. Dependencies
-follow uv's split: anything an adopter installs is an extra, anything local-only
-is a PEP 735 dependency group.
+`examples/evaluate.py` reads a frozen taskset, calls any OpenAI-compatible
+endpoint, and hands the answer body to `arggym.score_row`. It reaches into no
+private name, which is the demonstration: if the public surface were not enough,
+this file could not exist.
+
+The Hydra harness on the `baris-benchmark` branch is the other half of this and
+has not moved yet. It was written against v1 and is stale in places, so what
+comes across is a set of decisions rather than the code: that a taskset carries
+WHAT to answer and the evaluator chooses HOW; that the reasoning method is a
+run-time choice; that a chain-of-thought draft must never be the text that gets
+scored; and that an API error, a truncation and a wrong answer are three events,
+not one.
+
+Dependencies follow uv's split: anything an adopter installs is an extra,
+anything local-only is a PEP 735 dependency group.
 
 ```toml
 dependencies = ["python-argumentation==2.0.2", "typer>=0.12"]
 
 [project.optional-dependencies]
 inspector = ["flask>=3.0"]
-evals     = ["hydra-core>=1.3", "omegaconf>=2.3"]
 report    = ["matplotlib>=3.8"]
 
 [dependency-groups]

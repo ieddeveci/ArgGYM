@@ -5,7 +5,7 @@
 # was identified by "whatever the defaults were at that commit". Cite this file
 # and its taskset_hash instead.
 #
-#   uv run arggym export --config tasksets/standard.yaml -o data/
+#   uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
 
 # Checked before anything is generated, so a mismatch costs seconds rather than
 # a full export. Leave a field out and the export records what it used instead.

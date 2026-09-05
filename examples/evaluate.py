@@ -65,7 +65,12 @@ def complete(base_url: str, model: str, key: str, question: str,
         # score 0 here would report infrastructure trouble as a reasoning
         # result, which is the mistake this field makes routinely.
         return {"error": f"{type(e).__name__}: {e}"}
-    choice = payload["choices"][0]
+    try:
+        choice = payload["choices"][0]
+    except (KeyError, IndexError) as e:
+        # A 200 whose body is not the shape we expect is still infrastructure,
+        # not reasoning.
+        return {"error": f"malformed response: {type(e).__name__}: {e}"}
     return {"text": choice["message"].get("content") or "",
             "finish_reason": choice.get("finish_reason")}
 
@@ -108,7 +113,15 @@ def main() -> int:
                "completion": gen.get("text", "")}
         if gen.get("error"):
             return out
-        result = arggym.score_row(extract(gen["text"]), row)
+        try:
+            result = arggym.score_row(extract(gen["text"]), row)
+        except Exception as e:
+            # score_row refuses a row it cannot score -- a different engine, a
+            # missing field. One such row must not cost the whole run: every
+            # completion above has already been paid for, and losing them all
+            # to an unopened output file is the expensive failure here.
+            out["error"] = f"unscorable row: {type(e).__name__}: {e}"
+            return out
         out.update(score=result.score, success=result.success, reason=result.reason,
                    diagnostics=result.diagnostics)
         return out

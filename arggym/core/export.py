@@ -1,3 +1,13 @@
+"""The pre-contract export, kept only for the tests that still read it.
+
+Superseded by `core/freeze.py`, which builds from a spec, records what it
+skipped, and puts everything answer-bearing under `metadata.gold`. The rows this
+writes do not: `goals`, `min_directives` and the raw statistics blob sit at the
+top level, so a taskset written by this path leaks the answer size. That is why
+its two CLI commands are gone -- `arggym freeze` is the only way to write a
+taskset now -- and why the rest of this module should follow once the nineteen
+files that import its constants have moved to `core/spec.py`.
+"""
 from __future__ import annotations
 
 import hashlib

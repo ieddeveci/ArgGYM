@@ -17,12 +17,6 @@ wheels = [
 ]
 
 [[package]]
-name = "antlr4-python3-runtime"
-version = "4.9.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3e/38/7859ff46355f76f8d19459005ca000b6e7012f2f1ca597746cbcd1fbfe5e/antlr4-python3-runtime-4.9.3.tar.gz", hash = "sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b", size = 117034, upload-time = "2021-11-06T17:52:23.524Z" }
-
-[[package]]
 name = "arggym"
 version = "2.0.0"
 source = { editable = "." }
@@ -33,10 +27,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-evals = [
-    { name = "hydra-core" },
-    { name = "omegaconf" },
-]
 inspector = [
     { name = "flask" },
 ]
@@ -56,14 +46,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "flask", marker = "extra == 'inspector'", specifier = ">=3.0" },
-    { name = "hydra-core", marker = "extra == 'evals'", specifier = ">=1.3" },
     { name = "matplotlib", marker = "extra == 'report'", specifier = ">=3.8" },
-    { name = "omegaconf", marker = "extra == 'evals'", specifier = ">=2.3" },
     { name = "python-argumentation", specifier = "==2.0.2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["inspector", "evals", "report"]
+provides-extras = ["inspector", "report"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -375,20 +363,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/21/ff/2eab37d43f2e2ccc0993959d8f2605d9a68470082c592684ac98611ee70a/fonttools-4.64.0-cp315-cp315t-win32.whl", hash = "sha256:f8669ce37851b597d3435b91fefa51139e58d506ca449ca0e5bb68c63b8b6d2b", size = 2463614, upload-time = "2026-08-31T15:44:27.198Z" },
     { url = "https://files.pythonhosted.org/packages/dc/8d/8bdff3ea656592197c8ef5062774221885468ffa01d8b0dc782dae23a83a/fonttools-4.64.0-cp315-cp315t-win_amd64.whl", hash = "sha256:89356c0793b474af7e49ec90d39fb2363e2341516a90460e38231df5ebe8acd5", size = 2512422, upload-time = "2026-08-31T15:44:29.478Z" },
     { url = "https://files.pythonhosted.org/packages/82/f8/7188153c4b265c899cd035de6a062677d51f67118a4ba640902bd9683e90/fonttools-4.64.0-py3-none-any.whl", hash = "sha256:4a05783ff54ce4c7a28f18e5772efdf63c219374bd9ffc55452182e1cef8be60", size = 1195327, upload-time = "2026-08-31T15:44:31.741Z" },
-]
-
-[[package]]
-name = "hydra-core"
-version = "1.3.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "antlr4-python3-runtime" },
-    { name = "omegaconf" },
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/78/03/adfa2bf3a9eef568a85f2e7cf18ce1938e7aa0b5257c432e5eb48f89960a/hydra_core-1.3.6.tar.gz", hash = "sha256:8c4c215b6cfba68e9a4e76f565bd7399fc2a86b93cfe8cb7328b046834dfbee5", size = 3272413, upload-time = "2026-08-29T14:36:08.092Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/fd/612cc7905787100dc9225ae6ad71b42b60cbc23cd56ca55afcdd1e000f81/hydra_core-1.3.6-py3-none-any.whl", hash = "sha256:55951f49c7e19c29f4281cce2eeaa6e73ef6c5620093a4efb402a7e4b839fc38", size = 163055, upload-time = "2026-08-29T14:36:06.385Z" },
 ]
 
 [[package]]
@@ -1041,19 +1015,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/42/06/6e11443f7b64ee376c860506091103bf68f92d2cab9e8d96d4501babf07c/numpy-2.5.2-cp315-cp315t-win32.whl", hash = "sha256:7354826bc6f8f69402e9b7fe28d15fcd34feebd74f856f111585c5b0c9fb0251", size = 6269775, upload-time = "2026-08-09T13:48:17.543Z" },
     { url = "https://files.pythonhosted.org/packages/f1/18/195d6b86cd72dbbc501edfa778005fa6b87afd34c153e46028cd3a0938f4/numpy-2.5.2-cp315-cp315t-win_amd64.whl", hash = "sha256:e5651f3f87add730ee6608d915009e19c911fba0cb000c7e3ea994b7d768eb12", size = 12782559, upload-time = "2026-08-09T13:48:21.023Z" },
     { url = "https://files.pythonhosted.org/packages/b4/07/458c344f0f0c178f4481dad5cca790626ffe4c34eabf9467069d06ee4999/numpy-2.5.2-cp315-cp315t-win_arm64.whl", hash = "sha256:5f8e00be2ec6f45f4e8a41a527f68d44a7d96fee92a650e4d8b1326f77f61e6e", size = 10748103, upload-time = "2026-08-09T13:48:24.21Z" },
-]
-
-[[package]]
-name = "omegaconf"
-version = "2.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "antlr4-python3-runtime" },
-    { name = "pyyaml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ce/3d/e4b57b8d9008c6ebe0d5eff901f91d5700cf7bdb8c8863df817463a7fd5e/omegaconf-2.3.1.tar.gz", hash = "sha256:e5e7de64aeebeddaf8e6d3f7a783b32ac2a01c0fbd9c878012caecb891a1f42a", size = 3298472, upload-time = "2026-06-11T05:05:12.885Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a4/0e/152509871bf30df6fc38569f52a2db9b55dd41aae957adae50a053ac7778/omegaconf-2.3.1-py3-none-any.whl", hash = "sha256:3d701d14e9a8828f1edd28bb70b725908b34277cdd72cf7d6a83f94dadc6b6a0", size = 79502, upload-time = "2026-06-11T05:05:09.954Z" },
 ]
 
 [[package]]
