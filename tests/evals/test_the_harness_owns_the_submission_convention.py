@@ -72,3 +72,41 @@ def test_elicitation_wraps_without_touching_the_question(rows):
     assert user.endswith("After:")
     assert rows[0]["question"] in user
     assert "prefix" in e.summary() and "system" in e.summary()
+
+
+def test_an_answer_only_in_the_reasoning_is_found_and_labelled(rows):
+    """A model that reached an answer but never submitted it did something else.
+
+    Crediting it is a scoring-policy choice, so it has to be visible: the score
+    counts, and `answer_in_cot` says the answer came out of the thinking rather
+    than out of a submission. Deleting this branch left the whole suite green
+    before, which meant the policy could change by accident.
+    """
+    from evals.score import answer_of
+
+    row = rows[0]
+    ref = row["reference_answer"]
+    found = answer_of({"completion": "I could not decide.",
+                       "reasoning": f"maybe <answer>{ref}</answer>"}, "xml_tags")
+    assert found["answer"] == ref
+    assert found["answer_in_cot"] is True
+    assert found["no_answer_region"] is False
+
+
+def test_a_submitted_answer_is_preferred_over_one_in_the_reasoning(rows):
+    """The fallback rescues an unsubmitted answer; it never overrides a submitted one."""
+    from evals.score import answer_of
+
+    found = answer_of({"completion": "<answer>submitted</answer>",
+                       "reasoning": "<answer>draft</answer>"}, "xml_tags")
+    assert found["answer"] == "submitted"
+    assert found["answer_in_cot"] is False
+
+
+def test_nothing_anywhere_is_reported_as_no_region(rows):
+    from evals.score import answer_of
+
+    found = answer_of({"completion": "no idea", "reasoning": "still no idea"},
+                      "xml_tags")
+    assert found["no_answer_region"] is True
+    assert found["answer_in_cot"] is False

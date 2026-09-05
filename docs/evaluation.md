@@ -52,7 +52,8 @@ OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 `thinking_config`. It is passed through untouched, because validating it would
 mean this harness knowing every provider, which is the thing we are avoiding.
 
-Five configs ship as examples, one per provider. Adding a sixth is copying one.
+Configs ship for OpenRouter, OpenAI, Gemini, a local vLLM and Qwen3.8 on vLLM.
+Adding another is copying one.
 
 ### What the compatibility layers cost
 
@@ -123,14 +124,16 @@ anywhere on disk. Nothing here can prevent that; only moving the directory can.
 ### The three outcomes
 
 An API error, a truncated generation and a wrong answer are different events,
-and the scored record keeps them apart.
+and the scored record keeps them apart. Every field below is present on every
+record, whatever happened, so a reader never has to guess whether a missing key
+means `false` or means "not applicable".
 
 | field | means |
 |---|---|
 | `api_error` | the request did not succeed. `score` is `null`, never `0.0`. |
 | `truncated` | the generation hit its token cap. |
-| `no_answer_region` | nothing in the completion was inside the fence. |
-| `answer_in_cot` | the answer was only in the reasoning trace, never submitted. |
+| `no_answer_region` | no fenced answer was found anywhere, completion or reasoning. |
+| `answer_in_cot` | a fenced answer was found only in the reasoning, never submitted. |
 | `zero_with_region` | a well-formed answer that scored zero. |
 | `scorer_refused` | the scorer would not grade the row at all. |
 
@@ -153,18 +156,45 @@ four different kinds, with chance floors spanning half the range, do not add up
 to a quantity: the number that comes out moves mostly with which tasks are in
 the basket.
 
-Floors are printed beside every score for the same reason. At level 3
+Floors are printed beside every mean for the same reason. At level 3
 `semantics_query` sits at 0.490 and `status_query` at 0.375, so a model scoring
 0.45 on the first is doing worse than answering the same thing every time. Where
 one figure per task is wanted, the chance-corrected column is
 `(score - floor) / (1 - floor)`, which is at least the same quantity across
 tasks.
 
+Two things follow from a floor being *measured* rather than given. Each
+breakdown measures its own — a level-15 group is corrected by a level-15 floor,
+not by one averaged over the grid. And a floor is measured over the rows a run
+actually scored, so a filtered run's floors are estimates from that filter; when
+two runs disagree about a task's floor the report marks it, because
+`(score - floor) / (1 - floor)` then cannot be reproduced from the single number
+in the column.
+
+There is no floor column beside the success-rate table. A floor is the mean
+*score* of the best constant answer, not its success rate, and printing it there
+would invite exactly the comparison it exists to prevent.
+
 ## Resuming, filtering, and what is refused
 
-A rerun into the same directory skips ids already generated without an error, so
-an interruption costs the item in flight. Errored items are retried and the
-retry supersedes the failure; both lines stay on disk.
+**A run directory is named by what identifies the run**, not by the clock:
+
+```yaml
+run_id: ${model.name}__${template.name}__${elicitation.name}
+hydra.run.dir: outputs/runs/${run_id}
+```
+
+So running the same command twice resumes rather than starting a second copy,
+and two configurations cannot land in one directory. That is the whole
+mechanism; there is nothing to pass. Give `run_id=` a value of your own for a
+deliberate second run of one configuration.
+
+A rerun skips ids that already have a good generation, so an interruption costs
+the item in flight. A failure and its retry both stay on disk and the good one
+is the one that counts, in either order — so a transient failure after a
+success never discards work already paid for. `resume=false` deletes the
+directory's generations and starts over, because the writer appends and leaving
+them would be resuming under a flag that says otherwise.
 
 Slice a frozen taskset by coordinate rather than freezing a second one:
 
@@ -179,8 +209,21 @@ missing sweep as a clean run of zero items.
 Two more refusals, both for the same reason -- a wrong number that looks right is
 worse than an error:
 
+- **A taskset whose contents do not match its own manifest is refused on load.**
+  The hash is recomputed from the rows, not read out of the manifest and
+  compared against a copy of itself: a file truncated to eight lines loads seven
+  rows and would otherwise pass, then get the full grid's hash printed beside
+  seven items' numbers.
 - **`score.py` refuses a taskset whose hash is not the one the run recorded.**
   Scoring answers against questions they were not asked is silent.
+- **A directory will not take a second configuration.** Resume keys on the row
+  id, so reusing one with a different model or template would mix two models'
+  completions under one manifest, all extracted with whichever template was
+  named last — and every other guard would pass.
+- **A provider that did not answer is an error, not a zero.** A
+  `finish_reason` of `content_filter`, or a refusal beside a null content,
+  leaves an empty completion that would otherwise score zero on every task,
+  publishing the provider's policy as the model's reasoning.
 - **A run whose API error rate passes `max_error_rate` is marked `failed`, not
   `completed`,** and exits non-zero. A dead endpoint and a model that answers
   badly produce the same low score, and only one of them is a finding.

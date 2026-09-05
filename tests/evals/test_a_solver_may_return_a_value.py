@@ -17,16 +17,32 @@ from evals.score import score_one, score_run
 from evals.types import Attempt
 
 
+def parsed_value(row):
+    """The reference answer as the live value its scorer expects.
+
+    This reaches into the package on purpose. The four answer shapes include two
+    a harness cannot construct from the public API alone -- `semantics_query`
+    keys its map by a tuple, and an operation list is a list of `Operation`
+    objects -- and the encoding in `evals/values.py` exists precisely for them.
+    Testing it on anything less than all twelve tasks would leave the shapes it
+    was written for uncovered.
+    """
+    from importlib import import_module
+
+    from arggym.core import registry
+    from arggym.core.rows import score_input
+
+    spec, payload = score_input(row)
+    if spec.scorer == registry.ENGINE:
+        from arggym.core.scoring import parse
+        return parse(row["reference_answer"], payload)
+    return import_module(f"arggym.tasks.{spec.module}").parse(
+        row["reference_answer"], payload)
+
+
 def value_for(row):
     """The row's own reference answer, as a JSON-carried value of its shape."""
-    from arggym.core.scoring import parse
-
-    ref = row["reference_answer"]
-    if row["metadata"]["answer_shape"] == "operation_list":
-        return values.encode(parse(ref, {}), row)
-    return values.encode({k.strip(): v.strip() for k, _, v in
-                          (line.partition(":") for line in ref.splitlines() if line)},
-                         row)
+    return values.encode(parsed_value(row), row)
 
 
 def test_a_value_answer_scores_the_same_as_its_text(rows):
@@ -61,29 +77,6 @@ def test_a_value_solver_needs_no_endpoint(tmp_path, rows, taskset_file):
         assert v["mean"] == 1.0, task
 
 
-def parsed_value(row):
-    """The reference answer as the live value its scorer expects.
-
-    This reaches into the package on purpose. The four answer shapes include two
-    a harness cannot construct from the public API alone -- `semantics_query`
-    keys its map by a tuple, and an operation list is a list of `Operation`
-    objects -- and the encoding in `evals/values.py` exists precisely for them.
-    Testing it on anything less than all twelve tasks would leave the shapes it
-    was written for uncovered.
-    """
-    from importlib import import_module
-
-    from arggym.core import registry
-    from arggym.core.rows import score_input
-
-    spec, payload = score_input(row)
-    if spec.scorer == registry.ENGINE:
-        from arggym.core.scoring import parse
-        return parse(row["reference_answer"], payload)
-    return import_module(f"arggym.tasks.{spec.module}").parse(
-        row["reference_answer"], payload)
-
-
 def test_every_answer_shape_survives_the_trip_through_json():
     """Generating and scoring are separate programs, so a value is JSON in between."""
     import json
@@ -95,3 +88,21 @@ def test_every_answer_shape_survives_the_trip_through_json():
         carried = json.loads(json.dumps(values.encode(value, row), default=str))
         result = arggym.score_row_value(values.decode(carried, row), row)
         assert result.score == 1.0, (task, row["metadata"]["answer_shape"], result)
+
+
+def test_a_value_that_is_not_json_is_refused_at_the_first_row(tmp_path, rows):
+    """`default=str` would stringify it, and the loss shows up only at scoring."""
+    import os
+
+    import pytest
+
+    from evals.run import generate
+
+    def unserialisable(row):
+        return Attempt(value=parsed_value(row))  # live objects, never encoded
+
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    with pytest.raises(TypeError) as e:
+        generate(rows[:1], unserialisable, run_dir, concurrency=1, progress=False)
+    assert "values.encode" in str(e.value)

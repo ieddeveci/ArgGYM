@@ -42,7 +42,7 @@ def test_an_errored_row_is_not_treated_as_finished(tmp_path, rows, provider):
 
 
 def test_a_retry_supersedes_the_failure_it_replaces(tmp_path, rows):
-    """Both lines stay on disk; the last one is the one that counts."""
+    """Both lines stay on disk; the good one is the one that counts."""
     run_dir = os.fspath(tmp_path / "run")
     os.makedirs(run_dir)
     path = os.path.join(run_dir, artifacts.GENERATIONS)
@@ -50,8 +50,34 @@ def test_a_retry_supersedes_the_failure_it_replaces(tmp_path, rows):
         a.write({"id": "x", "error": "down", "completion": ""})
         a.write({"id": "x", "error": None, "completion": "<answer>ok</answer>"})
     assert len(list(artifacts.read_jsonl(path))) == 2
-    assert artifacts.last_per_id(run_dir)["x"]["completion"] == "<answer>ok</answer>"
+    assert artifacts.best_per_id(run_dir)["x"]["completion"] == "<answer>ok</answer>"
     assert artifacts.completed_ids(run_dir) == {"x"}
+
+
+def test_a_later_failure_does_not_discard_a_generation_already_paid_for(tmp_path):
+    """The two readers must agree, or an item is lost while looking complete.
+
+    Reading simply the last record made `completed_ids` say "done" -- so resume
+    skipped the id forever -- while scoring took the trailing error and recorded
+    `score: None`. The good generation sat one line up and was never scored.
+    """
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    with artifacts.Appender(os.path.join(run_dir, artifacts.GENERATIONS)) as a:
+        a.write({"id": "x", "error": None, "completion": "<answer>ok</answer>"})
+        a.write({"id": "x", "error": "503 later", "completion": ""})
+    assert artifacts.completed_ids(run_dir) == {"x"}
+    assert artifacts.best_per_id(run_dir)["x"]["error"] is None
+
+
+def test_not_resuming_starts_the_directory_over(tmp_path):
+    """`Appender` appends, so leaving the old file would be resume by accident."""
+    run_dir = os.fspath(tmp_path / "run")
+    os.makedirs(run_dir)
+    with artifacts.Appender(os.path.join(run_dir, artifacts.GENERATIONS)) as a:
+        a.write({"id": "x", "error": None, "completion": "old"})
+    artifacts.restart(run_dir)
+    assert artifacts.completed_ids(run_dir) == set()
 
 
 def test_each_result_is_on_disk_before_the_next_call_returns(tmp_path, rows, provider):

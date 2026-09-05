@@ -24,22 +24,55 @@ import os
 from typing import Any, Dict, List, Optional, Sequence
 
 
+class NotScored(SystemExit):
+    """A run directory was named that has no metrics."""
+
+
 def load_metrics(paths: Sequence[str]) -> List[Dict[str, Any]]:
-    out = []
+    """Every named run's metrics, or a refusal naming the ones without any.
+
+    Skipping an unscored run quietly turns "we never scored this model" into a
+    table that simply lacks its column, and a reader cannot tell that from a
+    model that was never run. `make eval` makes this easy to hit: two parallel
+    invocations can both score whichever directory was written to last.
+    """
+    out, missing = [], []
     for p in paths:
         f = p if p.endswith(".json") else os.path.join(p, "metrics.json")
         if not os.path.exists(f):
+            missing.append(p)
             continue
         with open(f) as fh:
             m = json.load(fh)
         m["_label"] = label(m)
         out.append(m)
+    if missing:
+        raise NotScored(
+            f"{len(missing)} of {len(paths)} run directories have no "
+            f"metrics.json: {', '.join(missing[:4])}"
+            + (" ..." if len(missing) > 4 else "")
+            + ". Score them first, or leave them out deliberately -- a report "
+              "that drops them silently shows 'not scored' as 'not run'.")
     return sorted(out, key=lambda m: m["_label"])
 
 
 def label(m: Dict[str, Any]) -> str:
-    e = m["_meta"].get("endpoint") or {}
-    return str(e.get("model") or os.path.basename(m["_meta"].get("run_dir", "run")))
+    """What names a column, and it is not the model alone.
+
+    Two runs of one model under different elicitations are a comparison; giving
+    them the same column header makes them a collision. `evals/prompt.py` states
+    the intent: two runs differing only in elicitation are "comparable as an
+    experiment rather than confusable as a result".
+    """
+    meta = m["_meta"]
+    e = meta.get("endpoint") or {}
+    base = str(e.get("model") or os.path.basename(meta.get("run_dir", "run")))
+    parts = [base]
+    if meta.get("elicitation") and meta["elicitation"] != "none":
+        parts.append(str(meta["elicitation"]))
+    if meta.get("template") != "xml_tags":
+        parts.append(str(meta.get("template")))
+    return "/".join(parts)
 
 
 def coverage_table(runs: List[Dict[str, Any]]) -> str:
@@ -60,18 +93,49 @@ def coverage_table(runs: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def task_table(runs: List[Dict[str, Any]], field: str) -> str:
+def task_table(runs: List[Dict[str, Any]], field: str, show_floor: bool = True) -> str:
+    """One row per task, one column per run, with the count beside the value.
+
+    The count is there because a mean over three surviving items and a mean over
+    forty are formatted identically otherwise, and the coverage table above is
+    run-wide rather than per task.
+
+    `show_floor` is off for `success_rate`: a floor is the mean *score* of the
+    best constant strategy (`arggym/core/floors.py`), so printing it beside a
+    success rate invites exactly the comparison it exists to prevent.
+    """
     tasks = sorted({t for m in runs for t in m["by_task"]})
-    head = "| task | floor | " + " | ".join(m["_label"] for m in runs) + " |"
-    rule = "|---|---:|" + "---:|" * len(runs)
+    head = "| task |" + (" floor |" if show_floor else "") + \
+        " " + " | ".join(m["_label"] for m in runs) + " |"
+    rule = "|---|" + ("---:|" if show_floor else "") + "---:|" * len(runs)
     lines = [head, rule]
     for t in tasks:
-        floor = next((m["by_task"][t].get("floor") for m in runs
-                      if t in m["by_task"] and m["by_task"][t].get("floor") is not None),
-                     None)
-        cells = [_num(m["by_task"].get(t, {}).get(field)) for m in runs]
-        lines.append(f"| {t} | {_num(floor)} | " + " | ".join(cells) + " |")
+        seen = [m["by_task"][t]["floor"] for m in runs
+                if t in m["by_task"] and m["by_task"][t].get("floor") is not None]
+        floor = seen[0] if seen else None
+        # A floor is measured over the rows a run actually scored, so a filtered
+        # run and a full one produce different ones. Printing a single number
+        # then makes `(score - floor) / (1 - floor)` unreproducible from the
+        # table it is printed in, so the disagreement is shown rather than hidden.
+        floor_cell = _num(floor) + ("*" if len(set(seen)) > 1 else "")
+        cells = [_cell(m["by_task"].get(t, {}), field) for m in runs]
+        lines.append(f"| {t} |" + (f" {floor_cell} |" if show_floor else "")
+                     + " " + " | ".join(cells) + " |")
+    if any(len({m["by_task"][t]["floor"] for m in runs
+                if t in m["by_task"] and m["by_task"][t].get("floor") is not None}) > 1
+           for t in tasks):
+        lines.append("")
+        lines.append("`*` these runs measured different floors for that task, so "
+                     "one column's `corrected` cannot be reproduced from this "
+                     "floor. Floors are measured over the rows a run scored.")
     return "\n".join(lines)
+
+
+def _cell(stats: Dict[str, Any], field: str) -> str:
+    if not stats:
+        return "-"
+    n = stats.get("n_scored")
+    return _num(stats.get(field)) + (f" ({n})" if n is not None else "")
 
 
 def render(runs: List[Dict[str, Any]]) -> str:
@@ -98,6 +162,8 @@ def render(runs: List[Dict[str, Any]]) -> str:
         "cap has not been measured on reasoning, whatever its mean says.", "",
         coverage_table(runs), "",
         "## Mean score, by task", "",
+        "Each cell is the mean and, in brackets, how many items it is a mean "
+        "of.", "",
         task_table(runs, "mean"), "",
         "## Chance-corrected, by task", "",
         "`(score - floor) / (1 - floor)`. Negative means worse than a constant "
@@ -105,8 +171,9 @@ def render(runs: List[Dict[str, Any]]) -> str:
         task_table(runs, "corrected"), "",
         "## Success rate, by task", "",
         "The task's own definition of a fully correct answer, which is not "
-        "`score == 1.0` on every task.", "",
-        task_table(runs, "success_rate"), "",
+        "`score == 1.0` on every task. No floor column: a floor is a mean "
+        "score, not a success rate.", "",
+        task_table(runs, "success_rate", show_floor=False), "",
         "## Mean over untruncated generations only", "",
         task_table(runs, "mean_untruncated"), "",
         "---", "",
@@ -119,12 +186,16 @@ def render(runs: List[Dict[str, Any]]) -> str:
 
 
 def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
+    # Every stat `_stats` produces. `extrasaction` is left at its default, so
+    # adding a stat without adding it here fails loudly rather than dropping it
+    # from the artifact people load into a dataframe.
     fields = ["run", "task", "level", "ordering", "n", "n_scored", "n_api_error",
-              "mean", "mean_untruncated", "success_rate", "floor", "corrected",
-              "truncated_rate", "no_answer_region_rate", "zero_with_region"]
+              "n_scorer_refused", "mean", "mean_untruncated", "success_rate",
+              "floor", "corrected", "truncated_rate", "no_answer_region_rate",
+              "answer_in_cot_rate", "zero_with_region"]
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        w = csv.DictWriter(f, fieldnames=fields, restval="")
         w.writeheader()
         for m in runs:
             for group, level, ordering in (("by_task", "", ""),
@@ -132,9 +203,11 @@ def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
                                            ("by_task_ordering", "", None)):
                 for key, v in m.get(group, {}).items():
                     task, _, rest = key.partition("|")
-                    w.writerow({**v, "run": m["_label"], "task": task,
-                                "level": rest if level is None else "",
-                                "ordering": rest if ordering is None else ""})
+                    row = {k: v[k] for k in fields if k in v}
+                    row.update(run=m["_label"], task=task,
+                               level=rest if level is None else "",
+                               ordering=rest if ordering is None else "")
+                    w.writerow(row)
 
 
 def _num(x: Optional[float]) -> str:

@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from evals import artifacts, taskset
+from evals import artifacts, taskset, values
 from evals.client import Endpoint
 from evals.prompt import Elicitation
 from evals.solver import ChatSolver
@@ -39,6 +39,37 @@ def _plain(node: Any) -> Dict[str, Any]:
         return {}
     return dict(node) if isinstance(node, dict) else OmegaConf.to_container(node,
                                                                            resolve=True)
+
+
+def refuse_a_changed_run(run_dir: str, meta: Dict[str, Any]) -> None:
+    """Refuse to add generations from one configuration to another's directory.
+
+    Resume keys on the row id alone, so a directory reused with a different
+    model or template ends up holding two models' completions under one
+    manifest, all extracted with whichever template was named last. Every other
+    guard passes: same taskset, same ids, same hash.
+    """
+    path = os.path.join(run_dir, artifacts.RUN)
+    if not os.path.exists(path):
+        return
+    import json
+
+    with open(path) as f:
+        before = json.load(f)
+    changed = [k for k in ("taskset_hash", "template", "elicitation")
+               if before.get(k) != meta.get(k)]
+    if (before.get("endpoint") or {}).get("model") != meta["endpoint"]["model"]:
+        changed.append("endpoint.model")
+    if changed:
+        raise SystemExit(
+            f"{run_dir} already holds a run whose {', '.join(changed)} "
+            f"differ(s) from this one. Resuming into it would mix generations "
+            f"from two configurations under one manifest. Pass a different "
+            f"run_id=, or resume=false to start this directory over.")
+
+
+class RunFailed(SystemExit):
+    """More of the run failed to reach the provider than the config allows."""
 
 
 def quiet_http() -> None:
@@ -113,6 +144,8 @@ def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
                 # A solver that raises is still infrastructure. One bad row must
                 # not cost the rows already paid for.
                 attempt = Attempt(error=f"solver raised: {type(e).__name__}: {e}")
+            if attempt.value is not None:
+                values.check_json(attempt.value, row["id"])
             out.write({"id": row["id"], "task": row["task"],
                        "level": row["metadata"]["level"],
                        "ordering": row["metadata"]["ordering"],
@@ -136,24 +169,40 @@ def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> None:
-    # Hydra has already made the run directory and chdir'd into it, so a
-    # relative taskset path in the config means what the caller typed, not what
-    # it would resolve to from in here.
+    # Hydra has already made the run directory and chdir'd into it.
+    execute(cfg, os.getcwd(), hydra.utils.get_original_cwd())
+
+
+def execute(cfg: DictConfig, run_dir: str, origin: str = ".") -> Dict[str, Any]:
+    """One run, start to finish, returning its manifest.
+
+    Separated from `main` so it can be tested. Everything documented about a run
+    -- the manifest, the prompts written before any call, resume, and the
+    error-rate gate -- lives here, and none of it was reachable from a test
+    while it sat inside a `@hydra.main` entry point.
+
+    A relative taskset path means what the caller typed, hence `origin`: Hydra
+    chdirs into the run directory before `main` runs.
+    """
     quiet_http()
-    ts_path = os.path.join(hydra.utils.get_original_cwd(), cfg.taskset)
+    ts_path = os.path.join(origin, cfg.taskset)
     ts_manifest, all_rows = taskset.load(ts_path)
     rows = taskset.select(
         all_rows,
         tasks=cfg.filter.get("tasks"), levels=cfg.filter.get("levels"),
         orderings=cfg.filter.get("orderings"), limit=cfg.filter.get("limit"))
 
-    run_dir = os.getcwd()  # Hydra has already made and entered it.
+    os.makedirs(run_dir, exist_ok=True)
+    solver = build_solver(cfg)
+    meta = manifest(cfg, solver, ts_manifest, ts_path, rows, len(all_rows), 0)
+
+    if cfg.resume:
+        refuse_a_changed_run(run_dir, meta)
+    else:
+        artifacts.restart(run_dir)
     done = artifacts.completed_ids(run_dir) if cfg.resume else set()
     todo = [r for r in rows if r["id"] not in done]
-
-    solver = build_solver(cfg)
-    meta = manifest(cfg, solver, ts_manifest, ts_path, rows, len(all_rows),
-                    len(done))
+    meta["n_resumed"] = len(done)
     artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
 
     # Before any call, so a run that dies mid-flight still says what it asked.
@@ -167,10 +216,20 @@ def main(cfg: DictConfig) -> None:
     counts = generate(todo, solver, run_dir, cfg.generation.concurrency)
     elapsed = time.monotonic() - started
 
-    n = max(counts["generated"], 1)
-    error_rate = counts["errors"] / n
+    # Counted over everything on disk, not over this invocation. A resumed run
+    # that generated one item would otherwise write `n_generated: 0` and an
+    # error rate measured on a single row over the record of a whole sweep --
+    # and this manifest is what the "not measured must not look like measured
+    # as failing" argument rests on.
+    final = artifacts.best_per_id(run_dir)
+    n_errors = sum(1 for r in final.values() if r.get("error"))
+    n_truncated = sum(1 for r in final.values() if r.get("truncated"))
+    error_rate = n_errors / len(final) if final else 0.0
     meta.update(finished_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                elapsed_s=round(elapsed, 1), **{f"n_{k}": v for k, v in counts.items()},
+                elapsed_s=round(elapsed, 1),
+                n_generated=len(final), n_errors=n_errors, n_truncated=n_truncated,
+                n_this_invocation=counts["generated"],
+                n_missing=len(rows) - len(final),
                 error_rate=round(error_rate, 4))
     # A run that mostly failed to reach the provider is not a measurement of a
     # model. Saying so in the manifest keeps "not measured" from reading as
@@ -179,16 +238,18 @@ def main(cfg: DictConfig) -> None:
     meta["status"] = "failed" if error_rate > cfg.max_error_rate else "completed"
     artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
 
-    print(f"{meta['status']}: {counts['generated']} generated, "
-          f"{counts['errors']} errors ({error_rate:.1%}), "
-          f"{counts['truncated']} truncated, {elapsed:.0f}s", file=sys.stderr)
+    print(f"{meta['status']}: {len(final)} of {len(rows)} generated, "
+          f"{n_errors} errors ({error_rate:.1%}), "
+          f"{n_truncated} truncated, {elapsed:.0f}s "
+          f"({counts['generated']} this run)", file=sys.stderr)
     if meta["status"] == "failed":
-        raise SystemExit(
+        raise RunFailed(
             f"error rate {error_rate:.1%} is above max_error_rate "
             f"{cfg.max_error_rate}. The generations are kept and the run is "
             f"resumable; read the errors in {artifacts.GENERATIONS} before "
             f"rerunning, because a dead endpoint and a rejected request look "
             f"the same in a score.")
+    return meta
 
 
 if __name__ == "__main__":

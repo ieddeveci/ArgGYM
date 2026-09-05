@@ -27,8 +27,11 @@ def test_an_api_error_is_recorded_as_an_error_and_not_as_zero(tmp_path, rows,
 
     assert metrics["coverage"]["n_api_error"] == len(rows)
     assert metrics["coverage"]["n_scored"] == 0
-    # Not zero. Nothing was measured, so there is no mean to report.
-    assert metrics["coverage"]["mean"] is None
+    # Coverage says what was not measured and carries no score of any kind. A
+    # pooled figure over every record would be a cross-task mean, which is the
+    # one number `aggregate` exists to refuse.
+    assert not ({"mean", "mean_untruncated", "success_rate", "corrected", "floor"}
+                & set(metrics["coverage"])), metrics["coverage"]
     for v in metrics["by_task"].values():
         assert v["mean"] is None and v["success_rate"] is None
 

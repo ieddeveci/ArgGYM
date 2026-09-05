@@ -61,9 +61,16 @@ jobs:
         # dependencies are a local group rather than an extra. An adopter who
         # only scores model outputs must not receive an HTTP client for talking
         # to model providers.
+        #
+        # Run from outside the checkout: python puts the working directory on
+        # sys.path, so `import evals` from the repo root imports the source tree
+        # whatever the wheel contains, and this job failed on every run until it
+        # moved.
         run: |
+          VENV=$PWD/.venv
+          cd /tmp
           for mod in openai hydra evals; do
-            if .venv/bin/python -c "import $mod" 2>/dev/null; then
+            if $VENV/bin/python -c "import $mod" 2>/dev/null; then
               echo "$mod reached a bare install; it belongs to the evals group"
               exit 1
             fi

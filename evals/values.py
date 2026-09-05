@@ -31,6 +31,27 @@ def encode(value: Any, row: Dict[str, Any]) -> Any:
     return value
 
 
+def check_json(value: Any, row_id: str) -> None:
+    """Refuse a value that cannot survive the trip to `score.py`.
+
+    Generations are written with `default=str`, which would quietly turn a list
+    of live `Operation` objects into a list of strings. `decode` then hands
+    those strings to `score_row_value`, which at best refuses the row and at
+    worst grades it zero -- and by then the inference has been paid for. Raising
+    here costs the first row instead of the sweep.
+    """
+    import json
+
+    try:
+        json.dumps(value)
+    except TypeError as e:
+        raise TypeError(
+            f"{row_id}: the solver's value is not JSON ({e}). It travels to "
+            f"score.py as a line in a file, so pass it through "
+            f"evals.values.encode(value, row) first -- an operation list and "
+            f"semantics_query's tuple-keyed map both need it.") from None
+
+
 def decode(payload: Any, row: Dict[str, Any]) -> Any:
     """JSON back to the value `score_row_value` expects.
 

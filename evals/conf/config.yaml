@@ -40,12 +40,23 @@ generation:
 # there. The generations are kept either way and the run resumes.
 max_error_rate: 0.2
 
-# Skip ids already generated without an error. Off means start the directory
-# again from nothing.
+# Skip ids already generated without an error. Off deletes the directory's
+# generations and starts over, because the writer appends -- leaving them would
+# be resuming under a flag that says otherwise.
 resume: true
+
+# What identifies a run, and therefore names its directory. Derived from the
+# three things that change what a model was asked, so running the same command
+# twice resumes instead of starting a second copy.
+#
+# It was a timestamp, which made every invocation a fresh directory and left
+# `resume` unreachable: the feature was documented, tested at the function
+# level, and impossible to trigger through the command line. Give `run_id` a
+# value of your own for a deliberate second run of the same configuration.
+run_id: ${model.name}__${template.name}__${elicitation.name}
 
 hydra:
   run:
-    dir: outputs/runs/${now:%Y-%m-%d_%H-%M-%S}__${model.name}
+    dir: outputs/runs/${run_id}
   job:
     chdir: true

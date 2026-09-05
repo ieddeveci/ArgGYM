@@ -19,7 +19,11 @@ import pytest
 import arggym
 from arggym.core.freeze import taskset_hash
 
-TASKS = ("status_query", "formalization")
+#: Every task, not a sample of two. The four answer shapes are spread across
+#: the twelve, and the end-to-end test exists to catch an extraction path that
+#: mishandles one; two tasks cover two shapes. Building all twelve takes about
+#: a second and a half.
+TASKS = tuple(sorted(arggym.task_names()))
 LEVEL, ORDERING, SEED = 3, "last_link_elitist", 0
 
 

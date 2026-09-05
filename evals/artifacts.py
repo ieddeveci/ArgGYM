@@ -43,8 +43,31 @@ def write_json(path: str, obj: Any) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(obj, f, indent=2, default=str)
+        f.flush()
+        # Flushed to the device before the rename, not just out of Python's
+        # buffer. Without this the rename survives a killed process but not a
+        # machine reboot, which is the failure this module exists for.
+        os.fsync(f.fileno())
     # A manifest half-written by an interrupted process is worse than no
     # manifest: it reads as valid JSON right up to the point it does not.
+    os.replace(tmp, path)
+
+
+def write_jsonl(path: str, rows: Any) -> None:
+    """A whole JSONL, written atomically.
+
+    Not `Appender`: this replaces a file rather than growing one, and a scoring
+    pass killed halfway would otherwise leave a truncated `samples.jsonl` beside
+    a `metrics.json` from the previous scorer version, with nothing comparing
+    the two.
+    """
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        for r in rows:
+            f.write(json.dumps(r, default=str) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
@@ -72,20 +95,38 @@ class Appender:
         self.close()
 
 
-def completed_ids(run_dir: str) -> Set[str]:
-    """Ids already generated without an error, which a rerun may skip.
+def best_per_id(run_dir: str, name: str = GENERATIONS) -> Dict[str, Dict[str, Any]]:
+    """One record per id: the last that succeeded, or the last that failed.
 
-    An errored record is not complete: it is retried, and the retry appends a
-    second line for that id. `score.py` keeps the last line per id, so the retry
-    is the one that counts.
+    An id can hold several records -- a failure and the retry that replaced it,
+    in either order, because a resumed run appends. Preferring the last
+    *successful* one rather than simply the last means a generation that was
+    paid for is never thrown away by a later transient failure, and it is what
+    makes `completed_ids` and this function agree: both are answering "is there
+    a good generation for this id", so resume cannot skip an id whose good
+    record scoring would then ignore.
     """
-    return {r["id"] for r in read_jsonl(os.path.join(run_dir, GENERATIONS))
-            if not r.get("error")}
-
-
-def last_per_id(run_dir: str, name: str = GENERATIONS) -> Dict[str, Dict[str, Any]]:
-    """One record per id, the last written winning."""
-    out: Dict[str, Dict[str, Any]] = {}
+    best: Dict[str, Dict[str, Any]] = {}
     for r in read_jsonl(os.path.join(run_dir, name)):
-        out[r["id"]] = r
-    return out
+        current = best.get(r["id"])
+        if current is None or not r.get("error") or current.get("error"):
+            best[r["id"]] = r
+    return best
+
+
+def completed_ids(run_dir: str) -> Set[str]:
+    """Ids with a good generation on disk, which a rerun may skip."""
+    return {i for i, r in best_per_id(run_dir).items() if not r.get("error")}
+
+
+def restart(run_dir: str) -> None:
+    """Throw away a directory's generations, for a run that asked not to resume.
+
+    `Appender` opens for append, so leaving the file in place would mix the old
+    records in with the new ones and `best_per_id` would keep whichever
+    succeeded -- which is resume, under a flag that says otherwise.
+    """
+    for name in (GENERATIONS, PROMPTS, SAMPLES, METRICS):
+        path = os.path.join(run_dir, name)
+        if os.path.exists(path):
+            os.remove(path)

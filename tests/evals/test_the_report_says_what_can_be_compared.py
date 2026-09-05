@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 import os
 
+import pytest
+
 from evals.report import load_metrics, render, write_csv
 
 
@@ -24,6 +26,7 @@ def a_metrics(label, taskset_hash="abc", versions=None, **overrides):
                          "answer_in_cot_rate": 0.0, "zero_with_region": 1},
     }
     return {"_meta": {"run_dir": f"/runs/{label}", "endpoint": {"model": label},
+                      "template": "xml_tags", "elicitation": "none",
                       "taskset_hash": taskset_hash, "run_status": "completed",
                       "taskset_versions": versions or {"prompt_version": 3},
                       "n_scored": 4},
@@ -49,12 +52,66 @@ def test_the_report_gives_no_overall_mean(tmp_path):
     # The property, not the word: no row of any table aggregates across tasks.
     # (The prose says "no overall mean is given", so grepping for the phrase
     # would pass on a report that also printed one.)
-    labels = {line.split("|")[1].strip().lower()
-              for line in text.splitlines() if line.startswith("| ")}
+    #
+    # Labels are stripped of markdown emphasis first. Matching the raw cell let
+    # `| **overall** |` through, and a summary row someone adds later is far
+    # more likely to be bolded than not.
+    labels = {_plain(line.split("|")[1]) for line in text.splitlines()
+              if line.startswith("| ")}
     assert not (labels & {"overall", "average", "mean", "macro-avg", "macro", "all",
-                          "total"}), labels
+                          "total", "aggregate", "summary"}), labels
     assert "macro" not in text.lower()
     assert "No overall mean is given." in text
+
+
+def _plain(cell: str) -> str:
+    return cell.strip().strip("*_` ").lower()
+
+
+def test_the_csv_gives_no_overall_mean_either(tmp_path):
+    """The CSV is what a person loads into a dataframe, and nothing checked it."""
+    m = a_metrics("model-a")
+    out = os.fspath(tmp_path / "report")
+    write_csv(written(tmp_path, m), os.path.join(out, "results.csv"))
+    import csv as _csv
+
+    with open(os.path.join(out, "results.csv")) as f:
+        tasks = {_plain(r["task"]) for r in _csv.DictReader(f)}
+    assert not (tasks & {"overall", "average", "mean", "macro-avg", "macro", "all",
+                         "total", "aggregate", "summary"}), tasks
+
+
+def test_the_csv_carries_every_stat_the_scorer_produces(tmp_path):
+    """A stat dropped on the way to the CSV is a flag nobody sees."""
+    m = a_metrics("model-a")
+    out = os.fspath(tmp_path / "report")
+    write_csv(written(tmp_path, m), os.path.join(out, "results.csv"))
+    header = open(os.path.join(out, "results.csv")).readline()
+    for field in ("answer_in_cot_rate", "n_scorer_refused", "truncated_rate",
+                  "no_answer_region_rate", "zero_with_region", "n_scored"):
+        assert field in header, field
+
+
+def test_a_run_that_was_never_scored_is_not_silently_dropped(tmp_path):
+    from evals.report import NotScored
+
+    scored = written(tmp_path, a_metrics("model-a"))
+    unscored = tmp_path / "unscored"
+    unscored.mkdir()
+    with pytest.raises(NotScored) as e:
+        load_metrics([os.path.dirname(scored[0]["_meta"]["run_dir"]) and
+                      os.fspath(tmp_path / "run0"), os.fspath(unscored)])
+    assert "unscored" in str(e.value)
+
+
+def test_two_runs_of_one_model_get_different_columns(tmp_path):
+    """Elicitation exists so two runs are an experiment, not a collision."""
+    a = a_metrics("gpt-5")
+    b = a_metrics("gpt-5")
+    b["_meta"]["elicitation"] = "cot"
+    labels = [m["_label"] for m in written(tmp_path, a, b)]
+    assert len(set(labels)) == 2, labels
+    assert any("cot" in x for x in labels)
 
 
 def test_every_score_column_carries_its_floor(tmp_path):

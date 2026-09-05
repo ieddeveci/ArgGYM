@@ -35,6 +35,12 @@ SAMPLING_KEYS = frozenset({
 #: transient failure needs.
 _RETRYABLE = (408, 409, 429, 500, 502, 503, 504, 529)
 
+#: A provider that stopped for one of these produced an answer, or ran out of
+#: room while producing one. Anything else -- `content_filter` most of all --
+#: stopped for its own reasons, and the empty completion it leaves behind would
+#: otherwise be scored as a wrong answer on every task.
+_ANSWERED = frozenset({"stop", "length", "eos", ""})
+
 
 @dataclass
 class Endpoint:
@@ -139,7 +145,8 @@ class ChatClient:
         recorded["n_messages"] = len(body["messages"])
         started = time.monotonic()
         last = "no attempt made"
-        for attempt in range(1, self.endpoint.retries + 2):
+        attempt = 0
+        for attempt in range(1, max(self.endpoint.retries, 0) + 2):
             try:
                 resp = self._lazy().chat.completions.create(**body)
             except Exception as e:  # noqa: BLE001 - the taxonomy is below
@@ -151,13 +158,31 @@ class ChatClient:
             choice = resp.choices[0] if resp.choices else None
             if choice is None:
                 # A 200 whose body is not the shape we expect is still
-                # infrastructure, not reasoning.
+                # infrastructure, not reasoning. Retried, because a provider
+                # under load can return this intermittently.
                 last = "malformed response: no choices"
-                break
+                if attempt > self.endpoint.retries:
+                    break
+                time.sleep(min(5 * attempt, 30))
+                continue
+            reason = choice.finish_reason or ""
+            refusal = getattr(choice.message, "refusal", None) or ""
+            if reason not in _ANSWERED or refusal:
+                # Not an answer, so not a score. A refusal recorded as an empty
+                # completion is a zero on every task, which reports the
+                # provider's policy as the model's reasoning.
+                return Attempt(
+                    error=f"provider did not answer: finish_reason={reason!r}"
+                          + (f" refusal={refusal!r}" if refusal else ""),
+                    completion=choice.message.content or "", refusal=refusal,
+                    finish_reason=reason,
+                    usage=(resp.usage.model_dump() if resp.usage else {}),
+                    latency_s=time.monotonic() - started, attempts=attempt,
+                    request=recorded)
             return Attempt(
                 completion=choice.message.content or "",
                 reasoning=reasoning_of(choice.message),
-                truncated=choice.finish_reason == "length",
+                truncated=reason == "length", finish_reason=reason,
                 usage=(resp.usage.model_dump() if resp.usage else {}),
                 latency_s=time.monotonic() - started, attempts=attempt,
                 request=recorded)
@@ -166,9 +191,21 @@ class ChatClient:
 
 
 def _retryable(exc: Exception) -> bool:
+    """Whether trying again could plausibly work.
+
+    Narrow on purpose. Anything without a status code used to be retried, which
+    swept in `ImportError` from a missing dependency and `TypeError` from a bad
+    sampling value: every row then burned three attempts and fifteen seconds of
+    backoff on a fault no retry can fix, and 480 of those look like a provider
+    outage rather than a typo.
+    """
     status = getattr(exc, "status_code", None)
-    if status is None:
-        # A timeout or a dropped connection carries no status and is exactly the
-        # case retrying exists for.
-        return True
-    return status in _RETRYABLE
+    if status is not None:
+        return status in _RETRYABLE
+    try:
+        from openai import APIConnectionError, APITimeoutError
+    except ImportError:  # pragma: no cover - the group is installed in dev
+        return False
+    # A dropped connection or a timeout carries no status and is exactly the
+    # case retrying exists for. A bug in our own call path is not.
+    return isinstance(exc, (APIConnectionError, APITimeoutError))

@@ -16,7 +16,6 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence
 
 import arggym
-from arggym.core.floors import floors as measure_floors
 from evals import artifacts, taskset, values
 from evals.prompt import region
 
@@ -53,6 +52,11 @@ def score_one(gen: Dict[str, Any], row: Dict[str, Any],
         "completion_tokens": (gen.get("usage") or {}).get("completion_tokens"),
         "latency_s": gen.get("latency_s"), "attempts": gen.get("attempts"),
     }
+    # Every documented field is present on every record, whatever happened.
+    # `samples.jsonl` is read outside this process, and a reader that has to
+    # guess whether a missing key means false or means "not applicable" is
+    # being invited to guess wrong.
+    out.update(scorer_refused=False, zero_with_region=False)
     if gen.get("error"):
         # No score, no success, no zero. The item was not measured.
         out.update(score=None, success=None, reason="api_error",
@@ -95,67 +99,112 @@ def score_one(gen: Dict[str, Any], row: Dict[str, Any],
 def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float]) -> Dict[str, Any]:
     """One group's numbers, with what was not measured said first."""
     n = len(records)
-    errs = [r for r in records if r["api_error"]]
-    refused = [r for r in records if r.get("scorer_refused")]
     ok = [r for r in records if r["score"] is not None]
     untrunc = [r for r in ok if not r["truncated"]]
     mean = sum(r["score"] for r in ok) / len(ok) if ok else None
     out: Dict[str, Any] = {
-        "n": n, "n_scored": len(ok), "n_api_error": len(errs),
-        "n_scorer_refused": len(refused),
+        "n": n, "n_scored": len(ok),
+        "n_api_error": sum(1 for r in records if r["api_error"]),
+        "n_scorer_refused": sum(1 for r in records if r.get("scorer_refused")),
         # Read before the score. On the August sweep truncation removed 74-89%
         # of items for three of seven models, and a mean over what survived is
         # a measurement of the token cap.
-        "truncated_rate": round(sum(r["truncated"] for r in records) / n, 4) if n else None,
-        "no_answer_region_rate": (
-            round(sum(bool(r.get("no_answer_region")) for r in ok) / len(ok), 4)
-            if ok else None),
-        "answer_in_cot_rate": (
-            round(sum(bool(r.get("answer_in_cot")) for r in ok) / len(ok), 4)
-            if ok else None),
+        "truncated_rate": _rate(sum(r["truncated"] for r in records), n),
+        "no_answer_region_rate": _rate(
+            sum(bool(r.get("no_answer_region")) for r in ok), len(ok)),
+        "answer_in_cot_rate": _rate(
+            sum(bool(r.get("answer_in_cot")) for r in ok), len(ok)),
         "mean": round(mean, 4) if mean is not None else None,
         # The same mean over the generations that were not cut off. Reported
         # beside the raw one, never instead of it: on the previous sweep a 9B
         # model scored 0.598 raw and 0.765 censored, and only the pair says why.
         "mean_untruncated": (round(sum(r["score"] for r in untrunc) / len(untrunc), 4)
                              if untrunc else None),
-        "success_rate": (round(sum(bool(r["success"]) for r in ok) / len(ok), 4)
-                         if ok else None),
+        "success_rate": _rate(sum(bool(r["success"]) for r in ok), len(ok)),
         "zero_with_region": sum(bool(r.get("zero_with_region")) for r in ok),
     }
     if floor is not None:
         out["floor"] = round(floor, 4)
         # Chance-corrected, which is the only form in which two tasks' scores
-        # are the same quantity (`docs/dataset-contract.md` section 10).
+        # are the same quantity (`docs/dataset-contract.md` section 10). The
+        # floor bounds the mean score and nothing else, so nothing else here is
+        # corrected by it.
         out["corrected"] = (round(arggym.corrected(mean, floor), 4)
                             if mean is not None else None)
     return out
 
 
-def aggregate(records: List[Dict[str, Any]], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def coverage(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """What was not measured. No score in here, deliberately.
+
+    A pooled mean over every record is a mean across tasks, which is the one
+    number `aggregate` refuses to produce three lines below. Publishing it in
+    the file the report reads would make the artifact contradict its own
+    docstring, and it is the obvious thing for a reader to quote.
+    """
+    n = len(records)
+    ok = [r for r in records if r["score"] is not None]
+    return {
+        "n": n, "n_scored": len(ok),
+        "n_api_error": sum(1 for r in records if r["api_error"]),
+        "n_scorer_refused": sum(1 for r in records if r.get("scorer_refused")),
+        "truncated_rate": _rate(sum(r["truncated"] for r in records), n),
+        "no_answer_region_rate": _rate(
+            sum(bool(r.get("no_answer_region")) for r in ok), len(ok)),
+        "answer_in_cot_rate": _rate(
+            sum(bool(r.get("answer_in_cot")) for r in ok), len(ok)),
+    }
+
+
+def _rate(numerator: int, denominator: int) -> Optional[float]:
+    return round(numerator / denominator, 4) if denominator else None
+
+
+def _floors_of(rows: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+    """Measured floors, or none at all if the scorer cannot grade these rows.
+
+    `arggym.floors` scores every row with each constant strategy and does not
+    guard, so a single ungradeable row would abort the whole scoring pass --
+    after `score_one` has already recorded that row politely. Losing every
+    number to one bad row is the wrong trade.
+    """
+    try:
+        return {t: v["floor"] for t, v in arggym.floors(list(rows)).items()}
+    except Exception:  # noqa: BLE001 - reported in _meta, never silently zero
+        return {}
+
+
+def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
+              ) -> Dict[str, Any]:
     """Per task, per task and level, per task and ordering. Never one mean.
 
     There is deliberately no overall average. The twelve metrics are of four
     kinds and their chance floors span half the range, so a mean over them moves
     mostly with which tasks are in the basket. The previous harness published one
     as a "ranking aid"; the contract says not to.
-    """
-    floors = {t: v["floor"] for t, v in measure_floors(rows).items()}
-    by: Dict[str, Dict[str, List]] = {"task": defaultdict(list),
-                                      "task_level": defaultdict(list),
-                                      "task_ordering": defaultdict(list)}
-    for r in records:
-        by["task"][r["task"]].append(r)
-        by["task_level"][f"{r['task']}|L{r['level']}"].append(r)
-        by["task_ordering"][f"{r['task']}|{r['ordering']}"].append(r)
 
-    return {
-        "by_task": {k: _stats(v, floors.get(k)) for k, v in sorted(by["task"].items())},
-        "by_task_level": {k: _stats(v, floors.get(k.split("|")[0]))
-                          for k, v in sorted(by["task_level"].items())},
-        "by_task_ordering": {k: _stats(v, floors.get(k.split("|")[0]))
-                             for k, v in sorted(by["task_ordering"].items())},
-    }
+    Each grouping measures its own floor over its own rows. A floor is measured,
+    not constant: `docs/dataset-contract.md` section 10 quotes them per level
+    because that is what they vary with, so correcting a level-15 mean by a
+    floor averaged over levels 3 to 15 produces a well-formed number that means
+    nothing.
+    """
+    groups: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
+        "by_task": defaultdict(list), "by_task_level": defaultdict(list),
+        "by_task_ordering": defaultdict(list)}
+    for r in records:
+        groups["by_task"][r["task"]].append(r)
+        groups["by_task_level"][f"{r['task']}|L{r['level']}"].append(r)
+        groups["by_task_ordering"][f"{r['task']}|{r['ordering']}"].append(r)
+
+    out: Dict[str, Any] = {}
+    for name, buckets in groups.items():
+        out[name] = {}
+        for key, got in sorted(buckets.items()):
+            mine = [rows[r["id"]] for r in got if r["id"] in rows]
+            floor = _floors_of(mine).get(key.split("|")[0])
+            out[name][key] = _stats(got, floor)
+    return out
 
 
 def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any]:
@@ -173,20 +222,27 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
             f"used, or rerun it.")
 
     rows = {r["id"]: r for r in all_rows}
-    generations = artifacts.last_per_id(run_dir)
+    generations = artifacts.best_per_id(run_dir)
     unknown = sorted(set(generations) - set(rows))
     if unknown:
         raise TasksetMismatch(
             f"{len(unknown)} generated ids are in no row of {path} "
             f"({', '.join(unknown[:3])}).")
 
-    template = run.get("template")
+    if "template" not in run:
+        # `null` is a legitimate template -- it means the whole completion is
+        # the answer -- so an absent key cannot be read as one. Guessing would
+        # hand the strict parser a reasoning preamble and report a plausible
+        # low score with no warning.
+        raise TasksetMismatch(
+            f"{artifacts.RUN} in {run_dir} names no template. It is written by "
+            f"run.py and is needed to read the answer back out; without it "
+            f"there is no way to tell 'no fence was asked for' from 'the key is "
+            f"missing', and the two score differently.")
+    template = run["template"]
     records = [score_one(generations[i], rows[i], template) for i in sorted(generations)]
-    scored_rows = [rows[i] for i in sorted(generations)]
 
-    with open(os.path.join(run_dir, artifacts.SAMPLES), "w") as f:
-        for r in records:
-            f.write(json.dumps(r, default=str) + "\n")
+    artifacts.write_jsonl(os.path.join(run_dir, artifacts.SAMPLES), records)
 
     metrics = {
         "_meta": {
@@ -198,10 +254,14 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
             "run_status": run.get("status"),
             "arggym": arggym.__version__,
             "n_selected": run.get("n_selected"), "n_scored": len(records),
+            # A run interrupted before it finished has fewer generations than
+            # it selected, and the difference is the only sign of it once
+            # `run.json` is out of view.
+            "n_not_generated": (run.get("n_selected") or len(records)) - len(records),
         },
         # What was not measured, before anything that was.
-        "coverage": _stats(records, None),
-        **aggregate(records, scored_rows),
+        "coverage": coverage(records),
+        **aggregate(records, rows),
     }
     artifacts.write_json(os.path.join(run_dir, artifacts.METRICS), metrics)
     return metrics
@@ -217,19 +277,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     c = m["coverage"]
     print(f"{c['n_scored']} scored, {c['n_api_error']} API errors, "
-          f"{c['truncated_rate']:.1%} truncated, "
-          f"{c['no_answer_region_rate'] or 0:.1%} with no answer region\n")
-    print(f"{'task':26s} {'n':>4s} {'mean':>7s} {'untrunc':>8s} "
+          f"{c['n_scorer_refused']} unscorable, {_pct(c['truncated_rate'])} truncated, "
+          f"{_pct(c['no_answer_region_rate'])} with no answer region\n")
+    print(f"{'task':26s} {'n':>4s} {'scored':>6s} {'mean':>7s} {'untrunc':>8s} "
           f"{'floor':>7s} {'corr':>7s} {'succ':>7s}")
     for task, v in m["by_task"].items():
-        print(f"{task:26s} {v['n']:4d} {_f(v['mean'])} {_f(v['mean_untruncated'])} "
-              f"{_f(v.get('floor'))} {_f(v.get('corrected'))} {_f(v['success_rate'])}")
+        print(f"{task:26s} {v['n']:4d} {v['n_scored']:6d} {_f(v['mean'])} "
+              f"{_f(v['mean_untruncated'])} {_f(v.get('floor'))} "
+              f"{_f(v.get('corrected'))} {_f(v['success_rate'])}")
     print("\nNo overall mean: the per-task metrics are not the same quantity.")
     return 0
 
 
 def _f(x: Optional[float]) -> str:
     return "      -" if x is None else f"{x:7.3f}"
+
+
+def _pct(x: Optional[float]) -> str:
+    """A rate with no denominator has no percentage, and says so."""
+    return "-" if x is None else f"{x:.1%}"
 
 
 if __name__ == "__main__":

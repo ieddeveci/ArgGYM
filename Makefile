@@ -23,10 +23,16 @@ freeze:
 
 # `make eval MODEL=claude-openrouter`. Scoring is a second step on purpose, so
 # it can be rerun against these generations whenever the scorer moves.
-MODEL ?= stub
+#
+# The run directory is derived from the config rather than read back off the
+# filesystem: picking the most recently modified directory scores the wrong run
+# whenever two of these are in flight.
+MODEL ?=
 eval:
+	@test -n "$(MODEL)" || { echo 'usage: make eval MODEL=<a config under evals/conf/model>'; \
+	  echo 'available:'; ls evals/conf/model | sed 's/.yaml$$/  /;s/^/  /'; exit 1; }
 	uv run python -m evals.run taskset=data/taskset.jsonl model=$(MODEL)
-	uv run python -m evals.score $$(ls -td outputs/runs/* | head -1)
+	uv run python -m evals.score outputs/runs/$(MODEL)__xml_tags__none
 
 inspect:
 	uv run arggym inspect

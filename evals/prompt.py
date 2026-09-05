@@ -20,10 +20,19 @@ import arggym
 #: Named templates a config may select. Adding a convention is adding a line:
 #: `AnswerTemplate(name, open, close)` carries its own instruction sentence and
 #: its own delimiters, so the extractor follows automatically.
+#: Named templates a config may select, one file each under `conf/template/`.
+#: Adding a convention is adding a line: `AnswerTemplate(name, open, close)`
+#: carries its own instruction sentence and its own delimiters, so the extractor
+#: follows automatically.
+#:
+#: No `\boxed{...}` here. Its closing delimiter is a brace, and every answer
+#: shape this benchmark uses contains braces or spans lines, so the region would
+#: end at the first `}` rather than the matching one. A convention that can
+#: truncate an answer is worse than no convention, because the score it produces
+#: looks like a reasoning failure.
 TEMPLATES = {
     "xml_tags": arggym.XML_TAGS,
     "square_tags": arggym.AnswerTemplate("square_tags", "[answer]", "[/answer]"),
-    "boxed": arggym.AnswerTemplate("boxed", r"\boxed{", "}"),
 }
 
 

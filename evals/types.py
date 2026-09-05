@@ -44,6 +44,14 @@ class Attempt:
     #: of items for three of seven models, so it is a contamination flag, not a
     #: footnote.
     truncated: bool = False
+    #: Why the provider stopped. Recorded rather than reduced to `truncated`,
+    #: because `content_filter` is a refusal and reducing it away leaves an
+    #: empty completion that scores a hard zero on every task -- a safety
+    #: refusal published as a reasoning result. Scoring cannot recover this
+    #: later: it is the one thing the completion does not contain.
+    finish_reason: str = ""
+    #: A provider-side refusal, which OpenAI returns beside a null content.
+    refusal: str = ""
     usage: Dict[str, Any] = field(default_factory=dict)
     latency_s: float = 0.0
     attempts: int = 0
@@ -55,7 +63,8 @@ class Attempt:
     def to_dict(self) -> Dict[str, Any]:
         return {"completion": self.completion, "reasoning": self.reasoning,
                 "value": self.value, "error": self.error,
-                "truncated": self.truncated, "usage": self.usage,
+                "truncated": self.truncated, "finish_reason": self.finish_reason,
+                "refusal": self.refusal, "usage": self.usage,
                 "latency_s": round(self.latency_s, 3), "attempts": self.attempts,
                 "request": self.request}
 
