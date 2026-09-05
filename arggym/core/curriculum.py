@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Dict, FrozenSet, Optional, Sequence, Tuple
 
 ATTACK, DEFENCE, MIXED = "attack", "defence", "attack_defense"
 GOAL_UNDECIDED, GOAL_OVERRULED, GOAL_JUSTIFIED = "UNDECIDED", "OVERRULED", "JUSTIFIED"
@@ -136,7 +136,6 @@ def spec_for(level: int, ordering: str = LAST_LINK, variant: int = 0) -> ItemSpe
     td_min = 2
     td_max = d_max if L < 5 else max(2, d_max - 2)
     noise = 0 if L < 6 else min(1 + (L - 6) // 4, 3)
-    noise_rules = noise * 3
 
     return ItemSpec(
         level=L, ordering=ordering, mode=mode,

@@ -27,7 +27,7 @@ def test_exported_rows_verify(task, tmp_path):
         item = generate(cell)
         assert item is not None, cell.short
         result = MODES[task].score(row["reference"], item)
-        assert result["score"] == pytest.approx(1.0), (cell.short, result["reason"])
+        assert result.score == pytest.approx(1.0), (cell.short, result.reason)
 
 
 def test_every_mode_is_exportable():

@@ -91,15 +91,15 @@ def test_the_strict_answer_is_permitted_exactly_where_the_prompt_says_it_is():
         if strict.min_directives != 1:
             continue
         checked += 1
-        answer = f"[answer]\n[strict cs: {strict.seed_lit} -> -{strict.target}]\n[/answer]"
+        answer = f"[strict cs: {strict.seed_lit} -> -{strict.target}]"
 
         accepted = score_item(answer, ca.as_score_input(strict))
-        assert accepted["score"] == pytest.approx(1.0), (level, ordering, seed, accepted)
+        assert accepted.score == pytest.approx(1.0), (level, ordering, seed, accepted)
         assert STRICT_FORM in strict.prompt
 
         rejected = score_item(answer, ca.as_score_input(plain))
-        assert rejected["score"] == 0.0
-        assert "illegal" in rejected["reason"], rejected["reason"]
+        assert rejected.score == 0.0
+        assert "illegal" in rejected.reason, rejected.reason
         assert NO_STRICT in plain.prompt
     assert checked, "no cell at this level takes the strict shortcut; pick another level"
 
@@ -130,7 +130,10 @@ def test_the_block_states_the_rules_that_zero_an_answer(allow_strict):
     assert "more than twice" in block, "the bloat factor scores 0"
     assert "without a leading -" in block, "only a positively written premise can be negated"
     assert "cannot be read at all" in block, "one unparseable line zeroes the answer"
-    assert "leaving the theory inconsistent" in block, "consistency is required for any score"
+    # Consistency is stated where an answer can break it and nowhere else. Two contraries
+    # are both JUSTIFIED only if both are firm, firmness needs an axiom and a strict rule,
+    # and no answer may add an axiom -- so only a strict variant can reach the branch.
+    assert ("leaving the theory inconsistent" in block) is allow_strict
 
 
 def test_preference_construction_states_the_rule_that_zeroes_its_answer():

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
+from arggym.aspic.engine import Operation
 
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
 
@@ -80,7 +80,6 @@ def build_defence(n_attackers: int, ordering: str, names: Iterable[str],
     if junction and support_depth >= 3:
         step = max(1, support_depth // (n_junctions + 1))
         j_points = {min(support_depth - 2, step * (i + 1)) for i in range(n_junctions)}
-    junction_at = -1
     for i in range(max(1, support_depth)):
         nxt = tgt if i == support_depth - 1 else next(it)
         rn = f"s{i+1}"
@@ -122,7 +121,8 @@ def build_defence(n_attackers: int, ordering: str, names: Iterable[str],
             if _use_j and not _is_strict and q == 0:
                 extra = []
                 for _e in range(2 if ternary else 1):
-                    broot = next(it); blit = next(it)
+                    broot = next(it)
+                    blit = next(it)
                     ops.append(Operation(kind="premise", content=broot))
                     ops.append(Operation(kind="defeasible", name=f"{nm}b{_e}",
                                          antecedents=(broot,), consequent=blit))
@@ -162,7 +162,6 @@ def build_defence(n_attackers: int, ordering: str, names: Iterable[str],
 
 def defence_moves(item: DefenceItem) -> List[Tuple[str, int, List[Operation]]]:
     out: List[Tuple[str, int, List[Operation]]] = []
-    src = item.attackers[0].root if item.attackers else None
     base_root = None
     for o in item.ops:
         if o.kind == "premise":

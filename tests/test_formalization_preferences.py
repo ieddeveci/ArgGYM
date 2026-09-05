@@ -12,7 +12,7 @@ from arggym.tasks import formalization
 
 
 def render(ops):
-    return "[answer]\n" + "\n".join(formalization.render_op(o) for o in ops) + "\n[/answer]"
+    return "\n".join(formalization.render_op(o) for o in ops)
 
 
 @pytest.fixture(scope="module")
@@ -26,8 +26,8 @@ def item():
 
 def test_gold_answer_still_scores_one(item):
     result = formalization.score(render(item.reference_ops), item)
-    assert result["score"] == pytest.approx(1.0), result["reason"]
-    assert result["shape_f1"] == pytest.approx(1.0)
+    assert result.score == pytest.approx(1.0), result.reason
+    assert result.diagnostics["shape_f1"] == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("kind", ["prefer_rule", "prefer_premise"])
@@ -38,5 +38,5 @@ def test_one_flipped_preference_lowers_shape_f1(item, kind):
     ops[i] = Operation(kind=o.kind, stronger=o.weaker, weaker=o.stronger)
 
     result = formalization.score(render(ops), item)
-    assert result["shape_f1"] < 1.0, f"flipping {formalization.render_op(o)} went unnoticed"
-    assert result["directives_f1"] < 1.0
+    assert result.diagnostics["shape_f1"] < 1.0, f"flipping {formalization.render_op(o)} went unnoticed"
+    assert result.diagnostics["directives_f1"] < 1.0

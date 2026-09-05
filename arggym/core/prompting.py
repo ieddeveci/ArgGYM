@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
+from arggym.core.answers import AnswerTemplate
+
 SEMANTICS = "grounded semantics"
 ORDERING_NAME = {
     "last_link_elitist": "the last-link elitist strength ordering",
@@ -11,6 +13,14 @@ ORDERING_NAME = {
 }
 
 _STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]\n"
+# Two rules that `score_item` applies to every task routed through it, including the
+# one that writes its own prompt. Naming them here is what stops a second wording
+# drifting into existence: `preference_construction` stated neither, and was scored by
+# both.
+MINIMALITY = ("The answer must be minimal: one using more than twice the fewest "
+              "directives that work scores zero.")
+UNREADABLE = "A directive that cannot be read at all scores the whole answer zero"
+
 _TAIL = ("Every rule needs a name, written after the kind and separated from it by a space. "
          "A name starts with a letter and continues with letters, digits or underscores, "
          "and no rule already in the theory, and no earlier line of the answer, has used it. "
@@ -18,10 +28,14 @@ _TAIL = ("Every rule needs a name, written after the kind and separated from it 
          "Several antecedents are joined with AND. Rule antecedents must be literals "
          "already present in the theory. A rule name in a consequent, written -<name>, "
          "switches that rule off.\n"
-         "The answer must be minimal: one using more than twice the fewest directives that "
-         "work scores zero. A directive that cannot be read at all scores the whole answer "
-         "zero, and so does an answer that reaches every goal while leaving the theory "
-         "inconsistent.")
+         + MINIMALITY + " " + UNREADABLE + ".")
+
+# Two contraries are both JUSTIFIED under grounded semantics only if both are firm, and
+# firmness comes from an axiom through strict rules. No answer may add an axiom, so an
+# answer reaches this branch only where it may add a strict rule. On the other four
+# construction tasks the sentence described something their answers cannot do.
+INCONSISTENT = ("An answer that reaches every goal while leaving the theory inconsistent "
+                "also scores zero.")
 
 
 def permitted_block(allow_strict: bool = False) -> str:
@@ -45,10 +59,28 @@ def permitted_block(allow_strict: bool = False) -> str:
               "premise written above without a leading -\n"
             + ("" if allow_strict else "Strict rules may not be added.\n")
             + "New axioms may not be added.\n"
-            + _TAIL)
+            + _TAIL
+            + (" " + INCONSISTENT if allow_strict else ""))
 
 
-_FORMAT = ("Answer format: one directive per line, between [answer] and [/answer].")
+_FORMAT = ("Answer format: one directive per line.")
+
+
+def answer_format(clause: str, template: Optional[AnswerTemplate] = None) -> str:
+    """The answer-format block: what the answer must say, and optionally where to put it.
+
+    The clause is the task's own and describes content -- one directive per line,
+    one line per claim. Where the answer goes is delivery, and delivery belongs to
+    the harness: it composes the prompt from this question, calls whatever solver it
+    likes, and extracts the answer before handing it back. So by default the question
+    says nothing about a fence.
+
+    A caller that would rather have the sentence rendered here passes a template and
+    gets exactly one sentence more (`docs/dataset-contract.md` section 1).
+    """
+    if template is None:
+        return clause.rstrip()
+    return f"{clause.rstrip()}\n{template.instruction}"
 
 INCLUDE_NOTATION = True
 
@@ -63,7 +95,8 @@ def _goal_line(claim: str, current: str, want: str) -> str:
 
 
 def render(theory_text: str, ordering: str, goals: Sequence[Dict],
-           include_notation: Optional[bool] = None, allow_strict: bool = False) -> str:
+           include_notation: Optional[bool] = None, allow_strict: bool = False,
+           template: Optional[AnswerTemplate] = None) -> str:
     head = (f"The following is a defeasible argumentation theory, evaluated under {SEMANTICS} "
             f"with {ORDERING_NAME.get(ordering, ordering)}.")
     parts: List[str] = [head, "", theory_text, ""]
@@ -80,5 +113,5 @@ def render(theory_text: str, ordering: str, goals: Sequence[Dict],
                      f"{wants}?")
     if INCLUDE_NOTATION if include_notation is None else include_notation:
         parts += ["", permitted_block(allow_strict)]
-    parts += ["", _FORMAT]
+    parts += ["", answer_format(_FORMAT, template)]
     return "\n".join(parts)

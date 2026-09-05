@@ -11,18 +11,28 @@ import inspect
 
 import pytest
 
+from arggym.core.answers import UnparseableAnswer
+from arggym.core.export import ALL_ORDERINGS, export_task
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import parse_answer, score_item
-from arggym.core.export import ALL_ORDERINGS, export_task
 from arggym.tasks import counter_argument as ca
 from arggym.tasks import formalization as fz
 
+
+def _fz_parse(line):
+    """`(operations, unreadable)`, which `parse` no longer returns.
+
+    Text that spells out no answer raises rather than scoring, so the count these
+    tests assert on comes from the exception. A caller wanting the count reads it
+    from the diagnostics; a caller wanting the answer catches nothing.
+    """
+    try:
+        return fz.parse(line), 0
+    except UnparseableAnswer as e:
+        return [], e.diagnostics["n_unparseable"]
+
 GRID = inspect.signature(export_task).parameters["levels"].default
 SEEDS = inspect.signature(export_task).parameters["seeds"].default
-
-
-def _parse(line):
-    return parse_answer(f"[answer]{line}[/answer]")
 
 
 WELL_FORMED = [
@@ -45,14 +55,14 @@ MALFORMED = [
 
 @pytest.mark.parametrize("line,kind,name", WELL_FORMED)
 def test_a_well_formed_rule_still_parses(line, kind, name):
-    p = _parse(line)
+    p = parse_answer(line)
     assert p.n_unparseable == 0, p.unparseable_examples
     assert [(o.kind, o.name) for o in p.ops] == [(kind, name)]
 
 
 @pytest.mark.parametrize("line,why", MALFORMED)
 def test_a_malformed_rule_is_counted_as_unparseable(line, why):
-    p = _parse(line)
+    p = parse_answer(line)
     assert p.ops == [], f"{why}: parsed as {[(o.kind, o.name) for o in p.ops]}"
     assert p.n_unparseable == 1, why
 
@@ -61,24 +71,24 @@ def test_a_malformed_rule_costs_the_answer_its_score():
     """The point of #19: it used to cost nothing."""
     it = ca.make_item(3, 0, "last_link_elitist")
     good = score_item(it.reference, ca.as_score_input(it))
-    assert good["score"] == pytest.approx(1.0)
-    sneaked = it.reference.replace("[/answer]", "[stricttest: a => b]\n[/answer]")
+    assert good.score == pytest.approx(1.0)
+    sneaked = it.reference + "\n[stricttest: a => b]"
     bad = score_item(sneaked, ca.as_score_input(it))
-    assert bad["score"] == 0.0
-    assert bad["reason"].startswith("unparseable_lines")
+    assert bad.score == 0.0
+    assert bad.reason.startswith("unparseable_lines")
 
 
 @pytest.mark.parametrize("line,kind,name", WELL_FORMED)
 def test_formalization_reads_a_rule_the_same_way(line, kind, name):
     """It writes its own parser and its own notation line, and they had drifted apart."""
-    ops, bad = fz.parse(f"[answer]{line}[/answer]")
+    ops, bad = _fz_parse(line)
     assert bad == 0
     assert [(o.kind, o.name) for o in ops] == [(kind, name)]
 
 
 @pytest.mark.parametrize("line,why", MALFORMED)
 def test_formalization_rejects_the_same_shapes(line, why):
-    ops, bad = fz.parse(f"[answer]{line}[/answer]")
+    ops, bad = _fz_parse(line)
     assert ops == [] and bad == 1, why
 
 
@@ -99,4 +109,4 @@ def test_the_cheap_references_are_well_formed(level, allow_strict):
             it = ca.make_item(level, s, o, allow_strict=allow_strict)
             assert it is not None
             assert parse_answer(it.reference).n_unparseable == 0, it.reference
-            assert score_item(it.reference, ca.as_score_input(it))["score"] == pytest.approx(1.0)
+            assert score_item(it.reference, ca.as_score_input(it)).score == pytest.approx(1.0)

@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import hashlib
-import itertools
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES, junctions_for
-from arggym.core.curriculum import negated_branch
-from arggym.core.invariants import (randomize_rule_names, language_enrichment, split_atoms_and_rules,
-                            minimal_subset_exact)
+from arggym.aspic.engine import Operation
+from arggym.core.answers import AnswerTemplate
+from arggym.core.curriculum import (
+    PROFILES,
+    junctions_for,
+    negated_branch,
+)
+from arggym.core.invariants import (
+    language_enrichment,
+    minimal_subset_exact,
+    randomize_rule_names,
+    split_atoms_and_rules,
+)
+from arggym.core.prompting import MINIMALITY, UNREADABLE, answer_format
 
 TASK = "preference_construction"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -108,7 +116,8 @@ class PCItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[PCItem]:
+          profile: str = "FULL",
+          template: Optional[AnswerTemplate] = None) -> Optional[PCItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pc"))
     n_claims = max(1, min(1 + (level * 8) // 15, 8))
     n_conf = max(n_claims + 1, min(n_claims + 1 + (level * 5) // 15, 10))
@@ -149,7 +158,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             _pts.add(min(depth // 2, depth - 1))
             if j_budget > n_conf and depth >= 3:
                 _pts.add(0)
-        junction_at = -1
         for j in range(depth):
             ridx += 1
             nm = f"d{ridx}"
@@ -285,11 +293,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             best = found
 
     lines = [f"[{o.kind}: {o.stronger} > {o.weaker}]" for o in best]
-    prompt = _render_prompt(render_ops(base), goals, ordering)
+    prompt = _render_prompt(render_ops(base), goals, ordering, template)
     return PCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, goals=goals,
         ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         min_directives=len(best),
         metadata={
             "n_claims": n_claims, "n_conflicts": n_conf, "chain_depth": depth,
@@ -313,7 +321,8 @@ TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both direc
             "equally preferred and settles nothing between them.")
 
 
-def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
+def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     lines = [f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
              f"with {on}.", "", theory, ""]
@@ -324,19 +333,23 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
                       for g in goals)
     verb = "makes" if len(goals) == 1 else "simultaneously makes"
     lines += ["", f"What is the minimal set of preference directives that {verb} {wants}?", "",
-              "Permitted additions: preference directives only. "
+              "Permitted additions: preference directives only, written exactly in "
+              "these forms:\n"
+              "   [prefer_rule: <rule> > <rule>]\n"
+              "   [prefer_premise: <literal> > <literal>]\n"
               "No new rules or premises may be added.",
-              "The answer must be minimal: one using more than twice the fewest directives "
-              "that work scores zero.",
+              MINIMALITY,
+              UNREADABLE + ", so write only directives.",
               TIE_NOTE, "",
-              "Answer format: one directive per line, between [answer] and [/answer]."]
+              answer_format("Answer format: one directive per line.", template)]
     return "\n".join(lines)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14) -> Optional[PCItem]:
+              tries: int = 14,
+              template: Optional[AnswerTemplate] = None) -> Optional[PCItem]:
     for k in range(tries):
-        it = build(level, seed * 61 + k, ordering, profile)
+        it = build(level, seed * 61 + k, ordering, profile, template)
         if it is not None:
             return it
     return None

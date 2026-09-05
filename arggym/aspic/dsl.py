@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
 from arggym.aspic.engine import Operation
 
 _BRACKET_RE = re.compile(r"\[\s*([a-zA-Z_-]+)(?:\s+([a-zA-Z]\w*))?\s*(?::\s*(.*?))?\s*\]", re.DOTALL)

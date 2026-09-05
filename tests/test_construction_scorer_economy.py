@@ -13,6 +13,7 @@ import pytest
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
+from arggym.core.answers import ScoreResult
 from arggym.core.scoring import build_framework, score_item
 from arggym.tasks.attack_defense import reference_ok
 
@@ -38,13 +39,13 @@ def _item(**kw):
 
 
 def _ans(*lines):
-    return "[answer]\n" + "\n".join(lines) + "\n[/answer]"
+    return "\n".join(lines)
 
 
 def test_gold_scores_one():
     r = score_item(_ans(GOLD), _item())
-    assert r["score"] == pytest.approx(1.0), r
-    assert r["diagnostics"]["illegal"] == []
+    assert r.score == pytest.approx(1.0), r
+    assert r.diagnostics["illegal"] == []
 
 
 @pytest.mark.parametrize("extra, reason", [
@@ -58,21 +59,21 @@ def test_gold_scores_one():
 ])
 def test_engine_rejected_preference_is_dropped_and_charged(extra, reason):
     r = score_item(_ans(GOLD, extra), _item())
-    assert not r["reason"].startswith("engine_rejected"), r
-    assert r["success"] is True
-    assert r["diagnostics"]["illegal"] == [reason]
-    assert len(r["diagnostics"]["rejected_detail"]) == 1
-    assert r["diagnostics"]["rejected_detail"][0]
-    assert r["diagnostics"]["n_used"] == 2
-    assert r["score"] == pytest.approx(0.75)  # 0.5 + 0.5 * (1/2)
+    assert not r.reason.startswith("engine_rejected"), r
+    assert r.success is True
+    assert r.diagnostics["illegal"] == [reason]
+    assert len(r.diagnostics["rejected_detail"]) == 1
+    assert r.diagnostics["rejected_detail"][0]
+    assert r.diagnostics["n_used"] == 2
+    assert r.score == pytest.approx(0.75)  # 0.5 + 0.5 * (1/2)
 
 
 def test_preference_may_name_the_answers_own_rule():
     item = _item(min_directives=2)
     r = score_item(_ans("[defeasible d4: c => -p]", "[prefer_rule: d1 > d4]", GOLD), item)
-    assert not r["reason"].startswith("engine_rejected"), r
-    assert r["diagnostics"]["illegal"] == []
-    assert r["success"] is True
+    assert not r.reason.startswith("engine_rejected"), r
+    assert r.diagnostics["illegal"] == []
+    assert r.success is True
 
 
 def test_engine_path_matches_from_operations():
@@ -88,52 +89,57 @@ def test_engine_path_matches_from_operations():
 
 def test_illegal_strict_rule_counts_toward_economy():
     r = score_item(_ans(GOLD, "[strict s1: c -> q]"), _item())
-    assert r["success"] is True
-    assert r["diagnostics"]["illegal"] == ["illegal_strict_rule:s1"]
-    assert r["diagnostics"]["n_used"] == 2
-    assert r["score"] == pytest.approx(0.75)
+    assert r.success is True
+    assert r.diagnostics["illegal"] == ["illegal_strict_rule:s1"]
+    assert r.diagnostics["n_used"] == 2
+    assert r.score == pytest.approx(0.75)
 
 
 @pytest.mark.parametrize("first", ["[prefer_rule: d1 > d2]", "[prefer_rule: d3 > d2]"])
 def test_bloat_is_judged_before_the_goals(first):
     # Reviewer's inputs: correct and wrong first line, same two junk lines, minimum 1.
     r = score_item(_ans(first, "[axiom: z]", "[premise: z]"), _item())
-    assert r["diagnostics"]["n_used"] == 3
-    assert r["reason"] == "bloated:3_used_vs_1_minimum"
-    assert r["score"] == 0.0
-    assert r["diagnostics"]["goals_met"] == []
+    assert r.diagnostics["n_used"] == 3
+    assert r.reason == "bloated:3_used_vs_1_minimum"
+    assert r.score == 0.0
+    assert r.diagnostics["goals_met"] == []
 
 
 def test_bloat_gate_skipped_when_minimum_unknown():
     r = score_item(_ans(GOLD, "[axiom: z]", "[premise: z]"), _item(min_directives=None))
-    assert r["reason"] == "success_but_minimum_unknown"
-    assert r["score"] == 0.5
+    assert r.reason == "success_but_minimum_unknown"
+    assert r.score == 0.5
 
 
 @pytest.mark.parametrize("rule", ["[defeasible d1: c => -p]", "[strict d1: c -> -p]"])
 def test_duplicate_rule_name_is_dropped(rule):
     item = _item(allow_strict=True)
     r = score_item(_ans(rule, GOLD), item)
-    assert r["diagnostics"]["illegal"] == ["duplicate_rule_name:d1"]
-    assert r["success"] is True
-    assert r["score"] == pytest.approx(0.75)
+    assert r.diagnostics["illegal"] == ["duplicate_rule_name:d1"]
+    assert r.success is True
+    assert r.score == pytest.approx(0.75)
 
 
 def test_rule_name_repeated_within_the_answer_is_dropped():
     item = _item(min_directives=3)
     r = score_item(_ans("[defeasible d4: c => -p]", "[defeasible d4: b => q]", GOLD), item)
-    assert r["diagnostics"]["illegal"] == ["duplicate_rule_name:d4"]
+    assert r.diagnostics["illegal"] == ["duplicate_rule_name:d4"]
 
 
 def test_all_directives_illegal_still_fires():
     r = score_item(_ans("[prefer_rule: d99 > d98]", "[axiom: y]"), _item())
-    assert r["score"] == 0.0
-    assert r["reason"] == "all_directives_illegal"
-    assert r["diagnostics"]["illegal"] == ["illegal_new_axiom:y", "rejected_preference:d99>d98"]
-    assert r["diagnostics"]["n_used"] == 2
+    assert r.score == 0.0
+    assert r.reason == "all_directives_illegal"
+    assert r.diagnostics["illegal"] == ["illegal_new_axiom:y", "rejected_preference:d99>d98"]
+    assert r.diagnostics["n_used"] == 2
+
+
+def _result(score, illegal):
+    return ScoreResult(score=score, success=score >= 0.999, reason="ok",
+                       diagnostics={"illegal": illegal})
 
 
 def test_reference_gate_requires_no_illegal_line():
-    assert reference_ok({"score": 1.0, "diagnostics": {"illegal": []}})
-    assert not reference_ok({"score": 1.0, "diagnostics": {"illegal": ["rejected_preference:d9>d8"]}})
-    assert not reference_ok({"score": 0.9, "diagnostics": {"illegal": []}})
+    assert reference_ok(_result(1.0, []))
+    assert not reference_ok(_result(1.0, ["rejected_preference:d9>d8"]))
+    assert not reference_ok(_result(0.9, []))

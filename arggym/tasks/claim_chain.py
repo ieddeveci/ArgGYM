@@ -6,12 +6,23 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import (junction_budget, JUNCTION_CAPS, PROFILES, wants_ternary,
-                            junctions_for, negated_branch)
-from arggym.core.invariants import (split_atoms_and_rules, randomize_rule_names, negation_gadget,
-                        language_enrichment)
+from arggym.aspic.engine import Operation
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
+from arggym.core.curriculum import (
+    JUNCTION_CAPS,
+    PROFILES,
+    junction_budget,
+    junctions_for,
+    negated_branch,
+    wants_ternary,
+)
+from arggym.core.invariants import (
+    language_enrichment,
+    randomize_rule_names,
+    split_atoms_and_rules,
+)
+from arggym.core.prompting import answer_format
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -109,8 +120,8 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[CCItem]:
-    rng = random.Random(stable_seed(seed, level, ordering, "cc"))
+          profile: str = "FULL",
+          template: Optional[AnswerTemplate] = None) -> Optional[CCItem]:
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
     tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)
@@ -306,11 +317,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         return None
 
     ref_lines = [render_op(o) for o in line_ops]
-    prompt = _render_prompt(render_ops(base), claim, ordering)
+    prompt = _render_prompt(render_ops(base), claim, ordering, template)
     return CCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         line_ops=line_ops, ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(ref_lines) + "\n[/answer]",
+        reference="\n".join(ref_lines),
         metadata={
             "chain_depth": depth, "n_decoys": n_decoy, "tower_height_true": tower_true,
             "decoy_defeat_points": [d["defeat_at"] for d in decoy_info],
@@ -321,18 +332,16 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(theory: str, claim: str, ordering: str) -> str:
+def _render_prompt(theory: str, claim: str, ordering: str,
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is justified.\n"
             f"Write all and only the directives that form the argumentation line justifying {claim}, "
             "in order from the premise to the claim.\n\n"
-            "Answer format: one directive per line, copied exactly as it appears above, between "
-            "[answer] and [/answer].")
-
-
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+            + answer_format("Answer format: one directive per line, copied exactly as it "
+                            "appears above.", template))
 
 
 def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:
@@ -359,27 +368,55 @@ def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:
     return ok, n_rules
 
 
-def score(answer_text: str, item: CCItem) -> Dict:
-    diag: Dict = {"n_quoted": 0, "n_gold": len(item.line_ops), "extra": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
-    quoted = re.findall(r"\[[^\]]*\]", body)
+#: What a `claim_chain` answer is: the directives of the justifying line, as the
+#: answer wrote them. The prompt asks for them "in order from the premise to the
+#: claim" and the score reads that order, so the value is a sequence and not a set.
+ClaimChainAnswer = List[str]
+
+_QUOTED = re.compile(r"\[[^\]]*\]")
+
+
+def _blank_diagnostics(item: CCItem) -> Dict:
+    """The keys every result carries, so a zero and a one have the same shape."""
+    return {"n_quoted": 0, "n_gold": len(item.line_ops), "extra": [], "missing": []}
+
+
+def parse(text: str, item: CCItem) -> ClaimChainAnswer:
+    """The directive lines an answer quotes, in the order it wrote them.
+
+    The text arrives already extracted: composing the prompt and pulling the answer
+    out of whatever came back is the harness's job, so the dataset never unwraps a
+    fence. That is what lets a caller use any convention at all -- or none, with a
+    solver that submits the value directly (`docs/dataset-contract.md` section 4).
+
+    An answer with no brackets is read a line at a time, so a solver that drops the
+    delimiters still submits something scorable. An answer that has brackets and
+    also prose between them is refused: the brackets say it meant to quote, so the
+    prose is not a second convention but text the answer did not account for.
+
+    An empty answer parses to an empty sequence. It is an answer with nothing in
+    it, not an answer that failed to arrive.
+    """
+    body = text or ""
+    quoted = _QUOTED.findall(body)
     if not quoted:
-        quoted = [l.strip() for l in body.splitlines() if l.strip()]
-    else:
-        residue = re.sub(r"\[[^\]]*\]", " ", body)
-        junk = [t for t in residue.split()
-                if t.strip(",;.-*\u2022()") and not re.fullmatch(r"\d+[.)]?", t)]
-        if junk:
-            diag["n_unparseable"] = len(junk)
-            diag["junk_tokens"] = junk[:6]
-            return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
-                    "diagnostics": diag}
+        return [line.strip() for line in body.splitlines() if line.strip()]
+    residue = _QUOTED.sub(" ", body)
+    junk = [t for t in residue.split()
+            if t.strip(",;.-*\u2022()") and not re.fullmatch(r"\d+[.)]?", t)]
+    if junk:
+        raise UnparseableAnswer(f"unparseable_tokens:{len(junk)}",
+                                {"n_unparseable": len(junk), "junk_tokens": junk[:6]})
+    return quoted
+
+
+def score_value(value: ClaimChainAnswer, item: CCItem) -> ScoreResult:
+    """Score the directives an answer submitted, whether it wrote them or a schema did."""
+    quoted = list(value)
+    diag: Dict = _blank_diagnostics(item)
     diag["n_quoted"] = len(quoted)
     if not quoted:
-        return {"score": 0.0, "reason": "empty_answer", "diagnostics": diag}
+        return ScoreResult(0.0, False, "empty_answer", diag)
 
     gold_lines = [render_op(o) for o in item.line_ops]
     gold_set, pred_set = set(gold_lines), set(quoted)
@@ -416,20 +453,40 @@ def score(answer_text: str, item: CCItem) -> Dict:
                 justifies = False
     diag["behavioural_in_theory"] = justifies
 
-    return {"score": round(f1, 4), "reason": "ok",
-            "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
-            "exact_match": pred_set == gold_set,
-            "correct_order": order_factor == 1.0,
-            "matches_reference_order": quoted == gold_lines,
-            "order_factor": round(order_factor, 4),
-            "behaviourally_justifies": justifies,
-            "diagnostics": diag}
+    # "All and only the directives" is set equality; "in order from the premise to the
+    # claim" is the order constraint. `behaviourally_justifies` is deliberately out of the
+    # conjunction: it is computed on the resolved lines only, so it holds for an answer
+    # that also carries junk (docs/dataset-contract.md, section 5).
+    exact_match = pred_set == gold_set
+    correct_order = order_factor == 1.0
+    diag.update(f1=round(f1, 4), precision=round(precision, 4), recall=round(recall, 4),
+                exact_match=exact_match, correct_order=correct_order,
+                matches_reference_order=quoted == gold_lines,
+                order_factor=round(order_factor, 4),
+                behaviourally_justifies=justifies)
+    return ScoreResult(round(f1, 4), exact_match and correct_order, "ok", diag)
+
+
+def score(answer_text: str, item: CCItem) -> ScoreResult:
+    """Score an answer written as text: read the value out of it, then score the value.
+
+    A harness scoring a whole taskset wants a row for every item, so text that spells
+    out no answer comes back as a zero rather than as an exception.
+    """
+    try:
+        value = parse(answer_text, item)
+    except UnparseableAnswer as e:
+        diag: Dict = _blank_diagnostics(item)
+        diag.update(e.diagnostics)
+        return ScoreResult(0.0, False, e.reason, diag)
+    return score_value(value, item)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14) -> Optional[CCItem]:
+              tries: int = 14,
+              template: Optional[AnswerTemplate] = None) -> Optional[CCItem]:
     for k in range(tries):
-        it = build(level, seed * 71 + k, ordering, profile)
+        it = build(level, seed * 71 + k, ordering, profile, template)
         if it is not None:
             return it
     return None

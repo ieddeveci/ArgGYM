@@ -1,0 +1,61 @@
+# The evaluated grid.
+#
+# This file is the taskset, not a convenience wrapper over one. Until now the
+# grid was a function default the CLI could not override, so a published taskset
+# was identified by "whatever the defaults were at that commit". Cite this file
+# and its taskset_hash instead.
+#
+#   uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+
+# Checked before anything is generated, so a mismatch costs seconds rather than
+# a full export. Leave a field out and the export records what it used instead.
+arggym: "2.0.0"
+pyarg: "2.0.2"
+theory_schema: 1
+
+tasks:
+  - preference_construction
+  - counter_argument
+  - counter_argument_strict
+  - attack
+  - defence
+  - attack_defense
+  - formalization
+  - status_query
+  - semantics_query
+  - perturbation
+  - claim_chain
+  - defeat_diagnosis
+
+# Five levels, spaced to give the curriculum room to separate them. Level 1 is
+# omitted: several generators treat it as a degenerate case rather than a rung.
+levels: [3, 6, 9, 12, 15]
+
+# All four set orderings. Elitist and democratic differ only where a preference
+# decides between sets with more than one element, so on eight of the twelve
+# tasks the axis is currently inert (#72). They stay in the grid because the
+# audit that measures that is only possible if both are generated.
+orderings:
+  - last_link_elitist
+  - last_link_democratic
+  - weakest_link_elitist
+  - weakest_link_democratic
+
+seeds:
+  start: 0
+  # Items required per cell. The export produces this many or fails naming the
+  # cell -- it never ships a short cell quietly. The frozen v2 taskset had a
+  # status_query L12 cell that rejected 12 of 20 seeds.
+  take: 2
+  # How far the export may look for those items. Two per cell over 40 seeds is
+  # a generous bound; a cell that needs it is a cell worth looking at.
+  scan_limit: 40
+
+# Refuse a cell that needs more than two seeds per item, so a degraded cell is a
+# decision rather than a silent property of the file.
+min_acceptance: 0.5
+
+# The only exportable profile. The axis is real -- nine tasks branch on it -- but
+# two tasks take no profile at all and only one mixes it into its seed, so a
+# non-FULL taskset would not be reproducible from its coordinates.
+profile: FULL

@@ -8,12 +8,29 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "python-argumentation==2.0.2",
-    "flask>=3.0",
     "typer>=0.12",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-xdist>=3.0"]
+# Extras are what an adopter installs. `pip install arggym` must not pull a web
+# framework on someone who only wants to score model outputs in CI (#54).
+inspector = ["flask>=3.0"]
+report = ["matplotlib>=3.8"]
+
+[dependency-groups]
+# Groups are local-only and are never published. `uv sync` installs them by
+# default, so `uv run pytest` works from a fresh clone with no flag.
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.0",
+    "ruff>=0.6",
+    # The test suite exercises the inspector, so a dev checkout needs Flask
+    # even though an adopter does not. uv has no default-extras, so this is
+    # named here rather than pulled through the extra. CI's install job checks
+    # separately that a bare install gets none of it.
+    "flask>=3.0",
+]
 
 [project.scripts]
 arggym = "arggym.cli:main"
@@ -33,4 +50,29 @@ markers = [
     "slow: full-grid cells of the end-to-end suite; run with `make test-all`",
     "families(*names): restrict an e2e test to task families",
     "modes(*names): restrict an e2e test to modes",
+]
+
+[tool.ruff]
+line-length = 100
+# The inspector embeds JavaScript in Python string literals; wrapping those
+# lines would break the markup rather than tidy it.
+extend-exclude = ["arggym/inspector.py"]
+
+[tool.ruff.lint]
+# E and F catch what a reader would call a mistake; I keeps imports ordered so a
+# merge of two branches touching the same header does not conflict on order.
+# B018 catches a statement that computes something and discards it, which is
+# what ruff's own unsafe F841 fix leaves behind when it strips an assignment
+# target: the dead work still runs and F841 can no longer see it.
+select = ["E", "F", "I", "B018"]
+ignore = [
+    # Off, and this is a debt rather than a decision: `ruff check --select E501`
+    # reports 32 lines at present. Ten of them are prompt string literals, and
+    # reflowing one risks changing a prompt byte -- which has to be a change of
+    # its own, verified against a full export diff, not a drive-by wrap.
+    "E501",
+    # `l` means "literal" throughout the generators and the engine wrapper, and
+    # reads as the domain term rather than as a stray name. Renaming 40 sites is
+    # worth doing, but not inside a change that also moves every scorer.
+    "E741",
 ]

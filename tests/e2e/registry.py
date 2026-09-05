@@ -9,10 +9,19 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
 from arggym.aspic.engine import Operation
+from arggym.core.answers import ScoreResult
 from arggym.core.scoring import score_item
-from arggym.tasks import (attack_defense, claim_chain, counter_argument, defeat_diagnosis,
-                          formalization, perturbation, preference_construction,
-                          semantics_query, status_query)
+from arggym.tasks import (
+    attack_defense,
+    claim_chain,
+    counter_argument,
+    defeat_diagnosis,
+    formalization,
+    perturbation,
+    preference_construction,
+    semantics_query,
+    status_query,
+)
 
 LABEL_MAP, CONSTRUCTION, DIAGNOSIS, CHAIN, FORMALIZATION = (
     "label_map", "construction", "diagnosis", "chain", "formalization")
@@ -29,7 +38,7 @@ class Adapter:
     family: str
     make: Callable[[int, int, str], Any]          # (level, seed, ordering) -> item | None
     reference: Callable[[Any], str]
-    score: Callable[[str, Any], Dict]
+    score: Callable[[str, Any], ScoreResult]
     theory_ops: Callable[[Any], List[Operation]]  # the theory the prompt shows
     prompt: Callable[[Any], str]
     junk_reason: str                               # UNPARSEABLE_LINES or UNPARSEABLE_TOKENS

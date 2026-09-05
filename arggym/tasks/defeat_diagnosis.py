@@ -4,14 +4,21 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import (PROFILES, junction_budget, JUNCTION_CAPS, wants_ternary,
-                            junctions_for)
-from arggym.core.curriculum import negated_branch
+from arggym.aspic.engine import Operation
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
+from arggym.core.curriculum import (
+    JUNCTION_CAPS,
+    PROFILES,
+    junction_budget,
+    junctions_for,
+    negated_branch,
+    wants_ternary,
+)
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.prompting import answer_format
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -97,7 +104,8 @@ class DDItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[DDItem]:
+          profile: str = "FULL",
+          template: Optional[AnswerTemplate] = None) -> Optional[DDItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "dd"))
     n_routes = 1 if level <= EASY_LEVELS else 3
     depth = max(2, min(2 + level // 3, 7))
@@ -120,7 +128,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     j_budget = min(3, junction_budget(level, JUNCTION_CAPS["defeat_diagnosis"]))
     j_routes = set(range(min(j_budget, n_routes))) if use_junction else set()
-    junction_at_route = -1
     for k in range(n_routes):
         kind = kind_seq[k]
         use_axiom = (level >= 4 and kind != UNDERMINE and k % 2 == 0
@@ -147,7 +154,6 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             j_here.add(depth // 2)
             if j_budget > n_routes and depth >= 5:
                 j_here.add(max(1, depth // 4))
-        junction_at = -1
         for j in range(depth):
             ridx[0] += 1
             nm = f"r_{ridx[0]}"
@@ -310,11 +316,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             parts.append(f"survives_because: {d['survives_because']}")
         lines.append("; ".join(parts))
 
-    prompt = _render_prompt(render_ops(base), claim, ordering, bool(tower))
+    prompt = _render_prompt(render_ops(base), claim, ordering, bool(tower), template)
     return DDItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         claim_status=st, diagnoses=diagnoses, ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         metadata={
             "n_routes": n_routes, "chain_depth": depth, "tower": tower,
             "n_inert_decoys": n_inert,
@@ -328,75 +334,112 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
+def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool,
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     extra = "   ...; survives_because: <rule>\n" if want_survival else ""
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is not justified.\n"
             f"State its status, and identify every point at which its support fails.\n\n"
-            "Answer format, between [answer] and [/answer]:\n"
-            "   first line: `status: overruled` or `status: undecided`\n"
-            "   then one line per failure point, as\n"
-            "   `defeated_at: <target>; defeater: <defeater>; "
-            "kind: undermine|undercut|rebut`\n" + extra)
+            + answer_format("Answer format:\n"
+                            "   first line: `status: overruled` or `status: undecided`\n"
+                            "   then one line per failure point, as\n"
+                            "   `defeated_at: <target>; defeater: <defeater>; "
+                            "kind: undermine|undercut|rebut`\n" + extra, template))
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
 _STATUS_LINE = re.compile(r"^[\W\d]*status\s*[:=]\s*(justified|overruled|undecided)", re.I | re.M)
 _FIELD = re.compile(r"(\w+)\s*[:=]\s*([^;\n]+)")
 
 
-def score(answer_text: str, item: DDItem) -> Dict:
-    diag: Dict = {"n_quoted": 0, "n_gold": len(item.diagnoses),
-                  "status_correct": False, "status_contradicted": False,
-                  "kind_contradicted": False, "extra": [], "missing": []}
-    m = _ANSWER.search(answer_text or "")
-    if m is None:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    body = m.group(1)
+#: One failure point, carrying the fields the prompt names: `defeated_at`,
+#: `defeater`, `kind`, and `survives_because` where the defeater is itself defeated.
+DiagnosisRecord = Dict[str, str]
+#: What a `defeat_diagnosis` answer is: the claim's status and its failure points.
+#: `status` is a sequence because an answer may state more than one, and an answer
+#: that states two is scored as the contradiction it is rather than as either of
+#: them; a solver writing the value directly writes one.
+DefeatDiagnosisAnswer = Dict[str, Any]
 
-    for _k in re.findall(r"kind\s*[:=]\s*([^;\n,]+)", body, flags=re.I):
-        if _k.strip().strip(",;.").lower() not in (UNDERMINE, UNDERCUT, REBUT):
-            diag["invalid_kind"] = _k.strip()
-            return {"score": 0.0, "reason": f"invalid_kind:{_k.strip()[:16]}",
-                    "diagnostics": diag}
+_KIND = re.compile(r"kind\s*[:=]\s*([^;\n,]+)", re.I)
+_RECORD_START = re.compile(r"(?=defeated_at\s*[:=])")
+
+
+def _blank_diagnostics(item: DDItem) -> Dict:
+    """The keys every result carries, so a zero and a one have the same shape."""
+    return {"n_quoted": 0, "n_gold": len(item.diagnoses),
+            "status_correct": False, "status_contradicted": False,
+            "kind_contradicted": False, "extra": [], "missing": []}
+
+
+def parse(text: str, item: DDItem) -> DefeatDiagnosisAnswer:
+    """The status an answer states and the failure points it lists, in its own order.
+
+    The text arrives already extracted: composing the prompt and pulling the answer
+    out of whatever came back is the harness's job, so the dataset never unwraps a
+    fence. That is what lets a caller use any convention at all -- or none, with a
+    solver that submits the value directly (`docs/dataset-contract.md` section 4).
+
+    A record runs from its `defeated_at` to the next one, so `survives_because` on a
+    line of its own belongs to the record above it. That reach stops at the next
+    `defeated_at`: a record naming a target but no defeater is still a record, and a
+    reason written under it is a reason about that failure point, not about the one
+    before it.
+
+    An empty answer parses to a status of nothing and no records. It is an answer
+    with nothing in it, not an answer that failed to arrive.
+    """
+    body = text or ""
+    for k in _KIND.findall(body):
+        written = k.strip()
+        if written.strip(",;.").lower() not in (UNDERMINE, UNDERCUT, REBUT):
+            raise UnparseableAnswer(f"invalid_kind:{written[:16]}",
+                                    {"invalid_kind": written})
     residue = _STATUS.sub(" ", body)
     residue = re.sub(r"(defeated_at|defeater|kind|survives_because)\s*[:=]\s*[^;\n]+",
                      " ", residue, flags=re.I)
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
     if junk:
-        diag["n_unparseable"] = len(junk)
-        diag["junk_tokens"] = junk[:6]
-        return {"score": 0.0, "reason": f"unparseable_tokens:{len(junk)}",
-                "diagnostics": diag}
+        raise UnparseableAnswer(f"unparseable_tokens:{len(junk)}",
+                                {"n_unparseable": len(junk), "junk_tokens": junk[:6]})
 
-    statuses = {s.upper() for s in _STATUS_LINE.findall(body)}
-    pred: Dict[Tuple[str, str], set] = {}
-    pred_surv = {}
-    last_key = None
-    records = re.split(r"(?=defeated_at\s*[:=])", body)
-    chunks = []
-    for rec in records:
-        if "defeated_at" in rec:
-            chunks.append(rec)
-        else:
-            chunks.extend(rec.splitlines())
-    for line in chunks:
-        if _STATUS.search(line) and "defeated_at" not in line:
+    records: List[DiagnosisRecord] = []
+    # Everything before the first `defeated_at` is the status line and whatever led
+    # up to it, so the records are the blocks after it.
+    for block in _RECORD_START.split(body)[1:]:
+        fields = {k.lower(): v.strip().strip(",;.") for k, v in _FIELD.findall(block)}
+        if "defeated_at" not in fields:
             continue
-        fields = {k.lower(): v.strip().strip(",;.") for k, v in _FIELD.findall(line)}
-        if "defeated_at" in fields and "defeater" in fields:
-            key = (fields["defeated_at"], fields["defeater"])
-            pred.setdefault(key, set()).add(fields.get("kind", "").lower())
-            last_key = key
-            if fields.get("survives_because"):
-                pred_surv[key] = fields["survives_because"].strip()
-        elif "survives_because" in fields and last_key is not None:
-            pred_surv[last_key] = fields["survives_because"].strip()
+        rec = {k: fields[k] for k in ("defeated_at", "defeater", "kind") if k in fields}
+        if fields.get("survives_because"):
+            rec["survives_because"] = fields["survives_because"]
+        records.append(rec)
+    return {"status": list(dict.fromkeys(_STATUS_LINE.findall(body))), "records": records}
+
+
+def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
+    """Score the diagnosis an answer submitted, whether it wrote it or a schema did."""
+    diag: Dict = _blank_diagnostics(item)
+    statuses = {str(s).upper() for s in value.get("status") or ()}
+    pred: Dict[Tuple[str, str], set] = {}
+    pred_surv: Dict[Tuple[str, str], str] = {}
+    for rec in value.get("records") or ():
+        # A record that names no defeater names no failure point, so it is not one
+        # of the answer's claims and nothing is scored against it.
+        if "defeated_at" not in rec or "defeater" not in rec:
+            continue
+        key = (rec["defeated_at"], rec["defeater"])
+        pred.setdefault(key, set()).add(str(rec.get("kind", "")).lower())
+        if "survives_because" in rec:
+            pred_surv[key] = rec["survives_because"]
     diag["n_quoted"] = len(pred)
+    if not statuses and not pred:
+        # An empty submission lands here too. It is an answer with nothing in it, not
+        # an answer that failed to arrive.
+        return ScoreResult(0.0, False, "empty_answer", diag)
 
     diag["status_contradicted"] = len(statuses) > 1
     status_ok = statuses == {item.claim_status}
@@ -427,19 +470,35 @@ def score(answer_text: str, item: DDItem) -> Dict:
         score_val = 0.85 * f1 + 0.15 * (1.0 if status_ok else 0.0)
     else:
         score_val = 0.60 * f1 + 0.15 * (1.0 if status_ok else 0.0) + 0.25 * surv_score
-    return {"score": round(score_val, 4), "reason": "ok",
-            "f1": round(f1, 4), "precision": round(precision, 4), "recall": round(recall, 4),
-            "status_correct": status_ok,
-            "survives_because_score": None if surv_score is None else round(surv_score, 4),
-            "exact_match": (tp == len(gold) == len(pred) and status_ok
-                            and (surv_score is None or surv_score >= 0.999)),
-            "diagnostics": diag}
+    exact_match = (tp == len(gold) == len(pred) and status_ok
+                   and (surv_score is None or surv_score >= 0.999))
+    diag.update(f1=round(f1, 4), precision=round(precision, 4), recall=round(recall, 4),
+                status_correct=status_ok,
+                survives_because_score=None if surv_score is None else round(surv_score, 4),
+                exact_match=exact_match)
+    return ScoreResult(round(score_val, 4), exact_match, "ok", diag)
+
+
+def score(answer_text: str, item: DDItem) -> ScoreResult:
+    """Score an answer written as text: read the value out of it, then score the value.
+
+    A harness scoring a whole taskset wants a row for every item, so text that spells
+    out no answer comes back as a zero rather than as an exception.
+    """
+    try:
+        value = parse(answer_text, item)
+    except UnparseableAnswer as e:
+        diag: Dict = _blank_diagnostics(item)
+        diag.update(e.diagnostics)
+        return ScoreResult(0.0, False, e.reason, diag)
+    return score_value(value, item)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14) -> Optional[DDItem]:
+              tries: int = 14,
+              template: Optional[AnswerTemplate] = None) -> Optional[DDItem]:
     for k in range(tries):
-        it = build(level, seed * 83 + k, ordering, profile)
+        it = build(level, seed * 83 + k, ordering, profile, template)
         if it is not None:
             return it
     return None

@@ -21,10 +21,6 @@ from arggym.tasks import status_query as sq
 STATUSES = ("justified", "overruled", "undecided")
 
 
-def _wrap(lines):
-    return "[answer]\n" + "\n".join(lines) + "\n[/answer]"
-
-
 def _other_status(gold_status: str) -> str:
     return next(s for s in STATUSES if s.upper() != gold_status)
 
@@ -44,10 +40,10 @@ def _sq_gold_lines(item):
 
 
 def test_sq_gold_is_exact(sq_item):
-    r = sq.score(_wrap(_sq_gold_lines(sq_item)), sq_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["contradicted"] == []
+    r = sq.score("\n".join(_sq_gold_lines(sq_item)), sq_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["contradicted"] == []
 
 
 @pytest.mark.parametrize("contradiction_first", [False, True])
@@ -57,31 +53,31 @@ def test_sq_contradiction_scores_as_one_wrong_in_either_order(sq_item, contradic
     wrong_line = f"{claim}: {_other_status(gold_status)}"
 
     one_wrong = [wrong_line if ln.startswith(f"{claim}:") else ln for ln in gold_lines]
-    expected = sq.score(_wrap(one_wrong), sq_item)["score"]
+    expected = sq.score("\n".join(one_wrong), sq_item).score
     assert expected < 1.0
 
     hedged = [wrong_line] + gold_lines if contradiction_first else gold_lines + [wrong_line]
-    r = sq.score(_wrap(hedged), sq_item)
-    assert r["reason"] == "ok"
-    assert r["score"] == expected
-    assert r["exact_match"] is False
-    assert r["diagnostics"]["contradicted"] == [claim]
+    r = sq.score("\n".join(hedged), sq_item)
+    assert r.reason == "ok"
+    assert r.score == expected
+    assert r.diagnostics["exact_match"] is False
+    assert r.diagnostics["contradicted"] == [claim]
     said = [ln.split(": ")[1].upper() for ln in hedged if ln.startswith(f"{claim}:")]
-    assert r["diagnostics"]["wrong"] == [f"{claim}:said {'/'.join(said)}, is {gold_status}"]
+    assert r.diagnostics["wrong"] == [f"{claim}:said {'/'.join(said)}, is {gold_status}"]
 
 
 def test_sq_identical_duplicate_is_not_a_contradiction(sq_item):
     gold_lines = _sq_gold_lines(sq_item)
-    r = sq.score(_wrap(gold_lines + [gold_lines[0]]), sq_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["contradicted"] == []
+    r = sq.score("\n".join(gold_lines + [gold_lines[0]]), sq_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["contradicted"] == []
 
 
 def test_sq_junk_token_still_rejected(sq_item):
-    r = sq.score(_wrap(_sq_gold_lines(sq_item) + ["blah"]), sq_item)
-    assert r["score"] == 0.0
-    assert r["reason"].startswith("unparseable_tokens:")
+    r = sq.score("\n".join(_sq_gold_lines(sq_item) + ["blah"]), sq_item)
+    assert r.score == 0.0
+    assert r.reason.startswith("unparseable_tokens:")
 
 
 # --- semantics_query ----------------------------------------------------------------------
@@ -99,10 +95,10 @@ def _smq_gold_lines(item):
 
 
 def test_smq_gold_is_exact(smq_item):
-    r = smq.score(_wrap(_smq_gold_lines(smq_item)), smq_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["contradicted"] == []
+    r = smq.score("\n".join(_smq_gold_lines(smq_item)), smq_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["contradicted"] == []
 
 
 @pytest.mark.parametrize("contradiction_first", [False, True])
@@ -113,32 +109,32 @@ def test_smq_contradiction_scores_as_one_wrong_in_either_order(smq_item, contrad
     wrong_line = f"{prefix} {_other_status(gold_status)}"
 
     one_wrong = [wrong_line if ln.startswith(prefix) else ln for ln in gold_lines]
-    expected = smq.score(_wrap(one_wrong), smq_item)["score"]
+    expected = smq.score("\n".join(one_wrong), smq_item).score
     assert expected < 1.0
 
     hedged = [wrong_line] + gold_lines if contradiction_first else gold_lines + [wrong_line]
-    r = smq.score(_wrap(hedged), smq_item)
-    assert r["reason"] == "ok"
-    assert r["score"] == expected
-    assert r["exact_match"] is False
-    assert r["diagnostics"]["contradicted"] == [f"{claim} under {sem}"]
+    r = smq.score("\n".join(hedged), smq_item)
+    assert r.reason == "ok"
+    assert r.score == expected
+    assert r.diagnostics["exact_match"] is False
+    assert r.diagnostics["contradicted"] == [f"{claim} under {sem}"]
     said = [ln[len(prefix):].strip().upper().replace(" ", "_")
             for ln in hedged if ln.startswith(prefix)]
-    assert r["diagnostics"]["wrong"] == [f"{prefix} said {'/'.join(said)}, is {gold_status}"]
+    assert r.diagnostics["wrong"] == [f"{prefix} said {'/'.join(said)}, is {gold_status}"]
 
 
 def test_smq_identical_duplicate_is_not_a_contradiction(smq_item):
     gold_lines = _smq_gold_lines(smq_item)
-    r = smq.score(_wrap(gold_lines + [gold_lines[0]]), smq_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["contradicted"] == []
+    r = smq.score("\n".join(gold_lines + [gold_lines[0]]), smq_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["contradicted"] == []
 
 
 def test_smq_junk_token_still_rejected(smq_item):
-    r = smq.score(_wrap(_smq_gold_lines(smq_item) + ["blah"]), smq_item)
-    assert r["score"] == 0.0
-    assert r["reason"].startswith("unparseable_tokens:")
+    r = smq.score("\n".join(_smq_gold_lines(smq_item) + ["blah"]), smq_item)
+    assert r.score == 0.0
+    assert r.reason.startswith("unparseable_tokens:")
 
 
 # --- perturbation -------------------------------------------------------------------------
@@ -156,10 +152,10 @@ def _pt_gold_lines(item):
 
 
 def test_pt_gold_is_exact(pt_item):
-    r = pt.score(_wrap(_pt_gold_lines(pt_item)), pt_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["contradicted"] == []
+    r = pt.score("\n".join(_pt_gold_lines(pt_item)), pt_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["contradicted"] == []
 
 
 @pytest.mark.parametrize("contradiction_first", [False, True])
@@ -169,25 +165,25 @@ def test_pt_contradiction_scores_as_one_wrong_in_either_order(pt_item, contradic
     wrong_line = f"{claim}: {_other_status(gold_status)}"
 
     one_wrong = [wrong_line if ln.startswith(f"{claim}:") else ln for ln in gold_lines]
-    expected = pt.score(_wrap(one_wrong), pt_item)["score"]
+    expected = pt.score("\n".join(one_wrong), pt_item).score
     assert expected < 1.0
 
     hedged = [wrong_line] + gold_lines if contradiction_first else gold_lines + [wrong_line]
-    r = pt.score(_wrap(hedged), pt_item)
-    assert r["reason"] == "ok"
-    assert r["score"] == expected
-    assert r["exact_match"] is False
-    assert r["diagnostics"]["contradicted"] == [claim]
-    assert r["diagnostics"]["wrong_status"] == [claim]
-    assert r["diagnostics"]["n_predicted"] == len(pt_item.gold)
+    r = pt.score("\n".join(hedged), pt_item)
+    assert r.reason == "ok"
+    assert r.score == expected
+    assert r.diagnostics["exact_match"] is False
+    assert r.diagnostics["contradicted"] == [claim]
+    assert r.diagnostics["wrong_status"] == [claim]
+    assert r.diagnostics["n_predicted"] == len(pt_item.gold)
 
 
 def test_pt_identical_duplicate_is_not_a_contradiction(pt_item):
     gold_lines = _pt_gold_lines(pt_item)
-    r = pt.score(_wrap(gold_lines + [gold_lines[0]]), pt_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["contradicted"] == []
+    r = pt.score("\n".join(gold_lines + [gold_lines[0]]), pt_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["contradicted"] == []
 
 
 # --- defeat_diagnosis ---------------------------------------------------------------------
@@ -201,9 +197,8 @@ def dd_item():
 
 
 def _dd_reference_lines(item):
-    lines = item.reference.strip().splitlines()
-    assert lines[0] == "[answer]" and lines[-1] == "[/answer]"
-    return lines[1:-1]
+    """The lines of the reference answer."""
+    return item.reference.strip().splitlines()
 
 
 def _dd_status_line(lines):
@@ -212,9 +207,9 @@ def _dd_status_line(lines):
 
 def test_dd_reference_is_exact(dd_item):
     r = dd.score(dd_item.reference, dd_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["status_contradicted"] is False
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["status_contradicted"] is False
 
 
 @pytest.mark.parametrize("contradiction_first", [False, True])
@@ -224,24 +219,24 @@ def test_dd_hedged_status_scores_as_wrong_status_in_either_order(dd_item, contra
     wrong_line = f"status: {_other_status(dd_item.claim_status)}"
 
     one_wrong = [wrong_line if ln is status_line else ln for ln in lines]
-    expected = dd.score(_wrap(one_wrong), dd_item)["score"]
+    expected = dd.score("\n".join(one_wrong), dd_item).score
     assert expected < 1.0
 
     hedged = [wrong_line] + lines if contradiction_first else lines + [wrong_line]
-    r = dd.score(_wrap(hedged), dd_item)
-    assert r["reason"] == "ok"
-    assert r["score"] == expected
-    assert r["status_correct"] is False
-    assert r["exact_match"] is False
-    assert r["diagnostics"]["status_contradicted"] is True
+    r = dd.score("\n".join(hedged), dd_item)
+    assert r.reason == "ok"
+    assert r.score == expected
+    assert r.diagnostics["status_correct"] is False
+    assert r.diagnostics["exact_match"] is False
+    assert r.diagnostics["status_contradicted"] is True
 
 
 def test_dd_identical_status_repeat_is_not_a_contradiction(dd_item):
     lines = _dd_reference_lines(dd_item)
-    r = dd.score(_wrap(lines + [_dd_status_line(lines)]), dd_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["status_contradicted"] is False
+    r = dd.score("\n".join(lines + [_dd_status_line(lines)]), dd_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["status_contradicted"] is False
 
 
 # --- case-variant and normalised keys -----------------------------------------------------
@@ -252,17 +247,18 @@ def test_sq_case_variant_hedge_is_a_contradiction(sq_item):
     claim, gold_status = next(iter(sq_item.gold.items()))
     one_wrong = [f"{claim}: {_other_status(gold_status)}" if ln.startswith(f"{claim}:") else ln
                  for ln in gold_lines]
-    expected = sq.score(_wrap(one_wrong), sq_item)["score"]
+    expected = sq.score("\n".join(one_wrong), sq_item).score
 
-    r = sq.score(_wrap(gold_lines + [f"{claim.upper()}: {_other_status(gold_status)}"]), sq_item)
-    assert r["score"] == expected < 1.0
-    assert r["diagnostics"]["contradicted"] == [claim]
+    hedge = f"{claim.upper()}: {_other_status(gold_status)}"
+    r = sq.score("\n".join(gold_lines + [hedge]), sq_item)
+    assert r.score == expected < 1.0
+    assert r.diagnostics["contradicted"] == [claim]
 
 
 def test_sq_all_uppercase_answer_scores_full(sq_item):
-    r = sq.score(_wrap([ln.upper() for ln in _sq_gold_lines(sq_item)]), sq_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
+    r = sq.score("\n".join([ln.upper() for ln in _sq_gold_lines(sq_item)]), sq_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
 
 
 def test_smq_case_variant_hedge_is_a_contradiction(smq_item):
@@ -271,12 +267,12 @@ def test_smq_case_variant_hedge_is_a_contradiction(smq_item):
     prefix = f"{claim} under {sem}:"
     one_wrong = [f"{prefix} {_other_status(gold_status)}" if ln.startswith(prefix) else ln
                  for ln in gold_lines]
-    expected = smq.score(_wrap(one_wrong), smq_item)["score"]
+    expected = smq.score("\n".join(one_wrong), smq_item).score
 
     hedge = f"{claim.upper()} under {sem.upper()}: {_other_status(gold_status)}"
-    r = smq.score(_wrap(gold_lines + [hedge]), smq_item)
-    assert r["score"] == expected < 1.0
-    assert r["diagnostics"]["contradicted"] == [f"{claim} under {sem}"]
+    r = smq.score("\n".join(gold_lines + [hedge]), smq_item)
+    assert r.score == expected < 1.0
+    assert r.diagnostics["contradicted"] == [f"{claim} under {sem}"]
 
 
 def test_smq_semantics_word_hedge_is_a_contradiction(smq_item):
@@ -285,13 +281,13 @@ def test_smq_semantics_word_hedge_is_a_contradiction(smq_item):
     prefix = f"{claim} under {sem}:"
     one_wrong = [f"{prefix} {_other_status(gold_status)}" if ln.startswith(prefix) else ln
                  for ln in gold_lines]
-    expected = smq.score(_wrap(one_wrong), smq_item)["score"]
+    expected = smq.score("\n".join(one_wrong), smq_item).score
 
     hedge = f"{claim} under {sem} semantics: {_other_status(gold_status)}"
-    r = smq.score(_wrap(gold_lines + [hedge]), smq_item)
-    assert r["reason"] == "ok"
-    assert r["score"] == expected < 1.0
-    assert r["diagnostics"]["contradicted"] == [f"{claim} under {sem}"]
+    r = smq.score("\n".join(gold_lines + [hedge]), smq_item)
+    assert r.reason == "ok"
+    assert r.score == expected < 1.0
+    assert r.diagnostics["contradicted"] == [f"{claim} under {sem}"]
 
 
 def test_pt_case_variant_hedge_is_a_contradiction(pt_item):
@@ -299,11 +295,12 @@ def test_pt_case_variant_hedge_is_a_contradiction(pt_item):
     claim, gold_status = next(iter(pt_item.gold.items()))
     one_wrong = [f"{claim}: {_other_status(gold_status)}" if ln.startswith(f"{claim}:") else ln
                  for ln in gold_lines]
-    expected = pt.score(_wrap(one_wrong), pt_item)["score"]
+    expected = pt.score("\n".join(one_wrong), pt_item).score
 
-    r = pt.score(_wrap(gold_lines + [f"{claim.upper()}: {_other_status(gold_status)}"]), pt_item)
-    assert r["score"] == expected < 1.0
-    d = r["diagnostics"]
+    hedge = f"{claim.upper()}: {_other_status(gold_status)}"
+    r = pt.score("\n".join(gold_lines + [hedge]), pt_item)
+    assert r.score == expected < 1.0
+    d = r.diagnostics
     assert d["contradicted"] == [claim]
     assert d["wrong_status"] == [claim]
     assert d["false_positives"] == []
@@ -329,18 +326,18 @@ def test_dd_kind_hedge_scores_as_one_wrong_kind(dd_item, contradiction_first):
     wrong_record = record.replace(f"kind: {kind}", f"kind: {next(k for k in KINDS if k != kind)}")
 
     one_wrong = [wrong_record if ln == record else ln for ln in lines]
-    expected = dd.score(_wrap(one_wrong), dd_item)["score"]
+    expected = dd.score("\n".join(one_wrong), dd_item).score
     assert expected < 1.0
 
     hedged = ([lines[0], wrong_record] + lines[1:] if contradiction_first
               else lines + [wrong_record])
-    r = dd.score(_wrap(hedged), dd_item)
-    assert r["reason"] == "ok"
-    assert r["score"] == expected
-    assert r["status_correct"] is True
-    assert r["exact_match"] is False
-    assert r["diagnostics"]["kind_contradicted"] is True
-    assert r["diagnostics"]["status_contradicted"] is False
+    r = dd.score("\n".join(hedged), dd_item)
+    assert r.reason == "ok"
+    assert r.score == expected
+    assert r.diagnostics["status_correct"] is True
+    assert r.diagnostics["exact_match"] is False
+    assert r.diagnostics["kind_contradicted"] is True
+    assert r.diagnostics["status_contradicted"] is False
 
 
 @pytest.mark.parametrize("value", ["justified", "correct"])
@@ -349,23 +346,24 @@ def test_dd_status_word_inside_a_record_is_not_a_status_line(dd_item, value):
     record = _dd_first_record(lines)
     if value == "correct":
         value = dd_item.claim_status.lower()
-    r = dd.score(_wrap([f"{ln}; status: {value}" if ln == record else ln for ln in lines]), dd_item)
-    assert r["score"] == 1.0
-    assert r["exact_match"] is True
-    assert r["diagnostics"]["status_contradicted"] is False
-    assert r["diagnostics"]["kind_contradicted"] is False
+    annotated = [f"{ln}; status: {value}" if ln == record else ln for ln in lines]
+    r = dd.score("\n".join(annotated), dd_item)
+    assert r.score == 1.0
+    assert r.diagnostics["exact_match"] is True
+    assert r.diagnostics["status_contradicted"] is False
+    assert r.diagnostics["kind_contradicted"] is False
 
 
 # --- early returns carry the contradiction keys ---------------------------------------------
 
 
-@pytest.mark.parametrize("answer", ["", "[answer]\nblah\n[/answer]", "[answer]\n[/answer]"])
+@pytest.mark.parametrize("answer", ["", "blah"])
 def test_early_returns_carry_contradicted_key(sq_item, smq_item, pt_item, dd_item, answer):
     for mod, item in ((sq, sq_item), (smq, smq_item), (pt, pt_item)):
         r = mod.score(answer, item)
-        assert r["reason"] != "ok"
-        assert r["diagnostics"]["contradicted"] == []
+        assert r.reason != "ok"
+        assert r.diagnostics["contradicted"] == []
     r = dd.score(answer, dd_item)
-    assert r["score"] == 0.0
-    assert r["diagnostics"]["status_contradicted"] is False
-    assert r["diagnostics"]["kind_contradicted"] is False
+    assert r.score == 0.0
+    assert r.diagnostics["status_contradicted"] is False
+    assert r.diagnostics["kind_contradicted"] is False

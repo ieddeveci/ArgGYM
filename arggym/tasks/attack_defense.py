@@ -4,19 +4,27 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-
-from arggym.structures.chains import CONFIGS, LAST_LINK, WEAKEST_LINK, reasoning_cost
-from arggym.core.invariants import randomize_rule_names, remap_text, language_enrichment
+from arggym.aspic.engine import Operation
+from arggym.core.answers import AnswerTemplate, ScoreResult
+from arggym.core.curriculum import (
+    ATTACK,
+    DEFENCE,
+    MIXED,
+    PROFILES,
+    junctions_for,
+    spec_for,
+    wants_ternary,
+)
+from arggym.core.invariants import language_enrichment, randomize_rule_names, remap_text
 from arggym.core.minimality import find_minimum, find_minimum_decomposed
-from arggym.structures.defence import (build_defence, verify_minimum as verify_defence_minimum,
-                     verify_minimum_decomposed as verify_defence_decomposed)
-from arggym.structures.interaction import build_mixed, check_interference, solve_mixed
 from arggym.core.prompting import render
-from arggym.core.curriculum import PROFILES, ATTACK, DEFENCE, MIXED, spec_for
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
-from arggym.core.scoring import score_item
+from arggym.core.scoring import score_item, subgoals_from
+from arggym.structures.chains import CONFIGS, LAST_LINK, reasoning_cost
+from arggym.structures.defence import build_defence
+from arggym.structures.defence import verify_minimum as verify_defence_minimum
+from arggym.structures.defence import verify_minimum_decomposed as verify_defence_decomposed
+from arggym.structures.interaction import build_mixed, check_interference, solve_mixed
 
 TASK = "attack_defense"
 _L = "abcdefghijklmnopqrstuvwxy"
@@ -59,16 +67,9 @@ class Item:
 
     @property
     def subgoals(self) -> List[str]:
-        out = []
-        for g in self.goals:
-            if g.get("want") != "OVERRULED":
-                continue
-            for o in self.base_ops:
-                if o.kind in ("defeasible", "strict") and o.consequent == g["claim"]:
-                    for a in (o.antecedents or ()):
-                        if a not in out:
-                            out.append(a)
-        return out
+        # Derived, so it is never written to a row: `core/rows.py` calls the
+        # same function when it scores one.
+        return subgoals_from(self.goals, self.base_ops)
 
 
 def _ops_ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
@@ -110,7 +111,8 @@ def _atoms_and_rules(ops: Sequence[Operation]) -> Tuple[set, set]:
 
 
 def build_attack_item(level: int, seed: int, ordering: str,
-                      profile: str = "FULL") -> Optional[Item]:
+                      profile: str = "FULL",
+                      template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     import random
     sp = spec_for(level, ordering, variant=seed % 5)
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
@@ -218,11 +220,11 @@ def build_attack_item(level: int, seed: int, ordering: str,
         if not dfs:
             return None
         ref_lines.append(f"[defeasible k{i+1}: {src} => -{dfs[0]['name']}]")
-    ref = remap_text("[answer]\n" + "\n".join(ref_lines) + "\n[/answer]", _rmap)
+    ref = remap_text("\n".join(ref_lines), _rmap)
 
     goals = [{"claim": target, "current": "JUSTIFIED", "want": "OVERRULED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=ATTACK,
-                prompt=render(_render_ops(base), ordering, goals),
+                prompt=render(_render_ops(base), ordering, goals, template=template),
                 theory_text=_render_ops(base), base_ops=base, goals=goals,
                 reference=ref, min_directives=mn["required_moves"],
                 metadata={
@@ -305,7 +307,8 @@ def _n_junctions(ops: Sequence[Operation]) -> int:
 
 
 def build_defence_item(level: int, seed: int, ordering: str,
-                       profile: str = "FULL") -> Optional[Item]:
+                       profile: str = "FULL",
+                       template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     n_junc = junctions_for(level, max(1, n * 4))
@@ -349,10 +352,10 @@ def build_defence_item(level: int, seed: int, ordering: str,
     for i, a in enumerate(d.attackers):
         cut = (a.rules[0] if a.rules else a.name)
         ref_lines.append(f"[defeasible z{i}_0: {src} => -{cut}]")
-    ref = remap_text("[answer]\n" + "\n".join(ref_lines) + "\n[/answer]", _rmap)
+    ref = remap_text("\n".join(ref_lines), _rmap)
     goals = [{"claim": d.target, "current": d.status(), "want": "JUSTIFIED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=DEFENCE,
-                prompt=render(_render_ops(base), ordering, goals),
+                prompt=render(_render_ops(base), ordering, goals, template=template),
                 theory_text=_render_ops(base), base_ops=base, goals=goals,
                 reference=ref, min_directives=mn["witness_moves"],
                 metadata={
@@ -374,7 +377,8 @@ def build_defence_item(level: int, seed: int, ordering: str,
 
 
 def build_mixed_item(level: int, seed: int, ordering: str,
-                     profile: str = "FULL") -> Optional[Item]:
+                     profile: str = "FULL",
+                     template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     n_atk = max(2, min(4, 2 + level // 5))
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
@@ -414,16 +418,15 @@ def build_mixed_item(level: int, seed: int, ordering: str,
             src = o.content
             break
     own = m.attack_own_rules[-1]
-    ref = "[answer]\n" + "\n".join(
+    ref = remap_text("\n".join(
         [f"[defeasible sa: {src} => -{own}]"]
         + [f"[defeasible sd{j}: {src} => -{x}]" for j, x in enumerate(m.attacker_rules)]
-    )
-    ref = remap_text(ref + "\n[/answer]", _rmap)
+    ), _rmap)
     goals = [{"claim": m.attack_target, "current": "JUSTIFIED", "want": "OVERRULED"},
              {"claim": m.defence_target, "current": m.status(m.defence_target),
               "want": "JUSTIFIED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=MIXED,
-                prompt=render(_render_ops(base), ordering, goals),
+                prompt=render(_render_ops(base), ordering, goals, template=template),
                 theory_text=_render_ops(base), base_ops=base, goals=goals,
                 reference=ref, min_directives=sol["n_directives"],
                 metadata={
@@ -433,8 +436,6 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                     "junction_budget": n_junc, "n_junctions": _n_junctions(base),
                     "branch_depth": depth, "stem_depth": stem,
                     "n_decoy_strict": n_ds, "shuffled_presentation": True, "profile": profile,
-                    "minimality_proven": sol.get("all_necessary", False),
-                    "minimality_method": "interaction_all_necessary",
                     "interferes": inter["interferes"],
                     "naive_attack_sabotages_defence":
                         inter.get("naive_B") == "OVERRULED",
@@ -446,8 +447,8 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     return item
 
 
-def reference_ok(result: Dict) -> bool:
-    return result["score"] >= 0.999 and not result["diagnostics"]["illegal"]
+def reference_ok(result: ScoreResult) -> bool:
+    return result.score >= 0.999 and not result.diagnostics["illegal"]
 
 
 MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: build_mixed_item}
@@ -455,14 +456,15 @@ MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               mode: Optional[str] = None, profile: str = "FULL",
-              tries: int = 12) -> Optional[Item]:
+              tries: int = 12,
+              template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     if mode is None:
         mode = spec_for(level, ordering, variant=seed % 5).mode
     fn = MODE_BUILDERS.get(mode)
     if fn is None:
         return None
     for k in range(tries):
-        it = fn(level, seed * 31 + k, ordering, profile)
+        it = fn(level, seed * 31 + k, ordering, profile, template)
         if it is not None:
             return it
     return None

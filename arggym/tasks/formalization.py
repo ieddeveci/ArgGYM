@@ -6,16 +6,36 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.scoring import ARROW
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, PROFILES
-from arggym.core.nlforms import (AXIOM, DEFEASIBLE, FORWARD_CONNECTIVES, LINE_TRANSITIONS,
-                          NEGATED_AXIOM, NEGATED_LITERAL, NEGATED_PREMISE, REBUT_RULE,
-                          STRICT_EXCLUSION, STRICT_FROM_NEGATION,
-                          JUNCTION_DEFEASIBLE, JUNCTION_STRICT,
-                     NEW_TOPIC, OBJECTION_CONNECTIVES, OPENERS, PREFER_PREMISE, PREFER_RULE,
-                     PREMISE, RULE_ANAPHORA, RULE_REFERENCE, STRICT, UNDERCUT)
+from arggym.aspic.engine import Operation
+from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
+from arggym.core.curriculum import JUNCTION_CAPS, PROFILES, junction_budget
+from arggym.core.nlforms import (
+    AXIOM,
+    DEFEASIBLE,
+    FORWARD_CONNECTIVES,
+    JUNCTION_DEFEASIBLE,
+    JUNCTION_STRICT,
+    LINE_TRANSITIONS,
+    NEGATED_AXIOM,
+    NEGATED_LITERAL,
+    NEGATED_PREMISE,
+    NEW_TOPIC,
+    OBJECTION_CONNECTIVES,
+    OPENERS,
+    PREFER_PREMISE,
+    PREFER_RULE,
+    PREMISE,
+    REBUT_RULE,
+    RULE_ANAPHORA,
+    RULE_REFERENCE,
+    STRICT,
+    STRICT_EXCLUSION,
+    STRICT_FROM_NEGATION,
+    UNDERCUT,
+)
+from arggym.core.prompting import answer_format
+from arggym.core.scoring import parse_answer
 
 TASK = "formalization"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -146,7 +166,8 @@ class _Cycler:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[FItem]:
+          profile: str = "FULL",
+          template: Optional[AnswerTemplate] = None) -> Optional[FItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
     lo = 3 + int((level - 1) * (40 - 3) / 14)
@@ -345,10 +366,10 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     nl = " ".join(sentences)
     concl = "; ".join(f"{l} is {gold[l].lower()}" for l in queried)
-    prompt = _render_prompt(nl, concl, ordering, queried)
+    prompt = _render_prompt(nl, concl, ordering, queried, template)
     return FItem(
         prompt=prompt, nl_text=nl, reference_ops=base,
-        reference="[answer]\n" + "\n".join(render_op(o) for o in base) + "\n[/answer]",
+        reference="\n".join(render_op(o) for o in base),
         queried=queried, gold_status=gold, ordering=ordering, level=level,
         metadata={
             "n_directives": len(base), "n_units": n_units,
@@ -362,7 +383,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -> str:
+def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str],
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following argumentation is described in words. Formalize it as an ASPIC+ theory, "
             f"to be evaluated under grounded semantics with {on}.\n\n{nl}\n\n"
@@ -371,70 +393,58 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str]) -
             "[prefer_rule: r1 > r2], [prefer_premise: x > y]. Negation is written -x. "
             "Rule names are yours to choose: a name starts with a letter and continues with "
             "letters, digits or underscores, and is separated from the kind by a space.\n\n"
-            "Answer format: one directive per line, between [answer] and [/answer].")
+            + answer_format("Answer format: one directive per line.", template))
 
 
-_ANSWER = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
-_P = re.compile(r"^\[(premise|axiom):\s*(-?\w+)\]$")
-# The same shape the shared scorer uses: a name that starts with a letter, and the arrow
-# that kind uses. Written `[\w]+` with either arrow, it accepted `_x` and `1n` as names and
-# took a strict rule written with the defeasible arrow -- while the prompt beside it says
-# a name starts with a letter and names the arrow per kind (#19, #20).
-_R = re.compile(r"^\[(defeasible|strict)\s+([A-Za-z]\w*)\s*:\s*(.+?)\s*(=>|->)\s*(-?\w+)\]$")
-_F = re.compile(r"^\[prefer_(rule|premise):\s*(-?\w+)\s*>\s*(-?\w+)\]$")
+def parse(text: str, item: Optional[FItem] = None) -> List[Operation]:
+    """The theory an answer submits, as values. One DSL, one parser.
+
+    A solver emitting operations directly hands them to `score_value` and never
+    writes a directive (`docs/dataset-contract.md` section 4). `item` is accepted so
+    every task parses through the same signature; formalization needs nothing from it.
+
+    This module carried its own copy of the three directive patterns and the same
+    unit-and-stray scan, and the copy drifted. It read an atom as `-?\\w+` where the
+    scorer reads `-?[A-Za-z]\\w*`, so `[premise: 9x]` and `[defeasible r1: p => _x]`
+    parsed here and were unparseable lines in every construction task; it required
+    `premise:` with no space where the scorer allows one; and it kept an empty
+    antecedent that the scorer rejects. Generated atoms match `^[a-z]{2}\\d`, so the
+    stricter class is the one every theory is written in, and a second definition of
+    the DSL is how the two fell out of step in the first place.
+    """
+    p = parse_answer(text)
+    if p.n_unparseable:
+        raise UnparseableAnswer(f"unparseable_lines:{p.n_unparseable}",
+                                {"n_parsed": len(p.ops),
+                                 "n_unparseable": p.n_unparseable})
+    return p.ops
 
 
-def parse(text: str) -> Tuple[List[Operation], int]:
-    m = _ANSWER.search(text or "")
-    if m is None:
-        return [], -1
-    ops, bad = [], 0
-    body = m.group(1)
-    units = re.findall(r"\[[^\]]*\]", body)
-    leftover = re.sub(r"\[[^\]]*\]", " ", body)
-    stray = [t for t in leftover.split()
-             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
-    for raw in units + stray:
-        line = raw.strip()
-        if not line:
-            continue
-        mm = _P.match(line)
-        if mm:
-            ops.append(Operation(kind=mm.group(1), content=mm.group(2)))
-            continue
-        mm = _R.match(line)
-        if mm and mm.group(4) == ARROW[mm.group(1)]:
-            ops.append(Operation(kind=mm.group(1), name=mm.group(2),
-                                 antecedents=tuple(a.strip() for a in mm.group(3).split("AND")),
-                                 consequent=mm.group(5)))
-            continue
-        mm = _F.match(line)
-        if mm:
-            ops.append(Operation(kind="prefer_" + mm.group(1), stronger=mm.group(2),
-                                 weaker=mm.group(3)))
-            continue
-        bad += 1
-    return ops, bad
+def score(answer_text: str, item: FItem) -> ScoreResult:
+    """`score_value(parse(text, item), item)`, with a parse failure turned into a row."""
+    try:
+        ops = parse(answer_text, item)
+    except UnparseableAnswer as e:
+        diag: Dict = {"n_parsed": 0, "n_unparseable": 0, "behavioural": None,
+                      "gold_status": item.gold_status}
+        diag.update(e.diagnostics)
+        return ScoreResult(0.0, False, e.reason, diag)
+    return score_value(ops, item)
 
 
-def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
-    diag: Dict = {"n_parsed": 0, "n_unparseable": 0, "behavioural": None,
+def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
+    ops = list(ops)
+    diag: Dict = {"n_parsed": len(ops), "n_unparseable": 0, "behavioural": None,
                   "gold_status": item.gold_status}
-    ops, bad = parse(answer_text)
-    if bad < 0:
-        return {"score": 0.0, "reason": "no_answer_region", "diagnostics": diag}
-    diag["n_parsed"], diag["n_unparseable"] = len(ops), bad
-    if strict_parse and bad:
-        return {"score": 0.0, "reason": f"unparseable_lines:{bad}", "diagnostics": diag}
     if not ops:
-        return {"score": 0.0, "reason": "no_directives", "diagnostics": diag}
+        return ScoreResult(0.0, False, "no_directives", diag)
 
     ordered = [o for o in ops if o.kind in ("premise", "axiom")] + \
               [o for o in ops if o.kind in ("defeasible", "strict")] + \
               [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
     got = status_map(ordered, item.queried, item.ordering)
     if not got:
-        return {"score": 0.0, "reason": "engine_rejected", "diagnostics": diag}
+        return ScoreResult(0.0, False, "engine_rejected", diag)
     gold_pairs = {(l, item.gold_status[l]) for l in item.queried}
     pred_pairs = {(l, got[l]) for l in item.queried if l in got and got[l] != "UNSATISFIABLE"}
     tp = len(gold_pairs & pred_pairs)
@@ -479,20 +489,25 @@ def score(answer_text: str, item: FItem, strict_parse: bool = True) -> Dict:
         total = round(0.4 * behavioural + 0.6 * shape, 4)
     else:
         total = round(0.25 * behavioural + 0.35 * shape + 0.40 * type_score, 4)
-    return {"score": total, "reason": "ok",
-            "directives_f1": round(shape, 4),
-            "directives_correct": inter, "directives_gold": sum(gset.values()),
-            "directives_written": sum(pset.values()),
-            "type_score": None if type_score is None else round(type_score, 4),
-            "behavioural": round(behavioural, 4), "shape_f1": round(shape, 4),
-            "exact_behaviour": behavioural >= 0.999, "diagnostics": diag}
+    # Success is behavioural equivalence alone. The prompt states its own success
+    # condition behaviourally ("Under a correct formalization: ..."), so a theory that
+    # reproduces every queried status is what was asked for, whatever names and groupings
+    # it used; requiring shape_f1 == 1.0 would demand the reference's exact directive
+    # multiset (docs/dataset-contract.md, section 5).
+    exact_behaviour = behavioural >= 0.999
+    diag.update(directives_f1=round(shape, 4), directives_correct=inter,
+                directives_gold=sum(gset.values()), directives_written=sum(pset.values()),
+                type_score=None if type_score is None else round(type_score, 4),
+                shape_f1=round(shape, 4), exact_behaviour=exact_behaviour)
+    return ScoreResult(total, exact_behaviour, "ok", diag)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               profile: str = "FULL",
-              tries: int = 16) -> Optional[FItem]:
+              tries: int = 16,
+              template: Optional[AnswerTemplate] = None) -> Optional[FItem]:
     for k in range(tries):
-        it = build(level, seed * 89 + k, ordering, profile=profile)
+        it = build(level, seed * 89 + k, ordering, profile=profile, template=template)
         if it is not None:
             return it
     return None

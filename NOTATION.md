@@ -118,55 +118,54 @@ definition.
 
 ## 6. Answer formats
 
-Every answer goes between `[answer]` and `[/answer]`. Whitespace, blank lines, bullets and numbering
-are ignored; content is what is parsed.
+The shapes below are what an answer says. Where it goes is the harness's choice: the question
+states what a legal answer must contain and stops there, so a fence, a JSON schema, a tool call or
+a solver that returns the answer directly all work (`docs/dataset-contract.md` section 1).
+Whitespace, blank lines, bullets and numbering are ignored; content is what is parsed. A solver
+that produces the answer as a value rather than as text can submit it with `score_value` and skip
+this section entirely.
 
 **Status queries** -- one line per claim.
 ```
-[answer]
 ab1: justified
 cd2: undecided
-[/answer]
 ```
 
 **Semantics queries** -- one line per claim-and-semantics pair.
 ```
-[answer]
 ab1 under grounded: undecided
 ab1 under sceptical preferred: justified
-[/answer]
 ```
 
 **Directive answers** (attack, defence, counter-argument, preference construction) -- one directive per
 line, in the DSL of section 1.
 ```
-[answer]
 [premise: -ab1]
 [prefer_premise: -ab1 > ab1]
 [defeasible z1: cd2 => -r4]
-[/answer]
 ```
 
 Constraints on directive answers:
+* every rule needs a name no rule in the theory and no earlier answer line has used
 * rule antecedents must be literals ALREADY present in the theory
 * a new premise is permitted only as the negation of an ordinary premise already present
-* strict rules are not permitted, except in tasks that say otherwise
+* no new axioms; no strict rules, except in the tasks that say otherwise
 * the target claim may not simply be asserted
-* answers much longer than necessary are rejected: the task asks for a MINIMAL set
+* the answer must be minimal: one using more than twice the fewest directives that work scores
+  zero, and one directive that cannot be read at all scores the whole answer zero
 
 **Extraction answers** (claim chain) -- the directives forming the line, copied exactly, in order from
 premise to claim.
 
 **Diagnosis answers** (defeat diagnosis) -- a status line, then one line per failure point.
 ```
-[answer]
 status: overruled
 defeated_at: <target>; defeater: <defeater>; kind: undermine|undercut|rebut
 defeated_at: <target>; defeater: <defeater>; kind: undercut; survives_because: <rule>
-[/answer]
 ```
 `defeated_at` is the CLAIM attacked for undermine and rebut, and the RULE switched off for undercut.
-`survives_because` names the rule that attacks that defeater and is itself defeated.
+`survives_because` names the rule that attacks that defeater and is itself defeated; a question asks
+for it only where the item has one.
 
 **Formalization answers** -- the full theory in the DSL of section 1. Rule names are your own choice
 and are not scored; structure and directive types are.

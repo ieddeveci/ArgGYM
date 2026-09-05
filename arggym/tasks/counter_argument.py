@@ -5,14 +5,23 @@ import random
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from arggym.aspic.engine import Operation
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.curriculum import junction_budget, JUNCTION_CAPS, wants_ternary, junctions_for
-from arggym.core.curriculum import negated_branch
-from arggym.core.prompting import permitted_block
-from arggym.core.invariants import (dedupe_parallel, minimal_subset_exact, assert_irredundant,
-                        randomize_rule_names, remap_text, language_enrichment,
-                        split_atoms_and_rules)
+from arggym.aspic.engine import Operation
+from arggym.core.answers import AnswerTemplate
+from arggym.core.curriculum import (
+    junctions_for,
+    negated_branch,
+    wants_ternary,
+)
+from arggym.core.invariants import (
+    assert_irredundant,
+    dedupe_parallel,
+    language_enrichment,
+    minimal_subset_exact,
+    randomize_rule_names,
+    split_atoms_and_rules,
+)
+from arggym.core.prompting import answer_format, permitted_block
 
 TASK = "counter_argument"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -105,9 +114,21 @@ class CAItem:
     seed_lit: str
     metadata: Dict = field(default_factory=dict)
 
+    @property
+    def goals(self) -> List[Dict[str, str]]:
+        """What the prompt asks for, in the shape every other task states it.
+
+        The question names both halves -- make -target justified and target
+        overruled -- so the pair is the task's goals rather than a scorer's
+        private restatement of them.
+        """
+        return [{"claim": "-" + self.target, "want": "JUSTIFIED"},
+                {"claim": self.target, "want": "OVERRULED"}]
+
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          allow_strict: bool = False) -> Optional[CAItem]:
+          allow_strict: bool = False,
+          template: Optional[AnswerTemplate] = None) -> Optional[CAItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
     n_chain = max(1, min(1 + (level * 5) // 15, 6))
     depth = max(2, min(2 + (level * 3) // 15, 5))
@@ -389,11 +410,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             ref_ops, lines = cand_ops, cand_lines
             break
 
-    prompt = _render_prompt(render_ops(base), target, ordering, allow_strict)
+    prompt = _render_prompt(render_ops(base), target, ordering, allow_strict, template)
     return CAItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, target=target,
         ordering=ordering, level=level,
-        reference="[answer]\n" + "\n".join(lines) + "\n[/answer]",
+        reference="\n".join(lines),
         min_directives=len(lines), seed_lit=seed_lit,
         metadata={
             "allow_strict": allow_strict, "n_axiom_strict_chains": n_axiom_strict,
@@ -414,7 +435,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 
 def _render_prompt(theory: str, target: str, ordering: str,
-                   allow_strict: bool = False) -> str:
+                   allow_strict: bool = False,
+                   template: Optional[AnswerTemplate] = None) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -422,21 +444,21 @@ def _render_prompt(theory: str, target: str, ordering: str,
             f"What is the minimal set of directives that makes -{target} justified "
             f"and {target} overruled?\n\n"
             f"{permitted_block(allow_strict)}\n\n"
-            "Answer format: one directive per line, between [answer] and [/answer].")
+            + answer_format("Answer format: one directive per line.", template))
 
 
 def as_score_input(it: "CAItem") -> Dict:
     return {"base_ops": it.base_ops, "ordering": it.ordering,
-            "goals": [{"claim": "-" + it.target, "want": "JUSTIFIED"},
-                      {"claim": it.target, "want": "OVERRULED"}],
+            "goals": it.goals,
             "min_directives": it.min_directives,
             "allow_strict": it.metadata.get("allow_strict", False)}
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              tries: int = 14, allow_strict: bool = False) -> Optional[CAItem]:
+              tries: int = 14, allow_strict: bool = False,
+              template: Optional[AnswerTemplate] = None) -> Optional[CAItem]:
     for k in range(tries):
-        it = build(level, seed * 53 + k, ordering, allow_strict)
+        it = build(level, seed * 53 + k, ordering, allow_strict, template)
         if it is not None:
             return it
     return None

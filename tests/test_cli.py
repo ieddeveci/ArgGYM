@@ -1,91 +1,74 @@
-"""The CLI wiring: command names, and the paths export writes to.
+"""The CLI wiring: which commands exist, and what they refuse.
 
-Generation itself is covered by test_smoke; here export_task is stubbed out so these stay fast.
+Generation itself is covered by test_smoke; the freeze path by
+test_a_thin_cell_is_a_finding_not_a_setting.
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+import json
 
-import pytest
 from typer.testing import CliRunner
 
 from arggym.cli import app
+from arggym.core import registry
 
 runner = CliRunner()
 
 
-@pytest.fixture
-def written():
-    """Capture (task, path) pairs instead of generating anything."""
-    calls = []
-    with patch("arggym.core.export.export_task",
-               lambda path, task, allow_missing=False: calls.append((task, path))):
-        yield calls
-
-
-def test_tasks_lists_every_exportable_task():
-    from arggym.core import export
-
+def test_tasks_lists_every_registered_task():
     result = runner.invoke(app, ["tasks"])
     assert result.exit_code == 0
-    assert result.output.split() == sorted(export._EXPORTABLE)
+    assert result.output.split() == list(registry.task_names())
 
 
-def test_export_defaults_to_data_dir(written):
-    assert runner.invoke(app, ["export", "status_query"]).exit_code == 0
-    assert written == [("status_query", "data/status_query.jsonl")]
+def test_freeze_writes_a_taskset_from_a_spec(tmp_path):
+    out = tmp_path / "t.jsonl"
+    result = runner.invoke(app, ["freeze", "-c", "tests/data/one-cheap-cell.yaml",
+                                 "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    lines = out.read_text().splitlines()
+    assert "__manifest__" in json.loads(lines[0])
+    assert len(lines) == 13  # manifest plus 6 cells x 2 items
 
 
-def test_export_honours_an_explicit_path(written):
-    assert runner.invoke(app, ["export", "status_query", "out.jsonl"]).exit_code == 0
-    assert written == [("status_query", "out.jsonl")]
-
-
-def test_export_all_covers_every_task_under_one_directory(written):
-    from arggym.core import export
-
-    assert runner.invoke(app, ["export-all", "somewhere"]).exit_code == 0
-    assert [t for t, _ in written] == sorted(export._EXPORTABLE)
-    assert all(p.startswith("somewhere/") for _, p in written)
-
-
-def test_unknown_task_is_rejected():
-    """Not stubbed: the rejection lives in export_task, and it fires before any generation."""
-    result = runner.invoke(app, ["export", "bogus"])
+def test_a_spec_naming_an_unknown_task_is_rejected(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"tasks": ["bogus"], "levels": [3],
+                               "orderings": ["last_link_elitist"]}))
+    result = runner.invoke(app, ["freeze", "-c", str(bad), "-o", str(tmp_path / "x.jsonl")])
     assert result.exit_code != 0
-    assert "unknown task bogus" in str(result.exception) + result.output
+    assert "unknown task" in str(result.exception) + result.output
 
 
-def test_gates_report_the_missing_validation_package():
-    result = runner.invoke(app, ["gates"])
-    assert result.exit_code == 1
-    assert "validation" in result.output
-
-
-def test_allow_missing_is_passed_through():
-    seen = []
-    with patch("arggym.core.export.export_task",
-               lambda path, task, allow_missing=False: seen.append(allow_missing)):
-        assert runner.invoke(app, ["export", "status_query", "--allow-missing"]).exit_code == 0
-        assert runner.invoke(app, ["export", "status_query"]).exit_code == 0
-        assert runner.invoke(app, ["export-all", "somewhere", "--allow-missing"]).exit_code == 0
-    n = len(seen)
-    assert seen[:2] == [True, False] and all(seen[2:]) and n > 2
-
-
-def test_export_all_attempts_every_task_and_fails_at_the_end():
-    """A task with missing cells must not stop the others, but must make the command fail."""
-    from arggym.core import export
-
-    attempted = []
-
-    def stub(path, task, allow_missing=False):
-        attempted.append(task)
-        if task == "status_query":
-            raise SystemExit(f"{task}: 2 of 20 cells returned no item")
-
-    with patch("arggym.core.export.export_task", stub):
-        result = runner.invoke(app, ["export-all", "somewhere"])
-    assert result.exit_code == 1
-    assert attempted == sorted(export._EXPORTABLE)
+def test_floors_reports_per_task(tmp_path):
+    out = tmp_path / "t.jsonl"
+    assert runner.invoke(app, ["freeze", "-c", "tests/data/one-cheap-cell.yaml",
+                               "-o", str(out)]).exit_code == 0
+    result = runner.invoke(app, ["floors", str(out)])
+    assert result.exit_code == 0
     assert "status_query" in result.output
+    assert "claim_chain" in result.output
+
+
+def test_the_cli_offers_no_command_it_cannot_run():
+    # `gates` and `gate` imported a `validation` package that is not in the repo,
+    # so a fresh clone met two commands that could only fail (#52).
+    #
+    # `export` and `export-all` are gone for a different reason: they wrote
+    # `goals`, `min_directives` and the raw statistics blob at the top level of
+    # every row, so a taskset written that way leaked the answer size. `freeze`
+    # puts all of it under `metadata.gold`, and is the only way to write one now.
+    # Read the commands off the app rather than out of its rendered help. Help is
+    # drawn by rich, which picks its box characters from the terminal's width,
+    # encoding and colour support, so a test that scrapes those characters is
+    # testing the terminal. This one passed locally and found no commands at all
+    # on CI, where the same help renders without them.
+    names = {c.name or c.callback.__name__.replace("_", "-")
+             for c in app.registered_commands}
+    assert names == {"tasks", "freeze", "floors", "inspect"}, names
+    # Offering a command means it runs. Each one loads its own imports lazily, so
+    # `--help` is what proves the module behind it is importable at all.
+    for name in sorted(names):
+        assert runner.invoke(app, [name, "--help"]).exit_code == 0, name
+    for gone in (["gates"], ["export", "status_query"], ["export-all", "somewhere"]):
+        assert runner.invoke(app, gone).exit_code != 0

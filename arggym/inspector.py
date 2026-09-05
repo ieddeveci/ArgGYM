@@ -14,6 +14,7 @@ from arggym.tasks import defeat_diagnosis as defeatdiag
 from arggym.tasks import formalization as formalize
 from arggym.tasks import status_query as statusquery
 from arggym.tasks import semantics_query as semquery
+from arggym.core.answers import extract_answer
 from arggym.core.scoring import score_item
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK, describe, spec_for
 
@@ -181,16 +182,20 @@ PAGE = """
   <button class="sec" onclick="fillRef()">Fill reference answer</button>
   <div class="card" style="margin-top:16px"><h3>Level spec</h3><div class="desc" id="spec">&mdash;</div></div>
   <div class="card"><h3>Scoring</h3><div class="desc">
-    score = 0.5 &times; success + 0.5 &times; efficiency.<br>
+    Construction tasks: score = 0.5 &times; success + 0.5 &times; efficiency,<br>
     efficiency = verified minimum / directives used.<br>
-    Strict parsing: any malformed line scores 0.
+    Query tasks score their own way; each reports its own diagnostics.<br>
+    Success is the task's own bar, not score = 1.<br>
+    Strict parsing: any malformed line scores 0.<br>
+    Paste an answer, or a whole completion between &lt;answer&gt; and &lt;/answer&gt;:<br>
+    this page extracts it, as an evaluation harness would.
   </div></div>
 </aside>
 <section>
   <div id="status"></div>
   <div class="card"><h3>Question Prompt</h3><pre id="prompt">generate an item&hellip;</pre></div>
   <div class="card"><h3>Answer</h3>
-    <textarea id="ans" rows="7" placeholder="[answer]&#10;...&#10;[/answer]"></textarea>
+    <textarea id="ans" rows="7" placeholder="one directive per line"></textarea>
     <button onclick="grade()">Grade</button><div id="grade"></div></div>
   <div class="card"><h3>Theory structure</h3>
     <div class="row"><button onclick="toggleGraph()">show / hide</button>
@@ -265,11 +270,12 @@ async function grade(){
   if(!d.ok){document.getElementById('grade').innerHTML=chip(d.error,'bad');return}
   const g=d.result, dg=g.diagnostics||{};
   let h=chip('score '+g.score.toFixed(3), g.score>=0.999?'ok':(g.score>0?'warn':'bad'))
+       +chip(g.success?'success':'not success', g.success?'ok':'bad')
        +chip(g.reason, g.reason==='ok'?'ok':'bad');
-  if(g.efficiency!==undefined) h+=chip('efficiency '+g.efficiency.toFixed(3),'neu');
-  if(g.precision!==undefined) h+=chip('P '+g.precision.toFixed(2)+' R '+g.recall.toFixed(2),'neu');
-  if(g.exact_match!==undefined) h+=chip(g.exact_match?'exact match':'not exact', g.exact_match?'ok':'warn');
-  if(g.order_factor!==undefined) h+=chip(g.correct_order?'premise to claim':'out of order', g.correct_order?'ok':'bad');
+  if(dg.efficiency!==undefined) h+=chip('efficiency '+dg.efficiency.toFixed(3),'neu');
+  if(dg.precision!==undefined) h+=chip('P '+dg.precision.toFixed(2)+' R '+dg.recall.toFixed(2),'neu');
+  if(dg.exact_match!==undefined) h+=chip(dg.exact_match?'exact match':'not exact', dg.exact_match?'ok':'warn');
+  if(dg.order_factor!==undefined) h+=chip(dg.correct_order?'premise to claim':'out of order', dg.correct_order?'ok':'bad');
   h+='<table><tr><th>diagnostic</th><th>value</th></tr>';
   ['n_lines','n_unparseable','n_used','minimum','n_predicted','n_gold',
    'n_survivor_included','n_wrong_status','n_contradicted','n_missed','n_spurious','n_quoted','n_gold',
@@ -312,7 +318,7 @@ def api_generate():
         ref = semquery.score(sq.reference, sq)
         return jsonify({"ok": True, "token": token, "task": semquery.TASK, "mode": SEMQUERY,
                         "level": sq.level, "ordering": sq.ordering, "prompt": sq.prompt,
-                        "reference": sq.reference, "ref_score": ref["score"],
+                        "reference": sq.reference, "ref_score": ref.score,
                         "min_directives": sq.metadata["n_queries"],
                         "goals": [{"claim": f"{c} under {s}", "current": "-",
                                    "want": sq.gold[(c, s)]} for c, s in sq.queries],
@@ -335,7 +341,7 @@ def api_generate():
         ref = statusquery.score(sq.reference, sq)
         return jsonify({"ok": True, "token": token, "task": statusquery.TASK, "mode": STATUSQUERY,
                         "level": sq.level, "ordering": sq.ordering, "prompt": sq.prompt,
-                        "reference": sq.reference, "ref_score": ref["score"],
+                        "reference": sq.reference, "ref_score": ref.score,
                         "min_directives": sq.metadata["n_queried"],
                         "goals": [{"claim": c, "current": "-", "want": sq.gold[c]}
                                   for c in sq.queried],
@@ -358,7 +364,7 @@ def api_generate():
         ref = formalize.score(fi.reference, fi)
         return jsonify({"ok": True, "token": token, "task": formalize.TASK, "mode": FORMALIZE,
                         "level": fi.level, "ordering": fi.ordering, "prompt": fi.prompt,
-                        "reference": fi.reference, "ref_score": ref["score"],
+                        "reference": fi.reference, "ref_score": ref.score,
                         "min_directives": fi.metadata["n_directives"],
                         "goals": [{"claim": l, "current": "-", "want": fi.gold_status[l]}
                                   for l in fi.queried],
@@ -381,7 +387,7 @@ def api_generate():
         ref = defeatdiag.score(dd.reference, dd)
         return jsonify({"ok": True, "token": token, "task": defeatdiag.TASK, "mode": DEFEATDIAG,
                         "level": dd.level, "ordering": dd.ordering, "prompt": dd.prompt,
-                        "reference": dd.reference, "ref_score": ref["score"],
+                        "reference": dd.reference, "ref_score": ref.score,
                         "min_directives": len(dd.diagnoses),
                         "goals": [{"claim": dd.claim, "current": dd.claim_status.lower(),
                                    "want": "diagnose every failure"}],
@@ -403,7 +409,7 @@ def api_generate():
         ref = claimchain.score(cc.reference, cc)
         return jsonify({"ok": True, "token": token, "task": claimchain.TASK, "mode": CLAIMCHAIN,
                         "level": cc.level, "ordering": cc.ordering, "prompt": cc.prompt,
-                        "reference": cc.reference, "ref_score": ref["score"],
+                        "reference": cc.reference, "ref_score": ref.score,
                         "min_directives": cc.metadata["line_length"],
                         "goals": [{"claim": cc.claim, "current": "justified",
                                    "want": "trace the line"}],
@@ -426,7 +432,7 @@ def api_generate():
         ref = score_item(pc.reference, pc.as_score_input())
         return jsonify({"ok": True, "token": token, "task": prefcon.TASK, "mode": PREFCON,
                         "level": pc.level, "ordering": pc.ordering, "prompt": pc.prompt,
-                        "reference": pc.reference, "ref_score": ref["score"],
+                        "reference": pc.reference, "ref_score": ref.score,
                         "min_directives": pc.min_directives, "goals": pc.goals,
                         "meta": pc.metadata,
                         "spec": f"L{pc.level} preference_construction "
@@ -450,7 +456,7 @@ def api_generate():
         ref = score_item(cit.reference, counterarg.as_score_input(cit))
         return jsonify({"ok": True, "token": token, "task": counterarg.TASK, "mode": FORMALIZE,
                         "level": cit.level, "ordering": cit.ordering, "prompt": cit.prompt,
-                        "reference": cit.reference, "ref_score": ref["score"],
+                        "reference": cit.reference, "ref_score": ref.score,
                         "min_directives": cit.min_directives,
                         "goals": [{"claim": "-" + cit.target, "current": "not justified",
                                    "want": "JUSTIFIED"},
@@ -482,7 +488,7 @@ def api_generate():
         ref = perturb.score(pit.reference(), pit)
         return jsonify({"ok": True, "token": token, "task": perturb.TASK, "mode": PERTURB,
                         "level": pit.level, "ordering": pit.ordering, "prompt": pit.prompt,
-                        "reference": pit.reference(), "ref_score": ref["score"],
+                        "reference": pit.reference(), "ref_score": ref.score,
                         "min_directives": len(pit.gold),
                         "goals": [{"claim": k, "current": pit.before.get(k, "-"), "want": v}
                                   for k, v in sorted(pit.gold.items())],
@@ -507,7 +513,7 @@ def api_generate():
     ref = score_item(it.reference, it.as_score_input())
     return jsonify({"ok": True, "token": token, "task": TASK, "mode": it.mode,
                     "level": it.level, "ordering": it.ordering, "prompt": it.prompt,
-                    "reference": it.reference, "ref_score": ref["score"],
+                    "reference": it.reference, "ref_score": ref.score,
                     "min_directives": it.min_directives, "goals": it.goals,
                     "meta": it.metadata, "spec": describe(spec_for(level, ordering, seed % 5))})
 
@@ -543,29 +549,33 @@ def api_grade():
     if entry is None:
         return jsonify({"ok": False, "error": "item expired - generate again"})
     kind, it = entry
+    # This page is a harness, so it does a harness's job: the box below the prompt
+    # takes an answer or a whole completion, and the answer is pulled out here. The
+    # dataset never unwraps anything (`docs/dataset-contract.md` section 1).
+    answer = extract_answer(b.get("answer", ""))
     try:
         if kind == "perturb":
-            res = perturb.score(b.get("answer", ""), it)
+            res = perturb.score(answer, it)
         elif kind == "counterarg":
-            res = score_item(b.get("answer", ""), counterarg.as_score_input(it))
+            res = score_item(answer, counterarg.as_score_input(it))
         elif kind == "prefcon":
-            res = score_item(b.get("answer", ""), it.as_score_input())
+            res = score_item(answer, it.as_score_input())
         elif kind == "claimchain":
-            res = claimchain.score(b.get("answer", ""), it)
+            res = claimchain.score(answer, it)
         elif kind == "defeatdiag":
-            res = defeatdiag.score(b.get("answer", ""), it)
+            res = defeatdiag.score(answer, it)
         elif kind == "formalize":
-            res = formalize.score(b.get("answer", ""), it)
+            res = formalize.score(answer, it)
         elif kind == "semquery":
-            res = semquery.score(b.get("answer", ""), it)
+            res = semquery.score(answer, it)
         elif kind == "statusquery":
-            res = statusquery.score(b.get("answer", ""), it)
+            res = statusquery.score(answer, it)
         else:
-            res = score_item(b.get("answer", ""), it.as_score_input())
+            res = score_item(answer, it.as_score_input())
     except Exception as e:
         traceback.print_exc()
         return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"})
-    return jsonify({"ok": True, "result": res})
+    return jsonify({"ok": True, "result": res.as_dict()})
 
 
 if __name__ == "__main__":
