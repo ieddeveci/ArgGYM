@@ -30,11 +30,11 @@ wrong thing.
 | Preference is a preorder, so declaring both directions settles nothing | the subject (Modgil & Prakken) | keep |
 | Grounded semantics, four strength orderings | the subject | keep, and do not make them swappable |
 | The answer is fenced, and the question says how | the subject, weakly: a strict parser must know where the answer ends | **state it, do not fix it** |
-| The fence is specifically `[answer]` and `[/answer]` | our implementation | **remove** |
+| The fence is one particular pair of delimiters | our implementation | **remove** |
 | The answer is DSL *text* | our implementation | **remove** |
 
-The third row is the one this document exists for, and the second row is where
-the distinction is easy to get wrong.
+The two fence rows are what this document exists for, and the economy row is
+where the distinction is easy to get wrong.
 
 **A submission convention belongs in the prompt. Which convention it is does not
 belong to the dataset.** Those are different claims, and collapsing them breaks

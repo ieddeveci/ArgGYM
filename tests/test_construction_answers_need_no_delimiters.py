@@ -108,8 +108,6 @@ def test_the_prompt_names_the_fence_it_was_rendered_with(task, items):
     # The fence is named once, in the sentence the template contributed, and
     # nowhere in the clause that says what the answer must contain.
     assert it.prompt.count(DEFAULT_TEMPLATE.open) == 1
-    for gone in ("[answer]", "[/answer]"):
-        assert gone not in it.prompt, f"{task}: prompt still asks for {gone}"
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))

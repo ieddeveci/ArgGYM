@@ -127,8 +127,7 @@ def test_a_fence_around_reasoning_still_scores_one(task, item, open_tag, close_t
 @pytest.mark.parametrize("task", sorted(MODULES))
 def test_the_prompt_names_the_fence_it_was_rendered_with(task, item):
     assert DEFAULT_TEMPLATE.instruction in item.prompt
-    assert "[answer]" not in item.prompt and "[/answer]" not in item.prompt
-    assert item.prompt.count("<answer>") == 1
+    assert item.prompt.count(DEFAULT_TEMPLATE.open) == 1
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))

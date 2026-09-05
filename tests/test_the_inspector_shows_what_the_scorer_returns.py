@@ -52,7 +52,7 @@ def test_every_mode_in_the_dropdown_builds_an_item(items):
 def test_the_question_asks_for_the_default_template(key, items):
     prompt = items[key]["prompt"]
     assert DEFAULT_TEMPLATE.instruction in prompt
-    assert "[answer]" not in prompt and "[/answer]" not in prompt
+    assert prompt.count(DEFAULT_TEMPLATE.open) == 1
 
 
 @pytest.mark.parametrize("key", MODE_KEYS)
@@ -94,4 +94,3 @@ def test_the_page_states_the_scoring_rules_it_actually_applies(client):
     assert "Construction tasks: score = 0.5" in page
     assert "Query tasks score their own way" in page
     assert "&lt;answer&gt;" in page
-    assert "[answer]" not in page
