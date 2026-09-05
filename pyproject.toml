@@ -21,7 +21,19 @@ report = ["matplotlib>=3.8"]
 [dependency-groups]
 # Groups are local-only and are never published. `uv sync` installs them by
 # default, so `uv run pytest` works from a fresh clone with no flag.
+
+# The evaluation harness under `evals/`. It is not part of the wheel -- the uv
+# build backend packages `arggym` and nothing else -- so its dependencies are a
+# group rather than an extra. `pip install arggym` still gets three packages.
+evals = [
+    "openai>=3.8",
+    "hydra-core>=1.3",
+    "tqdm>=4.66",
+]
 dev = [
+    # The harness has tests, so a dev checkout needs what it imports. Same
+    # reasoning as Flask below: an adopter needs neither.
+    {include-group = "evals"},
     "pytest>=8.0",
     "pytest-xdist>=3.0",
     "ruff>=0.6",

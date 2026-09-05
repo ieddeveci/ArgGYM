@@ -473,6 +473,7 @@ part of the id.
 ```
 arggym/            the package: generate, render, score
 examples/          a reference evaluator, standard library only
+evals/             the harness: run a solver, score it, report it
 ```
 
 `examples/evaluate.py` reads a frozen taskset, calls any OpenAI-compatible
@@ -496,11 +497,20 @@ inspector = ["flask>=3.0"]
 report    = ["matplotlib>=3.8"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "pytest-xdist>=3.0", "ruff>=0.6", "flask>=3.0"]
+evals = ["openai>=3.8", "hydra-core>=1.3", "tqdm>=4.66"]
+dev   = [{include-group = "evals"}, "pytest>=8.0", "pytest-xdist>=3.0",
+         "ruff>=0.6", "flask>=3.0"]
 ```
 
 `pip install arggym` pulls no web framework, which is #54, and CI checks that
-rather than trusting a comment.
+rather than trusting a comment. It pulls no HTTP client either: `evals/` is not
+in the wheel and its dependencies are a local group, so an adopter who scores
+model outputs in CI receives nothing for talking to a model provider.
+
+`evals/` is one harness, not the harness. It reaches an OpenAI-compatible
+endpoint -- which every provider we use serves -- and holds its solver behind a
+four-line protocol, so a team preferring litellm, pydantic-ai or an agent
+framework writes a solver rather than a fork (`docs/evaluation.md`).
 
 Run traces do not live here. They are large, and reasoning-gym keeps theirs in a
 separate repository for the same reason (`eval/README.md`).

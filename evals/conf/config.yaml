@@ -1,0 +1,51 @@
+# The run configuration. Composed by Hydra; every key here is overridable on the
+# command line, and the whole resolved object is written into the run manifest.
+
+defaults:
+  - model: gpt-5-openrouter
+  - template: xml_tags
+  - elicitation: none
+  - _self_
+
+# A frozen taskset, by path. Named rather than globbed: the previous harness
+# resolved tasksets by pattern, and silently taking the newest would let a
+# taskset rebuilt mid-sweep score later models on different questions than
+# earlier ones -- a comparison that looks valid and is not.
+taskset: data/taskset.jsonl
+
+# Slice the frozen taskset in memory. Never a second freeze: two exports of the
+# same grid are the same only if nothing moved in between.
+filter:
+  tasks: null
+  levels: null
+  orderings: null
+  limit: null
+
+endpoint:
+  # Sized above the slowest generation we have seen rather than at a round
+  # number. On the August sweep a 1800s timeout expired on roughly 8% of
+  # requests, and each retry made the server generate the whole completion
+  # again: wasted inference, not lost data.
+  timeout_s: 5400
+  retries: 2
+
+generation:
+  # Threads, not processes: every worker is blocked on a socket. Match this to
+  # whatever the endpoint will actually run in parallel -- a local vLLM's
+  # --max-num-seqs, or a hosted provider's rate limit.
+  concurrency: 16
+
+# Above this share of API errors the run is marked failed rather than completed,
+# so a report can tell a model that answered badly from an endpoint that was not
+# there. The generations are kept either way and the run resumes.
+max_error_rate: 0.2
+
+# Skip ids already generated without an error. Off means start the directory
+# again from nothing.
+resume: true
+
+hydra:
+  run:
+    dir: outputs/runs/${now:%Y-%m-%d_%H-%M-%S}__${model.name}
+  job:
+    chdir: true

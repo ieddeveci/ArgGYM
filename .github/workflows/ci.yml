@@ -36,7 +36,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync
-      - run: uv run ruff check arggym tests examples
+      - run: uv run ruff check arggym evals tests examples
 
   install:
     # A bare install must not pull a web framework, and the console script must
@@ -56,6 +56,18 @@ jobs:
             echo 'flask reached a bare install; it belongs in the inspector extra'
             exit 1
           fi
+      - name: no inference client on a bare install
+        # The harness under evals/ is not part of the wheel, and its
+        # dependencies are a local group rather than an extra. An adopter who
+        # only scores model outputs must not receive an HTTP client for talking
+        # to model providers.
+        run: |
+          for mod in openai hydra evals; do
+            if .venv/bin/python -c "import $mod" 2>/dev/null; then
+              echo "$mod reached a bare install; it belongs to the evals group"
+              exit 1
+            fi
+          done
       - name: the console script works
         run: .venv/bin/arggym tasks
 

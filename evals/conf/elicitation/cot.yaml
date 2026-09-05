@@ -1,0 +1,4 @@
+name: cot
+system: "Work the problem out step by step, then answer in the format the question asks for."
+prefix: ""
+suffix: ""
