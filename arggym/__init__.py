@@ -50,7 +50,7 @@ __all__ = [
     # items
     "create", "from_spec", "TaskDataset", "ConcatDataset", "BuildFailed",
     # answers
-    "extract_answer", "ScoreResult", "score_row",
+    "extract_answer", "ScoreResult",
     "AnswerTemplate", "XML_TAGS", "DEFAULT_TEMPLATE",
     # reading a score
     "floors", "corrected", "score_row", "MissingField",

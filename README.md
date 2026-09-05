@@ -28,9 +28,10 @@ for entry in ds:
 ArgGYM owns **what a legal answer is**; you own **how it is delivered**. The question asks for the
 answer between `<answer>` and `</answer>`, matching reasoning-gym, and `arggym.extract_answer(text)`
 reads that region back. Which delimiters the question names is a render-time choice, not a property
-of the benchmark: `arggym.create(..., template=arggym.SQUARE_TAGS)` asks for the older pair instead,
-your own `AnswerTemplate` asks for anything else, and each row records which one built its question.
-A harness that already knows where its answer ends can hand the body straight to `score`.
+of the benchmark: `arggym.create(..., template=AnswerTemplate("boxed", r"\boxed{", "}"))` asks for
+those instead, and each row records which template built its question. Scoring unwraps `<answer>`
+and nothing else, so a harness that renders its own template unwraps its own answers and hands the
+body to `score` -- which is what a harness with constrained decoding or a JSON schema already does.
 
 The fence earns its place: the parser is strict, so every line inside it has to be an answer line.
 Without one, a model that reasons before writing its answer would have its reasoning read as a

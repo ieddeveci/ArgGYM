@@ -181,9 +181,12 @@ PAGE = """
   <button class="sec" onclick="fillRef()">Fill reference answer</button>
   <div class="card" style="margin-top:16px"><h3>Level spec</h3><div class="desc" id="spec">&mdash;</div></div>
   <div class="card"><h3>Scoring</h3><div class="desc">
-    score = 0.5 &times; success + 0.5 &times; efficiency.<br>
+    Construction tasks: score = 0.5 &times; success + 0.5 &times; efficiency,<br>
     efficiency = verified minimum / directives used.<br>
-    Strict parsing: any malformed line scores 0.
+    Query tasks score their own way; each reports its own diagnostics.<br>
+    Success is the task's own bar, not score = 1.<br>
+    Strict parsing: any malformed line scores 0.<br>
+    The answer may be bare or between &lt;answer&gt; and &lt;/answer&gt;.
   </div></div>
 </aside>
 <section>
@@ -265,6 +268,7 @@ async function grade(){
   if(!d.ok){document.getElementById('grade').innerHTML=chip(d.error,'bad');return}
   const g=d.result, dg=g.diagnostics||{};
   let h=chip('score '+g.score.toFixed(3), g.score>=0.999?'ok':(g.score>0?'warn':'bad'))
+       +chip(g.success?'success':'not success', g.success?'ok':'bad')
        +chip(g.reason, g.reason==='ok'?'ok':'bad');
   if(dg.efficiency!==undefined) h+=chip('efficiency '+dg.efficiency.toFixed(3),'neu');
   if(dg.precision!==undefined) h+=chip('P '+dg.precision.toFixed(2)+' R '+dg.recall.toFixed(2),'neu');
