@@ -1,7 +1,7 @@
 """One adapter per mode, so a property test can run the same code over all twelve.
 
-Each adapter mirrors how `arggym/inspector.py` builds and scores that mode, and how
-`arggym/core/export.py` exports it. Read the task module before changing a field here.
+Each adapter mirrors how `arggym/inspector.py` builds and scores that mode. Read the
+task module before changing a field here.
 """
 from __future__ import annotations
 

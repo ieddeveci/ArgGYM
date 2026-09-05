@@ -11,17 +11,15 @@ generator happened to build in would grade the branch order instead of the reaso
 """
 from __future__ import annotations
 
-import inspect
 import random
 
 import pytest
 
-from arggym.core.export import ALL_ORDERINGS, export_task
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import claim_chain as cc
 from arggym.tasks.claim_chain import render_op
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
+GRID = LEVELS
 CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 
 

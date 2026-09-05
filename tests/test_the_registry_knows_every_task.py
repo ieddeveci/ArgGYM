@@ -1,18 +1,16 @@
 """Adding a task cannot silently miss the export.
 
-`core/export.py` dispatches through an if/elif ladder whose default failure is a
-forgotten branch -- that is the mechanism behind #23, where two tasks were
-absent from the export. These tests hold the registry and the export list to
-each other so the two cannot drift apart again.
+The pre-contract export dispatched through an if/elif ladder whose default
+failure is a forgotten branch -- that is the mechanism behind #23, where two
+tasks were absent from it. The registry replaces the ladder with a table, so
+these tests check the table's own properties instead: every task builds, every
+variant is registered separately, and every task declares how it is checked.
+`test_registry_matches_inspector_modes.py` holds the registry to the one other
+list of tasks still alive, the inspector's.
 """
 import pytest
 
 from arggym.core import registry
-from arggym.core.export import _EXPORTABLE
-
-
-def test_the_registry_and_the_export_list_name_the_same_tasks():
-    assert set(registry.task_names()) == set(_EXPORTABLE)
 
 
 def test_every_registered_module_imports_and_can_build():

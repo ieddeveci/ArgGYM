@@ -13,17 +13,15 @@ variable, and offsetting it by a named constant.
 from __future__ import annotations
 
 import ast
-import inspect
 import pathlib
 
 import pytest
 
 from arggym.aspic.api import ASPICVerifier
-from arggym.core.export import ALL_ORDERINGS, export_task
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import status_query as sq
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
+GRID = LEVELS
 CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 
 LEVEL_NAMES = {"level", "lv", "L"}

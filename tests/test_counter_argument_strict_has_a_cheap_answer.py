@@ -16,15 +16,12 @@ number, and that is asserted rather than assumed.
 """
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
-from arggym.core.export import ALL_ORDERINGS, export_task
+from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import counter_argument as ca
 
-GRID = inspect.signature(export_task).parameters["levels"].default
-SEEDS = inspect.signature(export_task).parameters["seeds"].default
+GRID = LEVELS
 CHEAP_LEVELS = (3, 6)
 DREW_LEVELS = (3, 4, 5)
 
