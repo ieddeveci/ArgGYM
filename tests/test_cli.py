@@ -58,10 +58,17 @@ def test_the_cli_offers_no_command_it_cannot_run():
     # `goals`, `min_directives` and the raw statistics blob at the top level of
     # every row, so a taskset written that way leaked the answer size. `freeze`
     # puts all of it under `metadata.gold`, and is the only way to write one now.
-    # The command column of --help, not the prose beside it.
-    listed = runner.invoke(app, ["--help"]).output
-    names = {line.split()[1] for line in listed.splitlines()
-             if line.startswith("\u2502 ") and len(line.split()) > 2}
-    assert names - {"--help"} == {"tasks", "freeze", "floors", "inspect"}, names
+    # Read the commands off the app rather than out of its rendered help. Help is
+    # drawn by rich, which picks its box characters from the terminal's width,
+    # encoding and colour support, so a test that scrapes those characters is
+    # testing the terminal. This one passed locally and found no commands at all
+    # on CI, where the same help renders without them.
+    names = {c.name or c.callback.__name__.replace("_", "-")
+             for c in app.registered_commands}
+    assert names == {"tasks", "freeze", "floors", "inspect"}, names
+    # Offering a command means it runs. Each one loads its own imports lazily, so
+    # `--help` is what proves the module behind it is importable at all.
+    for name in sorted(names):
+        assert runner.invoke(app, [name, "--help"]).exit_code == 0, name
     for gone in (["gates"], ["export", "status_query"], ["export-all", "somewhere"]):
         assert runner.invoke(app, gone).exit_code != 0
