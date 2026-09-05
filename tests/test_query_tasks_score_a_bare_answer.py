@@ -51,8 +51,7 @@ CONTENT_CLAUSES = {
     "semantics_query": [
         "Answer format: one line per query, written as `claim under semantics: status`."],
     "perturbation": [
-        "Answer format: one line per changed claim, written as `claim: status`.",
-        "If no claim changes status, write `none`."],
+        "Answer format: one line per changed claim, written as `claim: status`."],
     "claim_chain": [
         "Answer format: one directive per line, copied exactly as it appears above."],
     "defeat_diagnosis": [
@@ -212,3 +211,17 @@ def test_formalization_fails_when_a_queried_status_moves(items):
     result = formalization.score("\n".join(l for l in lines if l != dropped), item)
     assert result.diagnostics["behavioural"] < 0.999
     assert result.success is False
+
+
+def test_perturbation_does_not_offer_an_answer_no_item_can_have():
+    """`none` scored zero on every item in the benchmark.
+
+    `build` returns None when nothing changed, and the status-diversity guards under it
+    would reject such a draw anyway, so gold is never empty. Inviting `none` offered a
+    model an answer that is wrong by construction (#23). The scorer still understands the
+    word, because that is what it would mean if no-change items were ever generated.
+    """
+    it = perturbation.make_item(LEVEL, SEED, ORDERING)
+    assert it.gold, "a shipped item with empty gold would put the sentence back"
+    assert "none" not in it.prompt.rsplit("Answer format", 1)[1]
+    assert perturbation.score("none", it).reason == "predicted_none"

@@ -371,7 +371,7 @@ def _render_prompt(theory: str, pert: str, ordering: str,
             "every argument for it is defeated, and undecided otherwise.\n"
             f"{TIE_NOTE}\n\n"
             + answer_format("Answer format: one line per changed claim, written as "
-                            "`claim: status`. If no claim changes status, write `none`.",
+                            "`claim: status`.",
                             template))
 
 
@@ -379,15 +379,18 @@ def _render_prompt(theory: str, pert: str, ordering: str,
 _PAIR = re.compile(r"(-?\w+)\s*[:=]\s*(justified|overruled|undecided)\b", re.I)
 
 
-def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> ScoreResult:
+def score(answer_text: str, item: PerturbItem) -> ScoreResult:
     diag: Dict = {"n_lines": 0, "n_unparseable": 0, "n_predicted": 0,
                   "n_gold": len(item.gold), "wrong_status": [], "false_positives": [],
                   "missed": [], "contradicted": []}
     body = extract_answer(answer_text).strip()
     if body.lower() == "none":
-        # Success is exact match over the label map, and an empty prediction matches an
-        # empty gold. `build` rejects every draw where nothing changed, so gold is never
-        # empty and this arm is unreachable today -- while the prompt still offers `none`.
+        # Success is exact match over the label map, so an empty prediction matches an
+        # empty gold. No shipped item has one: `build` returns None when nothing changed,
+        # and the status-diversity guards below it would reject such a draw anyway. The
+        # prompt used to invite `none` regardless, which offered an answer that scores
+        # zero on every item in the benchmark (#23). It no longer does, and this arm
+        # stays because it is what `none` means if no-change items are ever generated.
         diag["n_lines"] = 1
         diag.update(f1=0.0, exact_match=not item.gold)
         return ScoreResult(0.0, not item.gold, "predicted_none", diag)
@@ -398,7 +401,7 @@ def score(answer_text: str, item: PerturbItem, strict_parse: bool = True) -> Sco
     for tok in residue.split():
         if tok.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", tok):
             diag["n_unparseable"] += 1
-    if strict_parse and diag["n_unparseable"]:
+    if diag["n_unparseable"]:
         return ScoreResult(0.0, False, f"unparseable_lines:{diag['n_unparseable']}", diag)
     if not pred:
         return ScoreResult(0.0, False, "no_pairs", diag)

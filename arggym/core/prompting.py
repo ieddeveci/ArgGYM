@@ -13,6 +13,14 @@ ORDERING_NAME = {
 }
 
 _STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]\n"
+# Two rules that `score_item` applies to every task routed through it, including the
+# one that writes its own prompt. Naming them here is what stops a second wording
+# drifting into existence: `preference_construction` stated neither, and was scored by
+# both (#21).
+MINIMALITY = ("The answer must be minimal: one using more than twice the fewest "
+              "directives that work scores zero.")
+UNREADABLE = "A directive that cannot be read at all scores the whole answer zero"
+
 _TAIL = ("Every rule needs a name, written after the kind and separated from it by a space. "
          "A name starts with a letter and continues with letters, digits or underscores, "
          "and no rule already in the theory, and no earlier line of the answer, has used it. "
@@ -20,10 +28,14 @@ _TAIL = ("Every rule needs a name, written after the kind and separated from it 
          "Several antecedents are joined with AND. Rule antecedents must be literals "
          "already present in the theory. A rule name in a consequent, written -<name>, "
          "switches that rule off.\n"
-         "The answer must be minimal: one using more than twice the fewest directives that "
-         "work scores zero. A directive that cannot be read at all scores the whole answer "
-         "zero, and so does an answer that reaches every goal while leaving the theory "
-         "inconsistent.")
+         + MINIMALITY + " " + UNREADABLE + ".")
+
+# Two contraries are both JUSTIFIED under grounded semantics only if both are firm, and
+# firmness comes from an axiom through strict rules. No answer may add an axiom, so an
+# answer reaches this branch only where it may add a strict rule. On the other four
+# construction tasks the sentence described something their answers cannot do (#22).
+INCONSISTENT = ("An answer that reaches every goal while leaving the theory inconsistent "
+                "also scores zero.")
 
 
 def permitted_block(allow_strict: bool = False) -> str:
@@ -47,7 +59,8 @@ def permitted_block(allow_strict: bool = False) -> str:
               "premise written above without a leading -\n"
             + ("" if allow_strict else "Strict rules may not be added.\n")
             + "New axioms may not be added.\n"
-            + _TAIL)
+            + _TAIL
+            + (" " + INCONSISTENT if allow_strict else ""))
 
 
 _FORMAT = ("Answer format: one directive per line.")

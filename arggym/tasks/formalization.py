@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult, extract_answer
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
 from arggym.core.curriculum import JUNCTION_CAPS, PROFILES, junction_budget
 from arggym.core.nlforms import (
     AXIOM,
@@ -35,7 +35,7 @@ from arggym.core.nlforms import (
     UNDERCUT,
 )
 from arggym.core.prompting import answer_format
-from arggym.core.scoring import ARROW
+from arggym.core.scoring import parse_answer
 
 TASK = "formalization"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -396,51 +396,28 @@ def _render_prompt(nl: str, concl: str, ordering: str, queried: Sequence[str],
             + answer_format("Answer format: one directive per line.", template))
 
 
-_P = re.compile(r"^\[(premise|axiom):\s*(-?\w+)\]$")
-# The same shape the shared scorer uses: a name that starts with a letter, and the arrow
-# that kind uses. Written `[\w]+` with either arrow, it accepted `_x` and `1n` as names and
-# took a strict rule written with the defeasible arrow -- while the prompt beside it says
-# a name starts with a letter and names the arrow per kind (#19, #20).
-_R = re.compile(r"^\[(defeasible|strict)\s+([A-Za-z]\w*)\s*:\s*(.+?)\s*(=>|->)\s*(-?\w+)\]$")
-_F = re.compile(r"^\[prefer_(rule|premise):\s*(-?\w+)\s*>\s*(-?\w+)\]$")
-
-
 def parse(text: str) -> Tuple[List[Operation], int]:
-    ops, bad = [], 0
-    body = extract_answer(text)
-    units = re.findall(r"\[[^\]]*\]", body)
-    leftover = re.sub(r"\[[^\]]*\]", " ", body)
-    stray = [t for t in leftover.split()
-             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
-    for raw in units + stray:
-        line = raw.strip()
-        if not line:
-            continue
-        mm = _P.match(line)
-        if mm:
-            ops.append(Operation(kind=mm.group(1), content=mm.group(2)))
-            continue
-        mm = _R.match(line)
-        if mm and mm.group(4) == ARROW[mm.group(1)]:
-            ops.append(Operation(kind=mm.group(1), name=mm.group(2),
-                                 antecedents=tuple(a.strip() for a in mm.group(3).split("AND")),
-                                 consequent=mm.group(5)))
-            continue
-        mm = _F.match(line)
-        if mm:
-            ops.append(Operation(kind="prefer_" + mm.group(1), stronger=mm.group(2),
-                                 weaker=mm.group(3)))
-            continue
-        bad += 1
-    return ops, bad
+    """One DSL, one parser.
+
+    This module carried its own copy of the three directive patterns and the same
+    unit-and-stray scan, and the copy drifted. It read an atom as `-?\\w+` where the
+    scorer reads `-?[A-Za-z]\\w*`, so `[premise: 9x]` and `[defeasible r1: p => _x]`
+    parsed here and were unparseable lines in every construction task; it required
+    `premise:` with no space where the scorer allows one; and it kept an empty
+    antecedent that the scorer rejects. Generated atoms match `^[a-z]{2}\\d`, so the
+    stricter class is the one every theory is written in, and a second definition of
+    the DSL is how the two fell out of step in the first place (#20).
+    """
+    p = parse_answer(text)
+    return p.ops, p.n_unparseable
 
 
-def score(answer_text: str, item: FItem, strict_parse: bool = True) -> ScoreResult:
+def score(answer_text: str, item: FItem) -> ScoreResult:
     diag: Dict = {"n_parsed": 0, "n_unparseable": 0, "behavioural": None,
                   "gold_status": item.gold_status}
     ops, bad = parse(answer_text)
     diag["n_parsed"], diag["n_unparseable"] = len(ops), bad
-    if strict_parse and bad:
+    if bad:
         return ScoreResult(0.0, False, f"unparseable_lines:{bad}", diag)
     if not ops:
         return ScoreResult(0.0, False, "no_directives", diag)

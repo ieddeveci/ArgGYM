@@ -335,8 +335,14 @@ the same answer. `success_rate` and `mean_score` are not two views of one thing.
 directives". Under the rule in section 3 that sentence is rendered from the
 value, so changing the constant changes the prompt and the hash. `PARTIAL_CAP`
 and the partial-credit weights change the score without changing the prompt, so
-they are covered by `scoring_version`. `strict_parse` is a parameter on three of
-twelve scorers today and asserted by every prompt; it becomes part of the item.
+they are covered by `scoring_version`.
+
+Strict parsing is not a parameter. Three scorers took a `strict_parse` argument
+that defaulted to on and that no caller ever passed, while every prompt stated
+the rule flatly. An item that turned it off would have a prompt claiming a rule
+the scorer was not applying, which is the mismatch this section exists to stop.
+If a study wants to separate reasoning from format compliance, that is a second
+score reported beside the first, not a switch that makes the question untrue.
 
 ---
 

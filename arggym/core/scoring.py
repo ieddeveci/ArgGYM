@@ -175,7 +175,7 @@ def subgoals_from(goals: Sequence[Dict], base_ops: Sequence[Operation]) -> List[
     return out
 
 
-def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> ScoreResult:
+def score_item(answer_text: str, item: Dict) -> ScoreResult:
     """Score one construction answer.
 
     `success` is the contract's definition for these six tasks -- every goal met and the
@@ -198,7 +198,7 @@ def score_item(answer_text: str, item: Dict, strict_parse: bool = True) -> Score
     p = parse_answer(answer_text)
     diag.update(n_lines=p.n_lines, n_unparseable=p.n_unparseable,
                 unparseable_examples=p.unparseable_examples)
-    if strict_parse and p.n_unparseable:
+    if p.n_unparseable:
         return failed(f"unparseable_lines:{p.n_unparseable}")
     if not p.ops:
         # An empty submission lands here too. It is an answer with nothing in it, not an

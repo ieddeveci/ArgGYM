@@ -19,7 +19,7 @@ from arggym.core.invariants import (
     randomize_rule_names,
     split_atoms_and_rules,
 )
-from arggym.core.prompting import answer_format
+from arggym.core.prompting import MINIMALITY, UNREADABLE, answer_format
 
 TASK = "preference_construction"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -333,10 +333,13 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
                       for g in goals)
     verb = "makes" if len(goals) == 1 else "simultaneously makes"
     lines += ["", f"What is the minimal set of preference directives that {verb} {wants}?", "",
-              "Permitted additions: preference directives only. "
+              "Permitted additions: preference directives only, written exactly in "
+              "these forms:\n"
+              "   [prefer_rule: <rule> > <rule>]\n"
+              "   [prefer_premise: <literal> > <literal>]\n"
               "No new rules or premises may be added.",
-              "The answer must be minimal: one using more than twice the fewest directives "
-              "that work scores zero.",
+              MINIMALITY,
+              UNREADABLE + ", so write only directives.",
               TIE_NOTE, "",
               answer_format("Answer format: one directive per line.", template)]
     return "\n".join(lines)

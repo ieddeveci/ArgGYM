@@ -17,7 +17,7 @@ import pytest
 
 from arggym.aspic.engine import Operation
 from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
-from arggym.core.prompting import permitted_block
+from arggym.core.prompting import UNREADABLE, permitted_block
 from arggym.core.scoring import score_item
 from arggym.tasks import attack_defense as ad
 from arggym.tasks import counter_argument as ca
@@ -131,11 +131,27 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, items):
     assert ("The answer must be minimal: one using more than twice the fewest directives "
             "that work scores zero.") in it.prompt
     if task == "preference_construction":
-        assert "Permitted additions: preference directives only." in it.prompt
+        # It writes its own prompt but is scored by `score_item` like the other five,
+        # so the two rules that scorer applies unconditionally have to be stated here
+        # too, and the forms it accepts have to be shown rather than left inferable
+        # from the theory text (#21).
+        assert "Permitted additions: preference directives only, written exactly in " \
+               "these forms:" in it.prompt
+        for form in ("   [prefer_rule: <rule> > <rule>]",
+                     "   [prefer_premise: <literal> > <literal>]"):
+            assert form in it.prompt
+        assert UNREADABLE + ", so write only directives." in it.prompt
         assert pc.TIE_NOTE in it.prompt
+        # And not the third rule: an answer of preferences alone cannot make a
+        # consistent theory inconsistent, so stating it would describe a branch this
+        # task cannot reach.
+        assert "leaving the theory inconsistent" not in it.prompt
         return
-    block = permitted_block("strict" in task)
+    strict = "strict" in task
+    block = permitted_block(strict)
     assert block in it.prompt, f"{task}: the permitted-directive block is not verbatim"
+    assert ("leaving the theory inconsistent" in it.prompt) is strict, (
+        f"{task}: the consistency rule is stated where an answer cannot break it")
     for clause in ("Every rule needs a name, written after the kind and separated from it "
                    "by a space.",
                    "A name starts with a letter and continues with letters, digits or "
@@ -145,7 +161,7 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, items):
                    "Rule antecedents must be literals already present in the theory.",
                    "A rule name in a consequent, written -<name>, switches that rule off.",
                    "New axioms may not be added.",
-                   "A directive that cannot be read at all scores the whole answer zero,"):
+                   "A directive that cannot be read at all scores the whole answer zero."):
         assert clause in it.prompt, f"{task}: lost {clause!r}"
 
 
