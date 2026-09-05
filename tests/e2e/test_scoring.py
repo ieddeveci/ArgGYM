@@ -21,7 +21,7 @@ def body_lines(reference: str):
 
 
 def wrap(lines) -> str:
-    return "[answer]\n" + "\n".join(lines) + "\n[/answer]"
+    return "<answer>\n" + "\n".join(lines) + "\n</answer>"
 
 
 def flip_status(line: str) -> str:

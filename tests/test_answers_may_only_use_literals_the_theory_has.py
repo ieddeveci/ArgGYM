@@ -52,10 +52,10 @@ def test_one_invented_antecedent_among_several_is_enough_to_reject():
 def test_a_chain_through_an_invented_intermediate_no_longer_reaches_the_goal():
     it = ca.make_item(3, 1, "last_link_elitist")
     assert it is not None
-    answer = ("[answer]\n"
+    answer = ("<answer>\n"
               f"[defeasible n1: {it.seed_lit} => nw1]\n"
               f"[defeasible n2: nw1 => -{it.target}]\n"
-              "[/answer]")
+              "</answer>")
     r = score_item(answer, ca.as_score_input(it))
     assert r.score == 0.0
     assert "illegal_unknown_antecedent:nw1" in r.diagnostics["illegal"]

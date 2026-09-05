@@ -16,15 +16,20 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.answers import DEFAULT_TEMPLATE, SQUARE_TAGS, ScoreResult
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
 from arggym.core.prompting import permitted_block
 from arggym.core.scoring import score_item
 from arggym.tasks import attack_defense as ad
 from arggym.tasks import counter_argument as ca
 from arggym.tasks import preference_construction as pc
 
+# Any convention at all: the point is that the template is the caller's, not the
+# dataset's. Square brackets are gone as a built-in because keeping a second
+# accepted fence meant honouring one no prompt asks for.
+OTHER_TEMPLATE = AnswerTemplate("boxed", "\\boxed{", "}")
+
 LAST_LINK = "last_link_elitist"
-DELIMITERS = ("[answer]", "[/answer]", "<answer>", "</answer>")
+DELIMITERS = ("<answer>", "</answer>")
 
 # Level 3 is the cheapest cell that exists for all six, and each is a distinct code path:
 # preference_construction and counter_argument write their own prompt, the three
@@ -78,16 +83,13 @@ def test_the_reference_scores_one_bare(task, items):
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
-@pytest.mark.parametrize("open_tag, close_tag",
-                         [("<answer>", "</answer>"), ("[answer]", "[/answer]")])
-def test_the_reference_scores_one_fenced_after_reasoning(task, items, open_tag, close_tag):
+def test_the_reference_scores_one_fenced_after_reasoning(task, items):
     """What an evaluator actually sends: the answer after the model has thought aloud.
 
-    Both fences, because the older pair still has to read: a generation recorded
-    against an earlier prompt scores the same number today.
+    This is the shape that scored zero before the fence came back, on every task.
     """
     it, score_input = items[task]
-    r = score_item(f"Here is my reasoning.\n{open_tag}\n{it.reference}\n{close_tag}",
+    r = score_item(f"Here is my reasoning.\n{DEFAULT_TEMPLATE.wrap(it.reference)}",
                    score_input)
     assert r.score == pytest.approx(1.0), (task, r.reason)
     assert r.success is True
@@ -103,20 +105,23 @@ def test_the_prompt_names_the_fence_it_was_rendered_with(task, items):
     """
     it, _ = items[task]
     assert DEFAULT_TEMPLATE.instruction in it.prompt
-    for d in ("[answer]", "[/answer]"):
-        assert d not in it.prompt, f"{task}: prompt still asks for {d}"
+    # The fence is named once, in the sentence the template contributed, and
+    # nowhere in the clause that says what the answer must contain.
+    assert it.prompt.count(DEFAULT_TEMPLATE.open) == 1
+    for gone in ("[answer]", "[/answer]"):
+        assert gone not in it.prompt, f"{task}: prompt still asks for {gone}"
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
 def test_another_template_renders_another_sentence(task, items):
     """A harness with its own convention re-renders; it does not edit prompt strings."""
     make, _ = VARIANTS[task]
-    other = make(SQUARE_TAGS)
-    assert SQUARE_TAGS.instruction in other.prompt
+    other = make(OTHER_TEMPLATE)
+    assert OTHER_TEMPLATE.instruction in other.prompt
     assert DEFAULT_TEMPLATE.instruction not in other.prompt
     # And nothing but that sentence moved.
     default, _ = items[task]
-    assert (other.prompt.replace(SQUARE_TAGS.instruction, DEFAULT_TEMPLATE.instruction)
+    assert (other.prompt.replace(OTHER_TEMPLATE.instruction, DEFAULT_TEMPLATE.instruction)
             == default.prompt)
 
 

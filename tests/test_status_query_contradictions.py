@@ -22,7 +22,7 @@ STATUSES = ("justified", "overruled", "undecided")
 
 
 def _wrap(lines):
-    return "[answer]\n" + "\n".join(lines) + "\n[/answer]"
+    return "<answer>\n" + "\n".join(lines) + "\n</answer>"
 
 
 def _other_status(gold_status: str) -> str:
@@ -358,7 +358,7 @@ def test_dd_status_word_inside_a_record_is_not_a_status_line(dd_item, value):
 # --- early returns carry the contradiction keys ---------------------------------------------
 
 
-@pytest.mark.parametrize("answer", ["", "[answer]\nblah\n[/answer]", "[answer]\n[/answer]"])
+@pytest.mark.parametrize("answer", ["", "<answer>\nblah\n</answer>", "<answer>\n</answer>"])
 def test_early_returns_carry_contradicted_key(sq_item, smq_item, pt_item, dd_item, answer):
     for mod, item in ((sq, sq_item), (smq, smq_item), (pt, pt_item)):
         r = mod.score(answer, item)

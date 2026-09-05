@@ -120,7 +120,8 @@ definition.
 
 The shapes below are what an answer says. Where it goes is the evaluator's choice, not the
 benchmark's: ArgGYM renders a submission convention into each question and records which one it
-used, and the default follows reasoning-gym's `<answer>` and `</answer>`. An evaluator using
+used; the default follows reasoning-gym's `<answer>` and `</answer>`, and only the one a
+question asks for is read back. An evaluator using
 structured output or a tool call can replace it. Whitespace, blank lines, bullets and numbering are
 ignored; content is what is parsed.
 

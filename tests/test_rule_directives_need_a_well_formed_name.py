@@ -22,7 +22,7 @@ SEEDS = inspect.signature(export_task).parameters["seeds"].default
 
 
 def _parse(line):
-    return parse_answer(f"[answer]{line}[/answer]")
+    return parse_answer(f"<answer>{line}</answer>")
 
 
 WELL_FORMED = [
@@ -71,14 +71,14 @@ def test_a_malformed_rule_costs_the_answer_its_score():
 @pytest.mark.parametrize("line,kind,name", WELL_FORMED)
 def test_formalization_reads_a_rule_the_same_way(line, kind, name):
     """It writes its own parser and its own notation line, and they had drifted apart."""
-    ops, bad = fz.parse(f"[answer]{line}[/answer]")
+    ops, bad = fz.parse(f"<answer>{line}</answer>")
     assert bad == 0
     assert [(o.kind, o.name) for o in ops] == [(kind, name)]
 
 
 @pytest.mark.parametrize("line,why", MALFORMED)
 def test_formalization_rejects_the_same_shapes(line, why):
-    ops, bad = fz.parse(f"[answer]{line}[/answer]")
+    ops, bad = fz.parse(f"<answer>{line}</answer>")
     assert ops == [] and bad == 1, why
 
 

@@ -36,7 +36,7 @@ def _gold(item):
 
 
 def _answer(lines):
-    return "[answer]\n" + "\n".join(lines) + "\n[/answer]"
+    return "<answer>\n" + "\n".join(lines) + "\n</answer>"
 
 
 def _split(item, gold):

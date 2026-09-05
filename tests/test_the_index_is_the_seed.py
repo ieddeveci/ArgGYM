@@ -6,7 +6,7 @@ order the caller asked in, not on how many items were requested.
 """
 import pytest
 
-from arggym.core.answers import DEFAULT_TEMPLATE, SQUARE_TAGS
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
 from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
 from arggym.core.spec import SeedPolicy, TasksetSpec
 
@@ -88,9 +88,10 @@ def test_a_row_records_the_template_its_question_was_rendered_with():
 def test_the_template_is_a_render_time_argument():
     """Everything but the delivery sentence is the same question."""
     default = create(**CHEAP, size=1)[0]
-    other = create(**CHEAP, size=1, template=SQUARE_TAGS)[0]
-    assert other["metadata"]["answer_template"] == "square_tags"
-    assert other["question"].replace(SQUARE_TAGS.instruction,
+    boxed = AnswerTemplate("boxed", "\\boxed{", "}")
+    other = create(**CHEAP, size=1, template=boxed)[0]
+    assert other["metadata"]["answer_template"] == "boxed"
+    assert other["question"].replace(boxed.instruction,
                                      DEFAULT_TEMPLATE.instruction) == default["question"]
     # The item is the same item: only the question was re-rendered.
     assert other["reference_answer"] == default["reference_answer"]

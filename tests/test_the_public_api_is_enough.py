@@ -34,7 +34,7 @@ def test_a_whole_evaluation_runs_from_the_public_names_alone():
     assert entry["question"] and entry["reference_answer"]
     # A model's completion arrives however the evaluator chose to wrap it; the
     # body is what gets scored either way.
-    assert arggym.extract_answer("thinking...\n[answer]\nBODY\n[/answer]").strip() == "BODY"
+    assert arggym.extract_answer("thinking...\n<answer>\nBODY\n</answer>").strip() == "BODY"
     assert arggym.extract_answer("BODY") == "BODY"
 
 

@@ -47,23 +47,22 @@ class AnswerTemplate:
 #: `<answer>answer here</answer>` and `reasoning_gym/utils.py:25` reads the
 #: region back with `<{tag}>\s?(.*?)\s?</{tag}>`.
 XML_TAGS = AnswerTemplate("xml_tags", "<answer>", "</answer>")
-#: The convention ArgGYM asked for before this one. Kept so a harness can
-#: reproduce an older prompt without editing strings.
-SQUARE_TAGS = AnswerTemplate("square_tags", "[answer]", "[/answer]")
 DEFAULT_TEMPLATE = XML_TAGS
 
-_XML = re.compile(r"<answer>\s?(.*?)\s?</answer>", re.S | re.I)
-# Still read, so generations recorded against the older prompts keep scoring.
-_SQUARE = re.compile(r"\[answer\](.*?)\[/answer\]", re.S | re.I)
+_FENCE = re.compile(r"<answer>\s?(.*?)\s?</answer>", re.S | re.I)
 
 
 def extract_answer(text: Optional[str]) -> str:
     """The part of a completion that holds the answer.
 
-    A fenced answer yields its last region, `<answer>` first and `[answer]`
-    after it; an unfenced completion is returned whole. The last case is a
-    fallback for an evaluator that already cut the answer out, not the path the
-    prompts describe.
+    A fenced answer yields its last region; an unfenced completion is returned
+    whole, which is the fallback for an evaluator that already cut the answer
+    out rather than the path the prompts describe.
+
+    Only the fence the questions ask for is read. Accepting a second convention
+    would mean the scorer honours something no prompt requests, which is the
+    stated-versus-enforced mismatch this work keeps closing, and it forces a
+    precedence rule for answers carrying both.
 
     The last region rather than the first: a reasoning model drafts a candidate
     mid-thought and then revises it, so the first region is the draft. The v1
@@ -72,11 +71,8 @@ def extract_answer(text: Optional[str]) -> str:
     """
     if not text:
         return ""
-    for pattern in (_XML, _SQUARE):
-        found = pattern.findall(text)
-        if found:
-            return found[-1]
-    return text
+    found = _FENCE.findall(text)
+    return found[-1] if found else text
 
 
 @dataclass(frozen=True)

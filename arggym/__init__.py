@@ -17,18 +17,17 @@ JSONL scores without a dataset object at all:
     result = arggym.score_row(text, json.loads(line))
 
 The question asks for the answer between `<answer>` and `</answer>`, which is
-what `extract_answer` reads; it also still reads the older `[answer]` pair, and
-returns a completion whole when it is already just the answer. Which fence a
-question asks for is a render-time choice: `create(..., template=SQUARE_TAGS)`
-re-renders rather than editing prompt strings, and the row records which one it
-used. See `docs/dataset-contract.md`.
+what `extract_answer` reads; a completion that is already just the answer comes
+back whole. Which fence a question asks for is a render-time choice --
+`create(..., template=AnswerTemplate("boxed", "\\boxed{", "}"))` re-renders
+rather than editing prompt strings, and the row records which one it used. See
+`docs/dataset-contract.md`.
 """
 
 __version__ = "2.0.0"
 
 from arggym.core.answers import (
     DEFAULT_TEMPLATE,
-    SQUARE_TAGS,
     XML_TAGS,
     AnswerTemplate,
     ScoreResult,
@@ -52,7 +51,7 @@ __all__ = [
     "create", "from_spec", "TaskDataset", "ConcatDataset", "BuildFailed",
     # answers
     "extract_answer", "ScoreResult", "score_row",
-    "AnswerTemplate", "XML_TAGS", "SQUARE_TAGS", "DEFAULT_TEMPLATE",
+    "AnswerTemplate", "XML_TAGS", "DEFAULT_TEMPLATE",
     # reading a score
     "floors", "corrected", "score_row", "MissingField",
     # tasksets

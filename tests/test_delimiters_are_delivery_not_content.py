@@ -9,7 +9,6 @@ wins when there are several, and which fence wins when both are present.
 """
 from arggym.core.answers import (
     DEFAULT_TEMPLATE,
-    SQUARE_TAGS,
     XML_TAGS,
     AnswerTemplate,
     ScoreResult,
@@ -26,18 +25,14 @@ def test_a_fenced_answer_gives_up_its_body():
         == "[prefer_rule: r1 > r2]"
 
 
-def test_the_older_fence_still_reads():
-    # Generations recorded against the earlier prompts have to keep scoring, or
-    # every stored run becomes incomparable the day the prompt changes.
-    assert extract_answer("thinking\n[answer]\n[prefer_rule: r1 > r2]\n[/answer]").strip() \
-        == "[prefer_rule: r1 > r2]"
-
-
-def test_the_current_fence_wins_over_the_older_one():
-    # A model told to use <answer> that also emits the old pair inside its working:
-    # the fence the question asked for is the one that decides.
-    text = "[answer]\n[prefer_rule: a > b]\n[/answer]\n<answer>\n[prefer_rule: b > a]\n</answer>"
-    assert extract_answer(text).strip() == "[prefer_rule: b > a]"
+def test_only_the_fence_the_question_asks_for_is_read():
+    # A second accepted convention would mean the scorer honours something no
+    # prompt requests -- the stated-versus-enforced mismatch this work keeps
+    # closing -- and would need a precedence rule for answers carrying both.
+    # Square brackets are directive syntax here, so the text below is an answer
+    # whose first and last lines are unreadable, not a fenced one.
+    text = "[answer]\n[prefer_rule: a > b]\n[/answer]"
+    assert extract_answer(text) == text
 
 
 def test_the_default_template_is_the_reasoning_gym_one():
@@ -52,7 +47,6 @@ def test_a_template_is_data_so_a_harness_can_bring_its_own():
     mine = AnswerTemplate("boxed", "\\boxed{", "}")
     assert mine.instruction == "Give your final answer between \\boxed{ and }."
     assert mine.wrap("x") == "\\boxed{\nx\n}"
-    assert SQUARE_TAGS.instruction.endswith("between [answer] and [/answer].")
 
 
 def test_the_last_region_wins_because_the_first_is_the_draft():

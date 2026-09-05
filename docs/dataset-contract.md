@@ -51,6 +51,11 @@ reasoning-gym, whose `SYSTEM_PROMPTS` and `extract_answer` both use
 who already runs that library should not have to learn a second convention for
 no reason.
 
+Only the fence a question asks for is read back. Accepting a second convention
+would mean the scorer honours something no prompt requests, which is the
+stated-versus-enforced mismatch this document keeps closing, and it would need a
+precedence rule for an answer carrying both.
+
 ### The fence is stated, and it is still not the benchmark's
 
 "Remove" above is about the word *always*, and the distinction is easy to lose.
@@ -66,9 +71,8 @@ that asks for it, the default is `<answer>`/`</answer>` matching reasoning-gym
 (`reasoning_gym/utils.py:25` reads it back with `<{tag}>\s?(.*?)\s?</{tag}>`),
 and a harness with another convention re-renders instead of editing prompt
 strings. The row records `metadata.answer_template`, so a frozen taskset says
-what its questions asked for. `extract_answer` reads the current pair first, the
-older `[answer]` pair after it so recorded generations keep scoring, and returns
-a completion whole when neither is present.
+what its questions asked for. `extract_answer` reads that fence and returns a
+completion whole when it is absent.
 
 The content half of the answer-format block never moves: "one directive per
 line", "copied exactly as it appears above", "one line per claim, written as

@@ -34,7 +34,7 @@ def parse_answer(text: str) -> ParsedAnswer:
     """The directives a submission carries, wrapped in delimiters or not.
 
     `extract_answer` unwraps a wrapped answer and hands back anything else whole, so a
-    bare directive list and the same list between [answer] and [/answer] parse to the
+    bare directive list and the same list between <answer> and </answer> parse to the
     same operations (`docs/dataset-contract.md` section 1).
     """
     out = ParsedAnswer()

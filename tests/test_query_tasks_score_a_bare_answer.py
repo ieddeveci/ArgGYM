@@ -1,6 +1,6 @@
 """The six query tasks read the answer, not its wrapper, and say what they still require.
 
-Each of these modules used to define its own `[answer]`/`[/answer]` regex and score 0.0
+Each of these modules used to define its own answer-region regex and score 0.0
 when it did not match, and each fused the delimiter phrase into the sentence that states
 what the answer has to contain. `docs/dataset-contract.md` section 1 puts delivery on the
 evaluator's side and content on ours, so the two are separate sentences now: the content
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from arggym.core.answers import DEFAULT_TEMPLATE, SQUARE_TAGS, ScoreResult
+from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate, ScoreResult
 from arggym.tasks import (
     claim_chain,
     defeat_diagnosis,
@@ -26,6 +26,11 @@ from arggym.tasks import (
     semantics_query,
     status_query,
 )
+
+# Any convention at all: the point is that the template is the caller's, not the
+# dataset's. Square brackets are gone as a built-in because keeping a second
+# accepted fence meant honouring one no prompt asks for.
+OTHER_TEMPLATE = AnswerTemplate("boxed", "\\boxed{", "}")
 
 LEVEL, ORDERING, SEED = 3, "last_link_elitist", 0
 
@@ -81,7 +86,7 @@ def item(request, items):
 @pytest.mark.parametrize("task", sorted(MODULES))
 def test_the_stored_reference_carries_no_delimiters(task, item):
     ref = reference_of(item)
-    for d in ("[answer]", "[/answer]", "<answer>", "</answer>"):
+    for d in ("<answer>", "</answer>"):
         assert d not in ref, f"{task}: the stored reference carries {d}"
 
 
@@ -95,7 +100,7 @@ def test_the_bare_reference_scores_one(task, item):
 
 @pytest.mark.parametrize("task", sorted(MODULES))
 @pytest.mark.parametrize("open_tag, close_tag",
-                         [("<answer>", "</answer>"), ("[answer]", "[/answer]")])
+                         [("<answer>", "</answer>")])
 def test_the_fenced_reference_scores_the_same(task, item, open_tag, close_tag):
     bare = MODULES[task].score(reference_of(item), item)
     fenced = MODULES[task].score(
@@ -106,7 +111,7 @@ def test_the_fenced_reference_scores_the_same(task, item, open_tag, close_tag):
 
 @pytest.mark.parametrize("task", sorted(MODULES))
 @pytest.mark.parametrize("open_tag, close_tag",
-                         [("<answer>", "</answer>"), ("[answer]", "[/answer]")])
+                         [("<answer>", "</answer>")])
 def test_a_fence_around_reasoning_still_scores_one(task, item, open_tag, close_tag):
     """What an evaluator actually sends: the answer after the model's working.
 
@@ -123,13 +128,14 @@ def test_a_fence_around_reasoning_still_scores_one(task, item, open_tag, close_t
 def test_the_prompt_names_the_fence_it_was_rendered_with(task, item):
     assert DEFAULT_TEMPLATE.instruction in item.prompt
     assert "[answer]" not in item.prompt and "[/answer]" not in item.prompt
+    assert item.prompt.count("<answer>") == 1
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))
 def test_another_template_moves_that_sentence_and_nothing_else(task, item):
-    other = MODULES[task].make_item(LEVEL, SEED, ORDERING, template=SQUARE_TAGS)
-    assert SQUARE_TAGS.instruction in other.prompt
-    assert (other.prompt.replace(SQUARE_TAGS.instruction, DEFAULT_TEMPLATE.instruction)
+    other = MODULES[task].make_item(LEVEL, SEED, ORDERING, template=OTHER_TEMPLATE)
+    assert OTHER_TEMPLATE.instruction in other.prompt
+    assert (other.prompt.replace(OTHER_TEMPLATE.instruction, DEFAULT_TEMPLATE.instruction)
             == item.prompt)
 
 
