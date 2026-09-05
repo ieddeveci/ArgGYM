@@ -150,3 +150,23 @@ def test_the_manifest_records_the_taskset_it_actually_read(tmp_path, rows,
         written = f.read()
     assert "sk-must-not-be-written-down" not in written
     assert meta["endpoint"]["api_key_env"] == "ARGGYM_STUB_KEY"
+
+
+def test_a_directory_will_not_take_a_second_sampling_configuration(tmp_path, rows,
+                                                                   taskset_file,
+                                                                   provider):
+    """The token cap decides scores as surely as the prompt does.
+
+    Measured on a live model: at a 24,576-token cap eight of twelve tasks scored
+    exactly 0.000 because every generation hit the cap before writing an answer.
+    Pooling those with generations made under a larger cap would report a
+    setting as a result.
+    """
+    p = provider(answering(rows))
+    run_dir = os.fspath(tmp_path / "run")
+    execute(cfg_for(taskset_file, p.url), run_dir)
+
+    with pytest.raises(SystemExit) as e:
+        execute(cfg_for(taskset_file, p.url,
+                        **{"model.sampling.max_tokens": 4096}), run_dir)
+    assert "endpoint.sampling" in str(e.value)

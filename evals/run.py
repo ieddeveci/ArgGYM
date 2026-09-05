@@ -58,8 +58,13 @@ def refuse_a_changed_run(run_dir: str, meta: Dict[str, Any]) -> None:
         before = json.load(f)
     changed = [k for k in ("taskset_hash", "template", "elicitation")
                if before.get(k) != meta.get(k)]
-    if (before.get("endpoint") or {}).get("model") != meta["endpoint"]["model"]:
-        changed.append("endpoint.model")
+    # Sampling too, not just the model. Temperature and the token cap change
+    # what the model was asked as surely as the prompt does -- on this box a
+    # 24576-token cap scored eight of twelve tasks at exactly 0.000 and a larger
+    # one did not -- so generations made under two caps must not pool.
+    was, now = before.get("endpoint") or {}, meta["endpoint"]
+    changed += [f"endpoint.{k}" for k in ("model", "sampling", "extra_body")
+                if was.get(k) != now.get(k)]
     if changed:
         raise SystemExit(
             f"{run_dir} already holds a run whose {', '.join(changed)} "
