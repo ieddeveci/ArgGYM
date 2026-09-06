@@ -12,8 +12,12 @@ help:
 setup:
 	uv sync
 
+# `-n auto` takes the logical core count, so this adapts from a laptop to the
+# 128-thread box without a number to keep in sync. Bare `pytest` stays serial
+# on purpose: xdist breaks pdb and makes `-x` behave oddly, and debugging one
+# test is what a bare invocation is for.
 test:
-	uv run pytest -q
+	uv run pytest -q -n auto
 
 test-all:
 	uv run pytest -q -m "" -n auto
