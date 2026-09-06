@@ -13,14 +13,13 @@ from arggym.core.curriculum import (
     MIXED,
     PROFILES,
     junctions_for,
-    spec_for,
     wants_ternary,
 )
 from arggym.core.invariants import language_enrichment, randomize_rule_names, remap_text
 from arggym.core.minimality import find_minimum, find_minimum_decomposed
 from arggym.core.prompting import render
 from arggym.core.scoring import score_item, subgoals_from
-from arggym.structures.chains import CONFIGS, LAST_LINK, reasoning_cost
+from arggym.structures.chains import CONFIGS, reasoning_cost
 from arggym.structures.defence import build_defence
 from arggym.structures.defence import verify_minimum as verify_defence_minimum
 from arggym.structures.defence import verify_minimum_decomposed as verify_defence_decomposed
@@ -114,10 +113,15 @@ def build_attack_item(level: int, seed: int, ordering: str,
                       profile: str = "FULL",
                       template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     import random
-    sp = spec_for(level, ordering, variant=seed % 5)
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
-    n = max(2, min(sp.n_chains_max, 2 + level // 3))
-    depth = max(2, min(sp.depth_max, 2 + level // 4))
+    # Both caps came from `ItemSpec`, as `min(2 + L // 2, 10)` on the chain count and
+    # `min(2 + L // 2, 9)` on the depth, over an `L` clamped to 1..15. Nine is what each
+    # evaluates to at the top of that clamp -- the effective maximum, not the written
+    # constant for chains -- and neither binds anywhere in 1..15, where the level terms
+    # reach 7 chains and depth 5. Written out here because the spec that carried them
+    # described a curriculum no builder answered to (#31).
+    n = max(2, min(9, 2 + level // 3))
+    depth = max(2, min(9, 2 + level // 4))
 
     pool = ["C2"] if level <= 3 else (["C2", "C4"] if level <= 6 else
                                       ["C2", "C4", "C7"] if level <= 9 else
@@ -293,11 +297,27 @@ def _defence_shape(level: int):
     return out
 
 
+#: The level the two junction-placing builders switch junctions on at.
+#:
+#: `curriculum.JUNCTION_START` is 5, and it is a different thing: it is where
+#: `junctions_for` starts returning a non-zero budget. Holding the flag at 6 while the
+#: budget starts at 5 is what left level 5 asking for junctions it was told not to have
+#: (#31), and the tempting repair is to align them at 5. That is a curriculum decision,
+#: not a bug fix: it would give level 5 a difficulty step the defence schedule does not
+#: declare, since `_DEFENCE_SCHEDULE`'s first entry covers levels 1 through 5. Keeping
+#: the flag at 6 also puts `defence` where `build_mixed` already was -- it guards on the
+#: flag correctly (`structures/interaction.py:70`) and has always built 0 junctions at
+#: level 5 -- which leaves `attack` the odd one out, spending its budget from level 5
+#: with no flag at all. Aligning all three belongs to whoever sets the curriculum.
+JUNCTION_LEVEL = 6
+
+
 def _n_junctions(ops: Sequence[Operation]) -> int:
     """Junctions in the theory as built, which is not always the budget asked for.
 
     A junction is a rule that has to draw on more than one line at once. `build_defence`
-    hands its leftovers to the attackers, so it spends the whole budget. `build_mixed`
+    hands its leftovers to the attackers, so it spends the whole budget on any level that
+    asks for junctions at all, and none of it on a level that does not. `build_mixed`
     places junctions only on the shared stem, `j_points = {k % shared_depth}`, so it
     silently keeps `min(budget, shared_depth)` of them and the stem is the binding
     constraint from level 6 to level 12. Recording the budget alone would state a number
@@ -311,8 +331,12 @@ def build_defence_item(level: int, seed: int, ordering: str,
                        template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
-    n_junc = junctions_for(level, max(1, n * 4))
-    d = build_defence(n, ordering, it, support_depth=sup, junction=(level >= 6),
+    # One level decides the flag and the budget together, so the recorded budget cannot
+    # disagree with the theory. Level 5 used to record a budget of 2 next to
+    # `n_junctions: 0`, which reads as two junctions the item does not have (#31).
+    junctions_on = level >= JUNCTION_LEVEL
+    n_junc = junctions_for(level, max(1, n * 4)) if junctions_on else 0
+    d = build_defence(n, ordering, it, support_depth=sup, junction=junctions_on,
                       n_junctions=n_junc,
                       ternary=wants_ternary(level, 0),
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
@@ -383,9 +407,12 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
     stem = max(1, min(4, 1 + level // 5))
-    n_junc = junctions_for(level, max(1, n_atk * 4))
+    # Same pairing as `build_defence_item`. `build_mixed` already guards on the flag, so
+    # its theory was right at level 5; only the recorded budget disagreed with it (#31).
+    junctions_on = level >= JUNCTION_LEVEL
+    n_junc = junctions_for(level, max(1, n_atk * 4)) if junctions_on else 0
     m = build_mixed(it, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
-                    depth=depth, shared_depth=stem, junction=(level >= 6),
+                    depth=depth, shared_depth=stem, junction=junctions_on,
                     n_junctions=n_junc,
                     ternary=wants_ternary(level, 0))
     if m is None:
@@ -454,15 +481,21 @@ def reference_ok(result: ScoreResult) -> bool:
 MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: build_mixed_item}
 
 
-def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              mode: Optional[str] = None, profile: str = "FULL",
-              tries: int = 12,
+def make_item(level: int, seed: int, ordering: str, mode: str,
+              profile: str = "FULL", tries: int = 12,
               template: Optional[AnswerTemplate] = None) -> Optional[Item]:
-    if mode is None:
-        mode = spec_for(level, ordering, variant=seed % 5).mode
-    fn = MODE_BUILDERS.get(mode)
-    if fn is None:
-        return None
+    # The mode is part of the task identity: `core/registry.py` registers `attack`,
+    # `defence` and `attack_defense` separately and names the mode on each, so no
+    # caller wants a default. It used to take one from `spec_for(...).mode`, chosen off
+    # the seed's parity -- a curriculum nothing else in the module consulted, and
+    # unreachable because the registry always passes a mode (#31). Raising says
+    # "caller error" where returning None would read as a cell that rejected every
+    # candidate. `ordering` loses its default because a required argument cannot follow
+    # an optional one and `tests/e2e/registry.py` passes the mode positionally.
+    if mode not in MODE_BUILDERS:
+        raise ValueError(f"attack_defense needs a mode, one of "
+                         f"{', '.join(sorted(MODE_BUILDERS))}; got {mode!r}")
+    fn = MODE_BUILDERS[mode]
     for k in range(tries):
         it = fn(level, seed * 31 + k, ordering, profile, template)
         if it is not None:

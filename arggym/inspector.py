@@ -16,7 +16,7 @@ from arggym.tasks import status_query as statusquery
 from arggym.tasks import semantics_query as semquery
 from arggym.core.answers import extract_answer
 from arggym.core.scoring import score_item
-from arggym.core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK, describe, spec_for
+from arggym.core.curriculum import ATTACK, DEFENCE, MIXED, LAST_LINK, WEAKEST_LINK
 
 app = Flask(__name__)
 ITEMS = {}
@@ -293,6 +293,30 @@ init();
 """
 
 
+def _attack_defense_spec(it) -> str:
+    """The shape line for the panel, read off the item the way every other task's is.
+
+    It used to come from `describe(spec_for(level, ordering, seed % 5))`, which
+    described a level in the abstract while the item in front of the reader was built
+    by one of three builders that never consulted it -- so the panel could name a mode
+    the item was not, and a move floor no mode met (#31).
+    """
+    m = it.metadata
+    ordering = it.ordering.replace("_link_", "-link ").replace("_", "-")
+    if it.mode == ATTACK:
+        shape = (f"{m['n_chains']} chains depth {m['chain_depth']} "
+                 f"{m['configs']} | {m['rejected_moves']} dead ends")
+    elif it.mode == DEFENCE:
+        shape = (f"{m['n_attackers']} attackers ({m['n_strict_attackers']} via strict) "
+                 f"depth {m['attacker_depth']} | support depth {m['support_depth']} "
+                 f"| {m['n_decoys']} decoys")
+    else:
+        shape = (f"{m['n_attackers']} attackers | stem {m['stem_depth']} "
+                 f"branch {m['branch_depth']}")
+    return (f"L{it.level} {it.mode} {ordering} | {shape} "
+            f"| {m['n_junctions']} junctions | minimum {it.min_directives} directives")
+
+
 @app.route("/")
 def index():
     return render_template_string(PAGE, modes=MODES)
@@ -515,7 +539,7 @@ def api_generate():
                     "level": it.level, "ordering": it.ordering, "prompt": it.prompt,
                     "reference": it.reference, "ref_score": ref.score,
                     "min_directives": it.min_directives, "goals": it.goals,
-                    "meta": it.metadata, "spec": describe(spec_for(level, ordering, seed % 5))})
+                    "meta": it.metadata, "spec": _attack_defense_spec(it)})
 
 
 @app.route("/api/graph", methods=["POST"])
