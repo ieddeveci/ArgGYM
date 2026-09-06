@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
+from arggym.core.answers import ScoreResult, UnparseableAnswer
 from arggym.core.curriculum import PROFILES, junctions_for
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
@@ -177,8 +177,7 @@ def _tower(ops: List[Operation], names, ridx: List[int], target_lit: str, height
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL",
-          template: Optional[AnswerTemplate] = None) -> Optional[SQItem]:
+          profile: str = "FULL") -> Optional[SQItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "sq", profile))
     prof = PROFILES[profile]
     n_query = max(3, round(3 + (level - 1) * (40 - 3) / 14))
@@ -392,7 +391,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         return None
 
     lines = [f"{l}: {gold[l].lower()}" for l in queried]
-    prompt = _render_prompt(render_ops(base), queried, ordering, template)
+    prompt = _render_prompt(render_ops(base), queried, ordering)
     return SQItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, queried=queried, gold=gold,
         ordering=ordering, level=level,
@@ -412,8 +411,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(theory: str, queried: Sequence[str], ordering: str,
-                   template: Optional[AnswerTemplate] = None) -> str:
+def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -421,8 +419,7 @@ def _render_prompt(theory: str, queried: Sequence[str], ordering: str,
             "Possible statuses: justified, overruled, undecided.\n"
             "A claim is justified when some argument for it is accepted, overruled when every argument for it is defeated, and undecided otherwise.\n"
             "\n"
-            + answer_format("Answer format: one line per claim, written as `claim: status`.",
-                            template))
+            + answer_format("Answer format: one line per claim, written as `claim: status`."))
 
 
 # One whole line, as the format clause above asks for. See `core/pairs.py` for why the
@@ -505,10 +502,9 @@ def score(answer_text: str, item: SQItem) -> ScoreResult:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              profile: str = "FULL", tries: int = 24,
-              template: Optional[AnswerTemplate] = None) -> Optional[SQItem]:
+              profile: str = "FULL", tries: int = 24) -> Optional[SQItem]:
     for k in range(tries):
-        it = build(level, seed * 97 + k, ordering, profile, template)
+        it = build(level, seed * 97 + k, ordering, profile)
         if it is not None:
             return it
     return None

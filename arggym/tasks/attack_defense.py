@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import AnswerTemplate, ScoreResult
+from arggym.core.answers import ScoreResult
 from arggym.core.curriculum import (
     ATTACK,
     DEFENCE,
@@ -110,8 +110,7 @@ def _atoms_and_rules(ops: Sequence[Operation]) -> Tuple[set, set]:
 
 
 def build_attack_item(level: int, seed: int, ordering: str,
-                      profile: str = "FULL",
-                      template: Optional[AnswerTemplate] = None) -> Optional[Item]:
+                      profile: str = "FULL") -> Optional[Item]:
     import random
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
     # Both caps came from `ItemSpec`, as `min(2 + L // 2, 10)` on the chain count and
@@ -228,7 +227,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
 
     goals = [{"claim": target, "current": "JUSTIFIED", "want": "OVERRULED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=ATTACK,
-                prompt=render(_render_ops(base), ordering, goals, template=template),
+                prompt=render(_render_ops(base), ordering, goals),
                 theory_text=_render_ops(base), base_ops=base, goals=goals,
                 reference=ref, min_directives=mn["required_moves"],
                 metadata={
@@ -327,8 +326,7 @@ def _n_junctions(ops: Sequence[Operation]) -> int:
 
 
 def build_defence_item(level: int, seed: int, ordering: str,
-                       profile: str = "FULL",
-                       template: Optional[AnswerTemplate] = None) -> Optional[Item]:
+                       profile: str = "FULL") -> Optional[Item]:
     n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     # One level decides the flag and the budget together, so the recorded budget cannot
@@ -379,7 +377,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
     ref = remap_text("\n".join(ref_lines), _rmap)
     goals = [{"claim": d.target, "current": d.status(), "want": "JUSTIFIED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=DEFENCE,
-                prompt=render(_render_ops(base), ordering, goals, template=template),
+                prompt=render(_render_ops(base), ordering, goals),
                 theory_text=_render_ops(base), base_ops=base, goals=goals,
                 reference=ref, min_directives=mn["witness_moves"],
                 metadata={
@@ -401,8 +399,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
 
 
 def build_mixed_item(level: int, seed: int, ordering: str,
-                     profile: str = "FULL",
-                     template: Optional[AnswerTemplate] = None) -> Optional[Item]:
+                     profile: str = "FULL") -> Optional[Item]:
     n_atk = max(2, min(4, 2 + level // 5))
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
@@ -453,7 +450,7 @@ def build_mixed_item(level: int, seed: int, ordering: str,
              {"claim": m.defence_target, "current": m.status(m.defence_target),
               "want": "JUSTIFIED"}]
     item = Item(task=TASK, level=level, ordering=ordering, mode=MIXED,
-                prompt=render(_render_ops(base), ordering, goals, template=template),
+                prompt=render(_render_ops(base), ordering, goals),
                 theory_text=_render_ops(base), base_ops=base, goals=goals,
                 reference=ref, min_directives=sol["n_directives"],
                 metadata={
@@ -482,8 +479,7 @@ MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: 
 
 
 def make_item(level: int, seed: int, ordering: str, mode: str,
-              profile: str = "FULL", tries: int = 12,
-              template: Optional[AnswerTemplate] = None) -> Optional[Item]:
+              profile: str = "FULL", tries: int = 12) -> Optional[Item]:
     # The mode is part of the task identity: `core/registry.py` registers `attack`,
     # `defence` and `attack_defense` separately and names the mode on each, so no
     # caller wants a default. It used to take one from `spec_for(...).mode`, chosen off
@@ -497,7 +493,7 @@ def make_item(level: int, seed: int, ordering: str, mode: str,
                          f"{', '.join(sorted(MODE_BUILDERS))}; got {mode!r}")
     fn = MODE_BUILDERS[mode]
     for k in range(tries):
-        it = fn(level, seed * 31 + k, ordering, profile, template)
+        it = fn(level, seed * 31 + k, ordering, profile)
         if it is not None:
             return it
     return None

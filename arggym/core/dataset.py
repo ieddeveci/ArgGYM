@@ -24,7 +24,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from arggym.core import registry
-from arggym.core.answers import AnswerTemplate, ScoreResult
+from arggym.core.answers import ScoreResult
 from arggym.core.rows import encode_fields
 from arggym.core.rows import score as score_row
 from arggym.core.rows import score_value as score_row_value
@@ -49,8 +49,7 @@ class TaskDataset:
     """Items of one task at one difficulty, addressed by seed."""
 
     def __init__(self, task: str, level: int, ordering: str, size: int = 100,
-                 seed: int = 0, profile: str = "FULL",
-                 template: Optional[AnswerTemplate] = None) -> None:
+                 seed: int = 0, profile: str = "FULL") -> None:
         self.spec = registry.get(task)
         self.task = task
         self.level = level
@@ -69,11 +68,6 @@ class TaskDataset:
                 f"into its seed, so (level, ordering, seed) would not name the "
                 f"item. Track this on #51.")
         self.profile = profile
-        # Delivery belongs to the harness: it composes the prompt from the question,
-        # calls its solver, and extracts the answer before handing it back. So the
-        # question says nothing about a fence unless a caller asks for one here
-        # (`docs/dataset-contract.md` section 1).
-        self.template = template
 
     def __len__(self) -> int:
         return self.size
@@ -90,8 +84,7 @@ class TaskDataset:
         # semantics_query take none at all. The constructor refuses anything but
         # FULL, which is every generator's own default, so the recorded value is
         # what built the item rather than what the caller hoped for.
-        item = self.spec.make_item(self.level, seed, self.ordering,
-                                   template=self.template)
+        item = self.spec.make_item(self.level, seed, self.ordering)
         if item is None:
             raise BuildFailed(
                 f"{self.task} L{self.level} {self.ordering} seed {seed} built no item "
@@ -116,10 +109,6 @@ class TaskDataset:
             "level": self.level,
             "ordering": self.ordering,
             "profile": self.profile,
-            # Null unless the caller asked for a delivery sentence, so a frozen
-            # taskset says what its questions promised instead of leaving a reader
-            # to infer it from the prompt text.
-            "answer_template": self.template.name if self.template else None,
             "theory_schema": THEORY_SCHEMA,
             # Scoring the engine-checked tasks runs PyArg, so a row is
             # re-scorable against the pinned engine and no other.
@@ -199,17 +188,14 @@ class ConcatDataset:
 
 
 def create(task: str, level: int, ordering: str = "last_link_elitist",
-           size: int = 100, seed: int = 0, profile: str = "FULL",
-           template: Optional[AnswerTemplate] = None) -> TaskDataset:
-    return TaskDataset(task, level, ordering, size=size, seed=seed, profile=profile,
-                       template=template)
+           size: int = 100, seed: int = 0, profile: str = "FULL") -> TaskDataset:
+    return TaskDataset(task, level, ordering, size=size, seed=seed, profile=profile)
 
 
-def from_spec(spec: Any, size: Optional[int] = None,
-              template: Optional[AnswerTemplate] = None) -> ConcatDataset:
+def from_spec(spec: Any, size: Optional[int] = None) -> ConcatDataset:
     """Every cell of a taskset spec, in a stable order."""
     n = size if size is not None else spec.seeds.take
     return ConcatDataset([
         TaskDataset(task, level, ordering, size=n, seed=spec.seeds.start,
-                    profile=spec.profile, template=template)
+                    profile=spec.profile)
         for task, level, ordering in spec.cells])

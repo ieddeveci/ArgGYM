@@ -1,12 +1,17 @@
 """The answer body is what the evaluator hands over, fenced or not.
 
-`docs/dataset-contract.md` section 1: the fence is delivery. ArgGYM's prompts ask
-for one -- `<answer>` by default, matching reasoning-gym -- because a strict
-parser needs to know where the answer starts, but which fence is a render-time
-choice and none of them is required at scoring time. These tests pin that in
-every direction, and pin the two behaviours that are not obvious: which region
-wins when there are several, and which fence wins when both are present.
+`docs/dataset-contract.md` section 1: the fence is delivery, so no ArgGYM prompt
+asks for one. A harness that calls a chat model still needs a fence, because a
+strict parser has to know where the answer starts, and `AnswerTemplate` and
+`extract_answer` are here for the common `<answer>` convention -- offered, never
+required at scoring time. These tests pin that in every direction, and pin the
+two behaviours that are not obvious: which region wins when there are several,
+and which fence wins when both are present.
 """
+import pytest
+
+import arggym
+from arggym.core import registry
 from arggym.core.answers import (
     DEFAULT_TEMPLATE,
     XML_TAGS,
@@ -14,6 +19,64 @@ from arggym.core.answers import (
     ScoreResult,
     extract_answer,
 )
+
+LEVEL, ORDERING = 3, "last_link_elitist"
+
+#: The last thing each question says, which is the content clause `answer_format` was
+#: handed. Naming the ending rather than a list of forbidden fences is what makes this
+#: exhaustive: any sentence appended after the clause fails, whatever it says, not only
+#: the five delimiters somebody thought of. `defeat_diagnosis` takes two, because its
+#: format block gains a `survives_because` line on the items that have one.
+#:
+#: The six query tasks state these clauses again in `CONTENT_CLAUSES`
+#: (`tests/test_query_tasks_score_a_bare_answer.py`). Both are asserted against the same
+#: rendered question, so a reworded clause fails in both places rather than drifting.
+TERMINAL_CLAUSE = {
+    "attack": ("Answer format: one directive per line.",),
+    "defence": ("Answer format: one directive per line.",),
+    "attack_defense": ("Answer format: one directive per line.",),
+    "counter_argument": ("Answer format: one directive per line.",),
+    "counter_argument_strict": ("Answer format: one directive per line.",),
+    "preference_construction": ("Answer format: one directive per line.",),
+    "formalization": ("Answer format: one directive per line.",),
+    "claim_chain": ("Answer format: one directive per line, copied exactly as it "
+                    "appears above.",),
+    "status_query": ("Answer format: one line per claim, written as `claim: status`.",),
+    "semantics_query": ("Answer format: one line per query, written as "
+                        "`claim under semantics: status`.",),
+    "perturbation": ("Answer format: one line per changed claim, written as "
+                     "`claim: status`.",),
+    "defeat_diagnosis": ("`defeated_at: <target>; defeater: <defeater>; "
+                         "kind: undermine|undercut|rebut`",
+                         "...; survives_because: <rule>"),
+}
+
+
+def test_the_ending_table_covers_the_registry():
+    """A task added without an entry would otherwise be checked by nothing."""
+    assert set(TERMINAL_CLAUSE) == set(registry.task_names())
+
+
+@pytest.mark.parametrize("task", sorted(registry.task_names()))
+def test_no_task_renders_a_delivery_sentence(task):
+    """Generation has no way to say where the answer goes, on any of the twelve.
+
+    It used to: every `build` took a template and threaded it into `answer_format`, so
+    a frozen taskset could carry the sentence the harness appends and a model would be
+    told twice. One test over the registry rather than two per-task copies, because the
+    rule is the dataset's and holds whatever the task is.
+
+    The question has to *end* with its content clause. Checking a list of fence strings
+    instead let "then put your response inside `<solution>` tags" through, which is the
+    same defect in a wording nobody enumerated.
+    """
+    q = arggym.TaskDataset(task, LEVEL, ORDERING, size=1)[0]["question"]
+    assert q.rstrip().endswith(TERMINAL_CLAUSE[task]), (
+        f"{task}: something follows the answer-format clause")
+    # Named separately because it is the exact sentence #53 was about, and because a
+    # fence could in principle arrive somewhere other than the end.
+    assert DEFAULT_TEMPLATE.instruction not in q
+    assert DEFAULT_TEMPLATE.open not in q
 
 
 def test_a_bare_answer_is_its_own_body():

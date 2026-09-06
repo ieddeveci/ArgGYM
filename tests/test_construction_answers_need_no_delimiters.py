@@ -1,12 +1,10 @@
 """The six construction tasks own what a legal answer is; the evaluator owns delivery.
 
 `docs/dataset-contract.md` section 1: which delimiters fence an answer comes from our
-implementation, not from defeasible argumentation. So the fence is a render-time choice
--- the question names the template it was rendered with, another template renders another
-sentence, the stored reference carries no fence at all, and an answer scores the same
-bare. Section 5 adds the second half: `score_item` returns a `ScoreResult` whose
-`success` is present on every branch, including the early zeros that never reach the goal
-check.
+implementation, not from defeasible argumentation. So no question names a fence at all,
+the stored reference carries none either, and an answer scores the same bare. Section 5
+adds the second half: `score_item` returns a `ScoreResult` whose `success` is present on
+every branch, including the early zeros that never reach the goal check.
 
 One item per variant, not a grid: every property here is a function of a flag or of the
 scorer, and `tests/e2e/` already sweeps the grid.
@@ -16,22 +14,12 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.engine import Operation
-from arggym.core.answers import (
-    DEFAULT_TEMPLATE,
-    AnswerTemplate,
-    ScoreResult,
-    extract_answer,
-)
-from arggym.core.prompting import UNREADABLE, permitted_block
+from arggym.core.answers import DEFAULT_TEMPLATE, ScoreResult, extract_answer
+from arggym.core.prompting import UNREADABLE, permitted_block, preference_block
 from arggym.core.scoring import score_item
 from arggym.tasks import attack_defense as ad
 from arggym.tasks import counter_argument as ca
 from arggym.tasks import preference_construction as pc
-
-# Any convention at all: the point is that the template is the caller's, not the
-# dataset's. Square brackets are gone as a built-in because keeping a second
-# accepted fence meant honouring one no prompt asks for.
-OTHER_TEMPLATE = AnswerTemplate("boxed", "\\boxed{", "}")
 
 LAST_LINK = "last_link_elitist"
 DELIMITERS = ("<answer>", "</answer>")
@@ -39,24 +27,18 @@ DELIMITERS = ("<answer>", "</answer>")
 # Level 3 is the cheapest cell that exists for all six, and each is a distinct code path:
 # preference_construction and counter_argument write their own prompt, the three
 # attack_defense modes share `core.prompting.render`.
-# `make` takes the answer template, because which fence the question asks for is a
-# render-time argument and one of the properties below is that changing it changes the
-# question and nothing else.
 VARIANTS = {
-    "preference_construction": (lambda t: pc.make_item(3, 0, LAST_LINK, template=t),
+    "preference_construction": (lambda: pc.make_item(3, 0, LAST_LINK),
                                 lambda it: it.as_score_input()),
-    "counter_argument": (lambda t: ca.make_item(3, 0, LAST_LINK, allow_strict=False,
-                                                template=t),
+    "counter_argument": (lambda: ca.make_item(3, 0, LAST_LINK, allow_strict=False),
                          ca.as_score_input),
-    "counter_argument_strict": (lambda t: ca.make_item(3, 0, LAST_LINK, allow_strict=True,
-                                                       template=t),
+    "counter_argument_strict": (lambda: ca.make_item(3, 0, LAST_LINK, allow_strict=True),
                                 ca.as_score_input),
-    "attack": (lambda t: ad.make_item(3, 0, LAST_LINK, mode="attack", template=t),
+    "attack": (lambda: ad.make_item(3, 0, LAST_LINK, mode="attack"),
                lambda it: it.as_score_input()),
-    "defence": (lambda t: ad.make_item(3, 0, LAST_LINK, mode="defence", template=t),
+    "defence": (lambda: ad.make_item(3, 0, LAST_LINK, mode="defence"),
                 lambda it: it.as_score_input()),
-    "attack_defense": (lambda t: ad.make_item(3, 0, LAST_LINK, mode="attack_defense",
-                                              template=t),
+    "attack_defense": (lambda: ad.make_item(3, 0, LAST_LINK, mode="attack_defense"),
                        lambda it: it.as_score_input()),
 }
 
@@ -65,7 +47,7 @@ VARIANTS = {
 def items():
     out = {}
     for task, (make, as_input) in VARIANTS.items():
-        it = make(None)
+        it = make()
         assert it is not None, f"{task}: no item at level 3 seed 0"
         out[task] = (it, as_input(it))
     return out
@@ -112,13 +94,15 @@ def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, items):
     assert DEFAULT_TEMPLATE.open not in it.prompt
 
 
-@pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_asking_for_a_template_adds_that_sentence_and_nothing_else(task, items):
-    """A caller who would rather the question carried the sentence can have it."""
-    make, _ = VARIANTS[task]
-    other = make(OTHER_TEMPLATE)
-    default, _ = items[task]
-    assert other.prompt == f"{default.prompt}\n{OTHER_TEMPLATE.instruction}"
+# The directive forms, written out rather than read from `core.prompting`. Every block
+# shares them through one constant now, so a test that imported it would pass on an empty
+# one and take all seven variants down at once -- and no rejection reason is behind these
+# lines, since a malformed preference is only `unparseable_lines`.
+PREFERENCE_FORMS = ("   [prefer_rule: <rule> > <rule>]",
+                    "   [prefer_premise: <literal> > <literal>]")
+DEFEASIBLE_FORM = "   [defeasible <name>: <antecedent> => <consequent>]"
+STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]"
+PREMISE_FORM = "   [premise: -<literal>]"
 
 
 @pytest.mark.parametrize("task", sorted(VARIANTS))
@@ -128,18 +112,22 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, items):
     assert "Answer format: one directive per line." in it.prompt
     assert ("The answer must be minimal: one using more than twice the fewest directives "
             "that work scores zero.") in it.prompt
+    for form in PREFERENCE_FORMS:
+        assert form in it.prompt, f"{task}: lost the form line {form!r}"
     if task == "preference_construction":
         # It writes its own prompt but is scored by `score_item` like the other five,
         # so the two rules that scorer applies unconditionally have to be stated here
         # too, and the forms it accepts have to be shown rather than left inferable
         # from the theory text.
+        block = preference_block()
+        assert block and block in it.prompt, "the preference block is not verbatim"
         assert "Permitted additions: preference directives only, written exactly in " \
                "these forms:" in it.prompt
-        for form in ("   [prefer_rule: <rule> > <rule>]",
-                     "   [prefer_premise: <literal> > <literal>]"):
-            assert form in it.prompt
         assert UNREADABLE + ", so write only directives." in it.prompt
         assert pc.TIE_NOTE in it.prompt
+        # And the forms it does not accept, since the header promises an exact list.
+        for form in (DEFEASIBLE_FORM, STRICT_FORM, PREMISE_FORM):
+            assert form not in it.prompt, f"preference_construction offers {form!r}"
         # And not the third rule: an answer of preferences alone cannot make a
         # consistent theory inconsistent, so stating it would describe a branch this
         # task cannot reach.
@@ -147,7 +135,12 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, items):
         return
     strict = "strict" in task
     block = permitted_block(strict)
-    assert block in it.prompt, f"{task}: the permitted-directive block is not verbatim"
+    assert block and block in it.prompt, (
+        f"{task}: the permitted-directive block is not verbatim")
+    assert DEFEASIBLE_FORM in it.prompt, f"{task}: lost the defeasible form line"
+    assert PREMISE_FORM in it.prompt, f"{task}: lost the premise form line"
+    assert (STRICT_FORM in it.prompt) is strict, (
+        f"{task}: the strict form is offered where the scorer rejects it")
     assert ("leaving the theory inconsistent" in it.prompt) is strict, (
         f"{task}: the consistency rule is stated where an answer cannot break it")
     for clause in ("Every rule needs a name, written after the kind and separated from it "

@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Sequence
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import AnswerTemplate
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -19,7 +18,7 @@ from arggym.core.invariants import (
     randomize_rule_names,
     split_atoms_and_rules,
 )
-from arggym.core.prompting import MINIMALITY, UNREADABLE, answer_format
+from arggym.core.prompting import answer_format, preference_block
 
 TASK = "preference_construction"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -116,8 +115,7 @@ class PCItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL",
-          template: Optional[AnswerTemplate] = None) -> Optional[PCItem]:
+          profile: str = "FULL") -> Optional[PCItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pc"))
     n_claims = max(1, min(1 + (level * 8) // 15, 8))
     n_conf = max(n_claims + 1, min(n_claims + 1 + (level * 5) // 15, 10))
@@ -293,7 +291,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             best = found
 
     lines = [f"[{o.kind}: {o.stronger} > {o.weaker}]" for o in best]
-    prompt = _render_prompt(render_ops(base), goals, ordering, template)
+    prompt = _render_prompt(render_ops(base), goals, ordering)
     return PCItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, goals=goals,
         ordering=ordering, level=level,
@@ -321,8 +319,7 @@ TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both direc
             "equally preferred and settles nothing between them.")
 
 
-def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
-                   template: Optional[AnswerTemplate] = None) -> str:
+def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
     on = _ordering_phrase(ordering)
     lines = [f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
              f"with {on}.", "", theory, ""]
@@ -333,23 +330,16 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str,
                       for g in goals)
     verb = "makes" if len(goals) == 1 else "simultaneously makes"
     lines += ["", f"What is the minimal set of preference directives that {verb} {wants}?", "",
-              "Permitted additions: preference directives only, written exactly in "
-              "these forms:\n"
-              "   [prefer_rule: <rule> > <rule>]\n"
-              "   [prefer_premise: <literal> > <literal>]\n"
-              "No new rules or premises may be added.",
-              MINIMALITY,
-              UNREADABLE + ", so write only directives.",
+              preference_block(),
               TIE_NOTE, "",
-              answer_format("Answer format: one directive per line.", template)]
+              answer_format("Answer format: one directive per line.")]
     return "\n".join(lines)
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14,
-              template: Optional[AnswerTemplate] = None) -> Optional[PCItem]:
+              tries: int = 14) -> Optional[PCItem]:
     for k in range(tries):
-        it = build(level, seed * 61 + k, ordering, profile, template)
+        it = build(level, seed * 61 + k, ordering, profile)
         if it is not None:
             return it
     return None

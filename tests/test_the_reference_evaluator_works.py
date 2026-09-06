@@ -62,7 +62,7 @@ def test_no_question_in_the_taskset_says_where_to_put_the_answer(taskset):
     for row in rows:
         assert DEFAULT_TEMPLATE.instruction not in row["question"]
         assert DEFAULT_TEMPLATE.open not in row["question"]
-        assert row["metadata"]["answer_template"] is None
+        assert "answer_template" not in row["metadata"]
 
 
 def test_the_prompt_the_example_sends_does_say_where(taskset):

@@ -22,10 +22,11 @@ from typing import Any, Dict, Optional
 
 @dataclass(frozen=True)
 class AnswerTemplate:
-    """The delimiters a prompt asks for, and the sentence that asks for them.
+    """The delimiters a harness asks for, and the sentence that asks for them.
 
-    `name` is what a frozen row records, so a taskset says what its questions
-    asked for rather than leaving a reader to infer it from the prompt text.
+    `name` is what a run records (`evals/run.py`), so a set of completions says
+    which convention produced it. No frozen row records it: a question names no
+    fence, so there is nothing about delivery for the dataset to write down.
     """
 
     name: str

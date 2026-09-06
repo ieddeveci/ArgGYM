@@ -21,12 +21,11 @@ the answer back out of a completion are the harness's job, not the dataset's.
 That is what lets any convention work: XML tags, a boxed expression, a JSON
 schema, constrained decoding, or a solver that returns the answer directly.
 
-If you would rather the question carried the delivery sentence, ask for one and
-it renders exactly one sentence more:
+`AnswerTemplate` names the common convention and `extract_answer` reads it back,
+for a harness that wants them:
 
-    ds = arggym.create("status_query", level=9, template=arggym.XML_TAGS)
-    text = my_model(ds[0]["question"])
-    result = ds.score(arggym.extract_answer(text), ds[0])
+    q = ds[0]["question"] + "\\n" + arggym.XML_TAGS.instruction
+    result = ds.score(arggym.extract_answer(my_model(q)), ds[0])
 
 An answer need not be text either. Every task takes the value directly, so a
 solver with a JSON schema or constrained decoding submits it and gets the same
