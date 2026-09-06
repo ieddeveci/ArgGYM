@@ -140,14 +140,20 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     # is the same split levels 6 and up get from the mid-chain target.
     #
     # Only for the ablation. The plain variant asks a different question and the draw has
-    # nothing to say about it, so gating keeps its items exactly as they were. The two
-    # variants already build different theories below level 8, through `contested`.
+    # nothing to say about it, so gating keeps its items exactly as they were. It is the
+    # one thing that still makes the two variants build different theories, and it stays
+    # because deleting it puts the level-3 floor at two directives while level 6 keeps
+    # one, which is the inversion #32 was closed on.
     n_strict = 0 if level < 3 else min(n_chain, 1 + (level - 3) // 4)
     if allow_strict and 3 <= level < 6 and stable_seed(seed, level, ordering, "cas") % 2 == 0:
         n_strict = 0
     n_axiom_strict = 0
     use_decoy = level >= 9 and n_strict < n_chain
-    contested = level >= 8 or allow_strict
+    # Not `or allow_strict`. The strict variant is an ablation: it must hold the theory
+    # fixed and vary only the permitted directive forms, or a score gap between the arms
+    # cannot be read as an effect of permitting strict rules. Contested premises on the
+    # strict arm alone made the two arms build different theories at levels 3 and 6 (#37).
+    contested = level >= 8
     mid_target = level >= 6 and (seed % 2 == 1)
 
     it = iter(_names(stable_seed(seed, level, ordering, "nm"), _POOL))
@@ -392,9 +398,34 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     bank: List[Tuple[List[Operation], List[str]]] = []
     if allow_strict:
-        bank.append(([Operation(kind="strict", name="cs", antecedents=(seed_lit,),
-                                consequent="-" + target)],
-                     [f"[strict cs: {seed_lit} -> -{target}]"]))
+        # The strict counter-argument alone wins only where every chain reaching the
+        # target ends in a defeasible rule: it rebuts those for free, while a chain that
+        # reaches the target strictly derives the contrary of a strict conclusion and the
+        # framework is inconsistent. Whether such a chain exists was decided by `seed % 2`
+        # through `mid_target`, so on even seeds the strict arm fell back on the plain
+        # arm's answer and the two shipped the same reference (#37).
+        #
+        # So break those chains first, one undercut of the chain's first rule each -- the
+        # same move the plain path already makes for a strict-final chain. The answer then
+        # costs one directive where nothing blocks and 1 + k where k chains do, and it is
+        # the ablation's own question either way: what the strict rule buys is the k
+        # defeasible chains it rebuts without a preference apiece.
+        strict_ops = [Operation(kind="strict", name="cs", antecedents=(seed_lit,),
+                                consequent="-" + target)]
+        strict_lines = [f"[strict cs: {seed_lit} -> -{target}]"]
+        for ci, c in enumerate(target_chains):
+            if not c["rules"][_tgt_idx(c)][2]:
+                continue
+            # `u0`, like `w` and `z0` above: two characters, so it can be neither an atom
+            # (letter, letter, digit) nor a theory rule name (consonant, vowel, digit).
+            # A three-character `cu0` is both, and the scorer drops an answer rule whose
+            # name the theory already used.
+            first = c["rules"][0]
+            strict_ops.append(Operation(kind="strict", name=f"u{ci}",
+                                        antecedents=(seed_lit,),
+                                        consequent="-" + first[0]))
+            strict_lines.append(f"[strict u{ci}: {seed_lit} -> -{first[0]}]")
+        bank.append((strict_ops, strict_lines))
     for c in target_chains:
         rl = c["rules"][_tgt_idx(c)]
         if not rl[2]:
@@ -403,12 +434,41 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                           Operation(kind="prefer_rule", stronger="cw", weaker=rl[0])],
                          [f"[defeasible cw: {seed_lit} => -{target}]",
                           f"[prefer_rule: cw > {rl[0]}]"]))
+    # Every candidate is minimised first and compared afterwards. A candidate is written
+    # by hand rather than searched, so the length it arrives with says nothing about what
+    # it costs, and ordering the bank by that length would hide a longer candidate that
+    # trims shorter. One that does not hold costs a single verifier call and the bank
+    # holds at most one entry per chain, so trying them all is cheaper than the argument
+    # for skipping any.
+    #
+    # The trim is a check on an argument rather than a repair: `cs` plus one undercut per
+    # blocked chain should already be irredundant, since dropping `cs` leaves nothing
+    # deriving -target and dropping an undercut leaves the framework inconsistent. The
+    # score floor is `len(lines)`, so a line that could have been dropped would raise the
+    # floor every answer is measured against. `None` means the candidate does not hold.
+    winner: Optional[Tuple[List[Operation], List[str], bool]] = None
     for cand_ops, cand_lines in bank:
-        if len(cand_lines) >= len(lines):
+        trimmed, cand_proven, _ = minimal_subset_exact(cand_ops, holds, max_calls=4000)
+        if trimmed is None:
             continue
-        if holds(cand_ops):
-            ref_ops, lines = cand_ops, cand_lines
-            break
+        keep = {id(o) for o in trimmed}
+        c_ops, c_lines = dedupe_parallel([(o, l) for o, l in zip(cand_ops, cand_lines)
+                                          if id(o) in keep])
+        bar = len(winner[1]) if winner is not None else len(lines)
+        if not c_ops or len(c_lines) >= bar:
+            continue
+        # The searched path re-checks what it deduped, so this one does too: a candidate
+        # whose lines collapsed into each other must not ship unverified.
+        if not holds(c_ops):
+            continue
+        winner = (c_ops, c_lines, cand_proven)
+    if winner is not None:
+        # Bound here rather than in the loop. Bound in the loop, `minimality_proven` and
+        # `reference_irredundant` described whichever candidate was examined last: every
+        # plain-arm item reported `minimality_proven` false, from the two-line `cw`
+        # candidate that is always offered there and never holds.
+        ref_ops, lines, _proven = winner
+        irredundant, _irr_calls = assert_irredundant(ref_ops, holds)
 
     prompt = _render_prompt(render_ops(base), target, ordering, allow_strict, template)
     return CAItem(

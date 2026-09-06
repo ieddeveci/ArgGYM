@@ -130,8 +130,11 @@ def test_the_reference_answer_collides_with_its_own_theory_and_is_told_so():
     row = arggym.TaskDataset("counter_argument_strict", 9, "last_link_elitist",
                              size=1, seed=0)[0]
     ref = row["reference_answer"]
-    assert " z0:" in ref, "the reference no longer names its rule z0; update the rename"
-    colliding = ref.replace(" z0:", " as6:")
+    # `cs` is the strict counter-argument the bank offers this arm, and since #37 it is
+    # what this cell's reference is built from; the answer used to be defeasible `z0`
+    # lines. The rename target has to be a rule the reference actually names.
+    assert " cs:" in ref, "the reference no longer names its rule cs; update the rename"
+    colliding = ref.replace(" cs:", " as6:")
 
     honest = arggym.score_row(ref, row)
     assert honest.score == 1.0
