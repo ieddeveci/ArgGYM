@@ -13,6 +13,7 @@ from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import answer_format
+from arggym.core.spec import ALL_ORDERINGS
 
 TASK = "semantics_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -84,6 +85,32 @@ def semantics_for(level: int) -> Tuple[str, ...]:
         if level >= k:
             out = SEMANTICS_BY_LEVEL[k]
     return out
+
+
+def wants_unshielded_ring(level: int, ordering: str) -> bool:
+    """Does this cell load the ring onto both branches, leaving no stable extension?
+
+    `_render_prompt` tells every item that asks about stable to answer `no stable
+    extension` if the theory has none. Before #77 no theory ever had none, so the sentence
+    named an answer that was never right -- a standing red herring. A few cells have to
+    make it right, and only a few: an unattacked ring answers `no stable extension` for
+    every claim in the item, so on many cells that one answer would be most of what
+    `stable` says, and a solver could score it without reading a theory.
+
+    Keyed on (level, ordering), which are the item's coordinates in the exported grid, and
+    not on the seed. `tasksets/standard.yaml` scans up to 40 seeds a cell and keeps the
+    first two that build, so which seeds a cell ships is not fixed and a seed-keyed rule
+    would realise an uncontrolled fraction.
+
+    One ordering per level and one level per ordering, so the rows carrying a ring come
+    out balanced on both marginals a report breaks out: each ordering carries 2 of its 10
+    rows, each stable-asking level 2 of its 8. Only the level-by-ordering cell is
+    confounded, and nothing reports that cell. The exported levels step by 3, which is
+    what makes `level // 3` a bijection onto the four orderings across them.
+    """
+    if STABLE not in semantics_for(level):
+        return False
+    return ALL_ORDERINGS[(level // 3) % len(ALL_ORDERINGS)] == ordering
 
 
 def render_ops(ops: Sequence[Operation]) -> str:
@@ -255,21 +282,92 @@ def _defeated(it, ridx):
     return ops, x
 
 
-def _odd(it, ridx) -> Tuple[List[Operation], str]:
-    a, b, c, x, y, z = (next(it) for _ in range(6))
-    names = []
-    for _ in range(6):
-        ridx[0] += 1
-        names.append(f"r_{ridx[0]}")
-    ops = [Operation(kind="premise", content=a), Operation(kind="premise", content=b),
-           Operation(kind="premise", content=c),
-           Operation(kind="defeasible", name=names[0], antecedents=(a,), consequent=x),
-           Operation(kind="defeasible", name=names[1], antecedents=(b,), consequent="-" + x),
-           Operation(kind="defeasible", name=names[2], antecedents=(b,), consequent=y),
-           Operation(kind="defeasible", name=names[3], antecedents=(c,), consequent="-" + y),
-           Operation(kind="defeasible", name=names[4], antecedents=(c,), consequent=z),
-           Operation(kind="defeasible", name=names[5], antecedents=(a,), consequent="-" + z)]
-    return ops, x
+def _ring(host: str, names: Sequence[str]) -> List[Operation]:
+    """`d0: host => -d1`, `d1: host => -d2`, ... `dn: host => -d0`.
+
+    Undercuts, because an odd cycle needs attacks that do not answer back and an undercut
+    is one: the argument for `-d` defeats every argument using rule `d`, and nothing about
+    `d` reaches back. A rebut is symmetric, so a ring of rebuts is a ring of two-cycles.
+    Every rule stands on `host`, so defeating the argument for `host` collapses the ring.
+    """
+    return [Operation(kind="defeasible", name=n, antecedents=(host,),
+                      consequent="-" + names[(i + 1) % len(names)])
+            for i, n in enumerate(names)]
+
+
+def _odd_cycle(it, ridx, rng, unshielded: bool) -> Tuple[List[Operation], List[str]]:
+    """A contested pair with an odd undercut ring standing over one side of it.
+
+    This is the cluster that makes `stable` a different question from `sceptical
+    preferred`. The two names read the same all/any/none formula off their own extension
+    family, so they answer differently only where the families differ, and nothing the
+    generator built made them differ: preferred equalled stable on 40 of 40 exported cells
+    and 360 of 360 in a wider sweep (#77).
+
+    Odd cycles are the whole of the difference. Dung's coherence result says an argument
+    graph with no odd-length cycle has its preferred and stable extensions equal, so
+    without one there is nothing for `stable` to say that `sceptical preferred` does not.
+
+    What #77 asked for was an unattacked ring, which kills every stable extension and
+    makes every claim in the theory answer `no stable extension`. Shielding the ring is
+    better. With `p` and `-p` asserted against each other and the ring hung from `q`:
+
+        premise p          premise -p         rq: p => q
+        d0: q => -d1       d1: q => -d2       d2: q => -d0
+
+    the extension taking `-p` defeats the argument for `p`, so for `q`, so every rule in
+    the ring, and is stable; the extension taking `p` keeps the ring alive and is preferred
+    but not stable. Two preferred extensions, one stable, on all four orderings. Both
+    literals are undecided under sceptical preferred; stable justifies one and overrules
+    the other. Both separations survive #36's rereading of overruled, since the loser's
+    contrary is in every stable extension and each literal is in one preferred extension of
+    two either way.
+
+    Loading a ring over both branches gives the unattacked case back: no stable extension
+    at all, and `no stable extension` for every claim. `wants_unshielded_ring` schedules
+    that thinly, because the prompt promises the answer on every item that asks about
+    stable and it would otherwise never be right.
+
+    Three things here keep the cluster from handing a solver more than it has to. None of
+    them makes the item hard to fake: a program that reads the ring off the theory text and
+    computes no extension answers most of the stable column, and that is a property of odd
+    cycles rather than of this code. `docs/dataset-card.md` carries the measurement, and
+    #95 tracks what it means for chance floors on a task that asks about five semantics.
+
+    * One literal is exposed as a query candidate, not both. Asking both put a
+      complementary pair in every item under sceptical preferred, where the cluster makes
+      both undecided by construction, so `if c and -c are both asked, answer undecided`
+      covered that column and was never wrong. Trading #77's duplicated column for a
+      guessable neighbouring one is no trade.
+    * The ring hangs from a literal the branch derives rather than from the branch itself,
+      so the literal the item asks about is not the one the ring names, and reading the
+      ring off the text answers the query only after tracing a rule back to it.
+    * The pair is asserted outright rather than derived through two rules, and the ring is
+      three long rather than three or five. Six directives against nine, which matters
+      because this cluster is on every item that asks about stable and the theory is capped
+      at MAX_DIRECTIVES. Neither longer form separates the semantics any better, so
+      neither earns its directives.
+    """
+    p = next(it)
+    lits = [p, "-" + p]
+    ops = [Operation(kind="premise", content=p),
+           Operation(kind="premise", content="-" + p)]
+    for branch in (lits if unshielded else [rng.choice(lits)]):
+        # The unattacked variant skips the carrier: its two rings sit over complementary
+        # literals, which gives the case away whether or not they are one step removed,
+        # and it is already the widest cluster here against MAX_DIRECTIVES.
+        host = branch
+        if not unshielded:
+            ridx[0] += 1
+            host = next(it)
+            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                 antecedents=(branch,), consequent=host))
+        names = []
+        for _ in range(3):
+            ridx[0] += 1
+            names.append(f"r_{ridx[0]}")
+        ops.extend(_ring(host, names))
+    return ops, [rng.choice(lits)]
 
 
 def _strict_axiom(it, ridx):
@@ -316,11 +414,27 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     _lo = 3 + (1 if level >= 6 else 0)
     _hi = min(6, _lo + 1 + (1 if level >= 11 else 0))
     _n_cluster = rng.randint(_lo, _hi)
+    # The odd-cycle cluster takes a fixed slot on every item that asks about stable,
+    # rather than a seventh seat on the menu. It is the only thing in the generator that
+    # separates stable from sceptical preferred, and a menu draw would leave most items
+    # unable to tell the two apart at all (#77).
+    _odd_slot = 1 if STABLE in sems else -1
+    _unshielded = wants_unshielded_ring(level, ordering)
+    _required_claims: List[str] = []
     for k in range(_n_cluster):
         _menu = ["defeated", "settled", "undermining", "junction",
                  "strict_axiom", "negated_premise"]
-        kind = "floating" if k == 0 else _menu[rng.randrange(len(_menu))]
-        if kind == "floating":
+        if k == 0:
+            kind = "floating"
+        elif k == _odd_slot:
+            kind = "odd"
+        else:
+            kind = _menu[rng.randrange(len(_menu))]
+        if kind == "odd":
+            block, lits = _odd_cycle(it, ridx, rng, unshielded=_unshielded)
+            candidates.extend(lits)
+            _required_claims.extend(lits)
+        elif kind == "floating":
             block, shared, contested = _floating(it, ridx)
             candidates.extend([shared, contested])
         elif kind == "undermining":
@@ -338,11 +452,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         elif kind == "strict_axiom":
             block, x = _strict_axiom(it, ridx)
             candidates.append(x)
-        elif kind == "negated_premise":
-            block, x = _negated_premise(it, ridx)
-            candidates.append(x)
         else:
-            block, x = _odd(it, ridx)
+            block, x = _negated_premise(it, ridx)
             candidates.append(x)
         ops.extend(block)
 
@@ -406,6 +517,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     gold: Dict[Tuple[str, str], str] = {}
     for c in candidates:
         for s in sems:
+            # The odd cycle's literals are never asked under grounded or credulous
+            # preferred. It is a contested pair, so those two answer it by construction --
+            # undecided and justified respectively, on every item -- and asking them there
+            # hands a solver two free answers and tilts two columns the cluster has no
+            # business tilting. Structural, so it costs no look at the gold it drops (#77).
+            if c in _required_claims and s in (GROUNDED, CRED_PREF):
+                continue
             st = status_under(cache, c, s)
             if st is None:
                 return None
@@ -438,21 +556,66 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         for v in order:
             if by_status[v]:
                 queries.append(by_status[v].pop())
-    _first_of = {}
+    # The odd cycle separates stable from sceptical preferred in the theory whatever the
+    # item asks, but a theory that separates them and an item that shows it are different
+    # things: the trim below keeps a fraction of the pool and rarely drew one claim under
+    # both names, so the separation reached 6 of 24 cells while the theory carried it on
+    # 32 of 32. The cluster's exposed literal is therefore asked under stable outright, and
+    # asked first, so the semantics-coverage pass below fills around it rather than
+    # spending the stable slot on some other claim. Required by construction, not by
+    # inspection -- the cluster separates the two on all four orderings whatever the rest
+    # of the theory does, so nothing here reads the status it is selecting for.
+    #
+    # One claim is then asked under both names. Pairing the cluster's own literal on every
+    # item made the pairing itself the answer: the cluster leaves both its literals in one
+    # preferred extension of two, so sceptical preferred calls them undecided by
+    # construction. A claim from another cluster carries the pairing when the coin below
+    # says so and a decoy is available.
+    #
+    # The coin is fair and the realised split is not: the cluster's own literal carries the
+    # pairing on 174 of 213 items, 82%. Two causes, both measured. A decoy pairing adds a
+    # query, which raises `_target` and leaves the MAX_STATUS_SHARE gate below harder to
+    # pass, so the retry loop accepts cluster-paired items more often -- 47% of attempts
+    # draw a decoy against 57% of accepted items keeping the cluster. And on a decoy item
+    # the cluster's literal often survives the trim under both names anyway. So this
+    # mitigates the pattern rather than removing it, and the sceptical-preferred column
+    # should be read with that in mind.
+    _forced: List[Tuple[str, str]] = [(c, STABLE) for c in _required_claims]
+    if _required_claims:
+        _decoys = [c for c in candidates if c not in _required_claims]
+        _pair = (_required_claims[0] if (rng.random() < 0.5 or not _decoys)
+                 else rng.choice(_decoys))
+        _forced += [(_pair, STABLE), (_pair, SCEPT_PREF)]
+    _required: List[Tuple[str, str]] = []
+    for _c, _s in _forced:
+        if _s in sems and (_c, _s) in gold and (_c, _s) not in _required:
+            _required.append((_c, _s))
+    # Every semantics the level schedules is asked at least once, whatever the trim does.
+    _covered = {q[1] for q in _required}
     for q in queries:
-        _first_of.setdefault(q[1], q)
-    _required = [v for k, v in _first_of.items()]
+        if q[1] not in _covered:
+            _covered.add(q[1])
+            _required.append(q)
     queries = _required + [q for q in queries if q not in _required]
 
     _pool_n = len(queries)
     _frac = 0.55 + rng.random() * 0.35
-    _target = max(MIN_QUERIES, min(MAX_QUERIES_BY_LEVEL, _pool_n,
-                                   int(round(_pool_n * _frac))))
+    _target = max(MIN_QUERIES, len(_required),
+                  min(MAX_QUERIES_BY_LEVEL, _pool_n, int(round(_pool_n * _frac))))
     kept = []
     counts = collections.Counter()
+    _n_stable = 0
     for q in queries:
         if len(kept) >= _target:
             break
+        # On an unattacked ring `no stable extension` is a fact about the theory rather
+        # than about a claim, so every stable query in the item repeats the first. Left
+        # uncapped the interleave above treats them as a bucket to draw from and hands one
+        # item four copies of one answer. The cap runs before the required exemption below,
+        # so on these items a decoy pairing keeps its sceptical-preferred query and loses
+        # its stable one -- no loss, since that answer would have been the same word again.
+        if _unshielded and q[1] == STABLE and _n_stable >= 1:
+            continue
         cand = counts.copy()
         cand[gold[q]] += 1
         n = sum(cand.values())
@@ -460,6 +623,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             continue
         kept.append(q)
         counts[gold[q]] += 1
+        _n_stable += q[1] == STABLE
     if len(kept) < MIN_QUERIES:
         return None
     queries = kept
@@ -479,6 +643,9 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         metadata={"n_items": len(base), "n_queries": len(queries),
                   "n_clusters": n_cluster, "semantics": list(sems),
                   "n_diverging_claims": len(diverging),
+                  "odd_cycle": bool(_required_claims),
+                  "odd_cycle_claims": list(_required_claims),
+                  "unshielded_ring": _unshielded,
                   "n_rules": len(rules)})
 
 
