@@ -439,7 +439,7 @@ fails the irredundance check" without a format change.
 
 ### `profile` is recorded, and refused
 
-`arggym/core/curriculum.py:236-250` defines four language profiles and nine
+`arggym/core/curriculum.py:105-118` defines four language profiles and nine
 tasks branch on them. But `counter_argument` and `semantics_query` take no
 profile at all, only `status_query` mixes it into its seed, and `TASK_PROFILES`
 has no reader. It is a real axis that is under-built.

@@ -36,9 +36,11 @@ shown.
 
 Backwards, and then verified.
 
-1. A theory is constructed to a level's shape, from a curriculum whose numbers
-   come from generation sweeps rather than from choice
-   (`arggym/core/curriculum.py`).
+1. A theory is constructed to a level's shape. Each task states its own shape,
+   in its own module under `arggym/tasks/`; what the tasks share is a set of
+   level-indexed knobs -- junction density, ternary junctions, the language
+   profiles -- in `arggym/core/curriculum.py`. Those numbers come from
+   generation sweeps rather than from choice.
 2. A reference answer is constructed alongside it, and for the construction
    tasks a minimum is searched for rather than assumed.
 3. The item is evaluated through PyArg. If the reference does not score 1.0, or

@@ -13,14 +13,13 @@ from arggym.core.curriculum import (
     MIXED,
     PROFILES,
     junctions_for,
-    spec_for,
     wants_ternary,
 )
 from arggym.core.invariants import language_enrichment, randomize_rule_names, remap_text
 from arggym.core.minimality import find_minimum, find_minimum_decomposed
 from arggym.core.prompting import render
 from arggym.core.scoring import score_item, subgoals_from
-from arggym.structures.chains import CONFIGS, LAST_LINK, reasoning_cost
+from arggym.structures.chains import CONFIGS, reasoning_cost
 from arggym.structures.defence import build_defence
 from arggym.structures.defence import verify_minimum as verify_defence_minimum
 from arggym.structures.defence import verify_minimum_decomposed as verify_defence_decomposed
@@ -114,10 +113,15 @@ def build_attack_item(level: int, seed: int, ordering: str,
                       profile: str = "FULL",
                       template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     import random
-    sp = spec_for(level, ordering, variant=seed % 5)
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
-    n = max(2, min(sp.n_chains_max, 2 + level // 3))
-    depth = max(2, min(sp.depth_max, 2 + level // 4))
+    # Both caps came from `ItemSpec`, as `min(2 + L // 2, 10)` on the chain count and
+    # `min(2 + L // 2, 9)` on the depth, over an `L` clamped to 1..15. Nine is what each
+    # evaluates to at the top of that clamp -- the effective maximum, not the written
+    # constant for chains -- and neither binds anywhere in 1..15, where the level terms
+    # reach 7 chains and depth 5. Written out here because the spec that carried them
+    # described a curriculum no builder answered to (#31).
+    n = max(2, min(9, 2 + level // 3))
+    depth = max(2, min(9, 2 + level // 4))
 
     pool = ["C2"] if level <= 3 else (["C2", "C4"] if level <= 6 else
                                       ["C2", "C4", "C7"] if level <= 9 else
@@ -477,15 +481,21 @@ def reference_ok(result: ScoreResult) -> bool:
 MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: build_mixed_item}
 
 
-def make_item(level: int, seed: int, ordering: str = LAST_LINK,
-              mode: Optional[str] = None, profile: str = "FULL",
-              tries: int = 12,
+def make_item(level: int, seed: int, ordering: str, mode: str,
+              profile: str = "FULL", tries: int = 12,
               template: Optional[AnswerTemplate] = None) -> Optional[Item]:
-    if mode is None:
-        mode = spec_for(level, ordering, variant=seed % 5).mode
-    fn = MODE_BUILDERS.get(mode)
-    if fn is None:
-        return None
+    # The mode is part of the task identity: `core/registry.py` registers `attack`,
+    # `defence` and `attack_defense` separately and names the mode on each, so no
+    # caller wants a default. It used to take one from `spec_for(...).mode`, chosen off
+    # the seed's parity -- a curriculum nothing else in the module consulted, and
+    # unreachable because the registry always passes a mode (#31). Raising says
+    # "caller error" where returning None would read as a cell that rejected every
+    # candidate. `ordering` loses its default because a required argument cannot follow
+    # an optional one and `tests/e2e/registry.py` passes the mode positionally.
+    if mode not in MODE_BUILDERS:
+        raise ValueError(f"attack_defense needs a mode, one of "
+                         f"{', '.join(sorted(MODE_BUILDERS))}; got {mode!r}")
+    fn = MODE_BUILDERS[mode]
     for k in range(tries):
         it = fn(level, seed * 31 + k, ordering, profile, template)
         if it is not None:
