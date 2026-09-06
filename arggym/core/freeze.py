@@ -30,6 +30,11 @@ from arggym.core.spec import TasksetSpec, check_versions
 PROMPT_VERSION = 4
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
+#:
+#: A legality rule that the prompt states and the scorer enforces bumps both, the
+#: way the bloat factor does (`docs/dataset-contract.md`): the prompt hash records
+#: that the question changed, and this records that an unchanged question is now
+#: scored differently. #89's name-collision rule is such a rule.
 SCORING_VERSION = 4
 
 
