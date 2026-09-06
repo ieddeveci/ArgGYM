@@ -102,7 +102,12 @@ def build_defence(n_attackers: int, ordering: str, names: Iterable[str],
 
     attackers: List[Attacker] = []
     ad = max(2, attacker_depth)
-    atk_junctions = max(0, n_junctions - len(j_points))
+    # The attackers take the junctions the support chain had no room for, so a short
+    # support chain still spends the budget. Reading `len(j_points)` alone made that
+    # leftover the whole budget when the caller asked for no junctions at all, because
+    # an empty set is what both "none wanted" and "none fitted" look like. A level with
+    # `junction=False` therefore still got multi-antecedent attacker rules (#31).
+    atk_junctions = max(0, n_junctions - len(j_points)) if junction else 0
     for a in range(n_attackers):
         ar = next(it)
         ops.append(Operation(kind="premise", content=ar))

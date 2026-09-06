@@ -293,11 +293,27 @@ def _defence_shape(level: int):
     return out
 
 
+#: The level the two junction-placing builders switch junctions on at.
+#:
+#: `curriculum.JUNCTION_START` is 5, and it is a different thing: it is where
+#: `junctions_for` starts returning a non-zero budget. Holding the flag at 6 while the
+#: budget starts at 5 is what left level 5 asking for junctions it was told not to have
+#: (#31), and the tempting repair is to align them at 5. That is a curriculum decision,
+#: not a bug fix: it would give level 5 a difficulty step the defence schedule does not
+#: declare, since `_DEFENCE_SCHEDULE`'s first entry covers levels 1 through 5. Keeping
+#: the flag at 6 also puts `defence` where `build_mixed` already was -- it guards on the
+#: flag correctly (`structures/interaction.py:70`) and has always built 0 junctions at
+#: level 5 -- which leaves `attack` the odd one out, spending its budget from level 5
+#: with no flag at all. Aligning all three belongs to whoever sets the curriculum.
+JUNCTION_LEVEL = 6
+
+
 def _n_junctions(ops: Sequence[Operation]) -> int:
     """Junctions in the theory as built, which is not always the budget asked for.
 
     A junction is a rule that has to draw on more than one line at once. `build_defence`
-    hands its leftovers to the attackers, so it spends the whole budget. `build_mixed`
+    hands its leftovers to the attackers, so it spends the whole budget on any level that
+    asks for junctions at all, and none of it on a level that does not. `build_mixed`
     places junctions only on the shared stem, `j_points = {k % shared_depth}`, so it
     silently keeps `min(budget, shared_depth)` of them and the stem is the binding
     constraint from level 6 to level 12. Recording the budget alone would state a number
@@ -311,8 +327,12 @@ def build_defence_item(level: int, seed: int, ordering: str,
                        template: Optional[AnswerTemplate] = None) -> Optional[Item]:
     n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
-    n_junc = junctions_for(level, max(1, n * 4))
-    d = build_defence(n, ordering, it, support_depth=sup, junction=(level >= 6),
+    # One level decides the flag and the budget together, so the recorded budget cannot
+    # disagree with the theory. Level 5 used to record a budget of 2 next to
+    # `n_junctions: 0`, which reads as two junctions the item does not have (#31).
+    junctions_on = level >= JUNCTION_LEVEL
+    n_junc = junctions_for(level, max(1, n * 4)) if junctions_on else 0
+    d = build_defence(n, ordering, it, support_depth=sup, junction=junctions_on,
                       n_junctions=n_junc,
                       ternary=wants_ternary(level, 0),
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
@@ -383,9 +403,12 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
     stem = max(1, min(4, 1 + level // 5))
-    n_junc = junctions_for(level, max(1, n_atk * 4))
+    # Same pairing as `build_defence_item`. `build_mixed` already guards on the flag, so
+    # its theory was right at level 5; only the recorded budget disagreed with it (#31).
+    junctions_on = level >= JUNCTION_LEVEL
+    n_junc = junctions_for(level, max(1, n_atk * 4)) if junctions_on else 0
     m = build_mixed(it, ordering, n_attackers=n_atk, extra_attack_routes=1, shared=True,
-                    depth=depth, shared_depth=stem, junction=(level >= 6),
+                    depth=depth, shared_depth=stem, junction=junctions_on,
                     n_junctions=n_junc,
                     ternary=wants_ternary(level, 0))
     if m is None:
