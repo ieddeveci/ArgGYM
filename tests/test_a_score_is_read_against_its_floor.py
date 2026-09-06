@@ -1,19 +1,30 @@
-"""What a constant answer scores, per task.
+"""What an uninformed answer scores, per task.
 
 #9, and `docs/dataset-card.md`. A benchmark number means nothing without the
 number an uninformed answer gets: measured here, answering "justified" to every
-query scores 0.490 on `semantics_query`, so a model at 0.45 there is worse than
-a fixed reply.
+query scores 0.375 on `status_query`, so a model at 0.3 there is worse than a
+fixed reply.
 
 The strategies are deliberately dumb -- what a model that read the answer format
-and nothing else can produce. They are not attacks on the scorer.
+and nothing else can produce. They are not attacks on the scorer. One constant
+for the whole item is not the widest such answer, which is #95: where the
+answer key carries a component the task fixes, the uninformed answer is one
+constant per value of it.
 """
 import json
 
 import pytest
 
 import arggym
-from arggym.core.floors import STRATEGIES, corrected, floor_for, floors
+from arggym.core.floors import (
+    _CANDIDATES,
+    STRATEGIES,
+    _key_groups,
+    corrected,
+    floor_for,
+    floor_strategy,
+    floors,
+)
 from arggym.core.freeze import freeze
 from arggym.core.spec import SeedPolicy, TasksetSpec
 
@@ -35,7 +46,9 @@ def test_every_task_gets_a_floor(rows):
     assert set(got) == set(LABEL_TASKS + ("claim_chain", "counter_argument"))
     for task, v in got.items():
         assert 0.0 <= v["floor"] <= 1.0, task
-        assert v["strategy"] in STRATEGIES
+        # Not `in STRATEGIES`: a fitted strategy is not one of the named
+        # constants, and every strategy that ran is a key of `by_strategy`.
+        assert v["strategy"] in v["by_strategy"]
 
 
 @pytest.mark.parametrize("task", LABEL_TASKS)
@@ -44,7 +57,8 @@ def test_a_constant_label_is_actually_submitted(task, rows):
     # format submits nothing, and the task reports a floor of 0.0. An
     # unmeasured floor reads exactly like a task where guessing does not pay,
     # which is the opposite of the truth. semantics_query measured 0.000 that
-    # way before the strategy learned its phrasing; it is 0.49.
+    # way before the strategy learned its phrasing, and it is the highest floor
+    # in the set.
     for row in [r for r in rows if r["task"] == task]:
         text = STRATEGIES["all_justified"](row)
         assert text.strip(), f"{task}: the constant strategy produced no answer"
@@ -52,8 +66,47 @@ def test_a_constant_label_is_actually_submitted(task, rows):
 
 def test_answering_justified_to_everything_pays_on_the_query_tasks(rows):
     got = floors(rows)
-    assert got["semantics_query"]["floor"] > 0.3, got["semantics_query"]
+    # `semantics_query` asks under several semantics at once, and the status
+    # that pays differs between them: over the shipped grid one constant scores
+    # 0.459 and one constant per semantics 0.671, so a floor from one constant
+    # reported 0.54 of room above chance where there is 0.33 (#95).
+    assert got["semantics_query"]["floor"] > 0.7, got["semantics_query"]
     assert got["status_query"]["floor"] > 0.2, got["status_query"]
+
+
+def test_only_a_vocabulary_the_task_fixes_becomes_a_key_group(rows):
+    # The two halves of `semantics_query`'s answer key differ in where they come
+    # from: the semantics is five names the task schedules by level, the claim is
+    # drawn per item from a pool of two thousand. A constant per semantics is a
+    # map an uninformed answerer writes down in advance; a constant per sampled
+    # claim would be the gold spelled as a map, so only the first earns a group.
+    assert _key_groups([r for r in rows if r["task"] == "semantics_query"]) == (1,)
+    for task in ("status_query", "perturbation", "claim_chain"):
+        assert _key_groups([r for r in rows if r["task"] == task]) == (), task
+
+
+def test_a_floor_says_what_reached_it(rows):
+    # `0.000 empty` means the search found nothing that fits the answer format,
+    # which is a different sentence from "guessing does not pay here". The number
+    # alone spells the two the same way, and a fitted floor is unreadable without
+    # the map it fitted.
+    got = floors(rows)
+    assert floor_strategy(got["status_query"]) == got["status_query"]["strategy"]
+
+    sem = got["semantics_query"]
+    assert sem["strategy"] == "per_key_group"
+    assert set(sem["detail"]) == {"grounded", "credulous preferred"}
+    assert floor_strategy(sem).startswith("per_key_group(credulous preferred=")
+
+
+def test_every_candidate_is_a_status_the_scorer_accepts():
+    # A candidate the parser drops is a search that measures nothing. `no stable
+    # extension` is the answer `semantics_query` asks for when a theory has none,
+    # and the search never tried it -- #95 in miniature.
+    from arggym.tasks.semantics_query import _PAIR
+
+    for status in _CANDIDATES:
+        assert _PAIR.findall(f"x under stable: {status}") == [("x", "stable", status)]
 
 
 def test_a_directive_task_cannot_be_guessed(rows):
@@ -66,7 +119,7 @@ def test_a_directive_task_cannot_be_guessed(rows):
 def test_the_floor_is_the_best_constant_not_their_average(rows):
     # A reader comparing a model against chance asks whether it beat the
     # easiest thing that works, not the average of several dumb things.
-    value, best, means = floor_for([r for r in rows if r["task"] == "status_query"])
+    value, best, means, _ = floor_for([r for r in rows if r["task"] == "status_query"])
     assert value == max(means.values())
     assert means[best] == value
 

@@ -96,7 +96,8 @@ def score_one(gen: Dict[str, Any], row: Dict[str, Any],
     return out
 
 
-def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float]) -> Dict[str, Any]:
+def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float],
+           floor_strategy: Optional[str] = None) -> Dict[str, Any]:
     """One group's numbers, with what was not measured said first."""
     n = len(records)
     ok = [r for r in records if r["score"] is not None]
@@ -129,6 +130,11 @@ def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float]) -> Dict[st
     }
     if floor is not None:
         out["floor"] = round(floor, 4)
+        # What reached it, in the artifact rather than only on the terminal.
+        # A floor of 0.000 that no strategy could fit and a floor of 0.000 on a
+        # task guessing cannot touch are different findings, and the number
+        # alone spells them the same way (`arggym/core/floors.py`).
+        out["floor_strategy"] = floor_strategy
         # Chance-corrected, which is the only form in which two tasks' scores
         # are the same quantity (`docs/dataset-contract.md` section 10). The
         # floor bounds the mean score and nothing else, so nothing else here is
@@ -165,8 +171,8 @@ def _rate(numerator: int, denominator: int) -> Optional[float]:
 
 
 def _floors_of(rows: Sequence[Dict[str, Any]]
-               ) -> Tuple[Dict[str, float], Optional[str]]:
-    """Measured floors, and why there are none when there are none.
+               ) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
+    """Measured floors, what reached them, and why there are none when there are none.
 
     `arggym.floors` scores every row with each constant strategy and does not
     guard, so a single ungradeable row would abort the whole scoring pass --
@@ -179,9 +185,11 @@ def _floors_of(rows: Sequence[Dict[str, Any]]
     row would quietly remove a task's `corrected` column with nothing saying so.
     """
     try:
-        return {t: v["floor"] for t, v in arggym.floors(list(rows)).items()}, None
+        got = arggym.floors(list(rows))
+        return ({t: v["floor"] for t, v in got.items()},
+                {t: arggym.floor_strategy(v) for t, v in got.items()}, None)
     except Exception as e:  # noqa: BLE001 - recorded on the group and in _meta
-        return {}, f"{type(e).__name__}: {e}"
+        return {}, {}, f"{type(e).__name__}: {e}"
 
 
 def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
@@ -212,9 +220,10 @@ def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
         out[name] = {}
         for key, got in sorted(buckets.items()):
             mine = [rows[r["id"]] for r in got if r["id"] in rows]
-            floors, why = _floors_of(mine)
-            floor = floors.get(key.split("|")[0])
-            out[name][key] = _stats(got, floor)
+            floors, strategies, why = _floors_of(mine)
+            task = key.split("|")[0]
+            floor = floors.get(task)
+            out[name][key] = _stats(got, floor, strategies.get(task))
             if floor is None and why:
                 out[name][key]["floor_error"] = why
     return out
