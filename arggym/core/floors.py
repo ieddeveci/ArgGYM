@@ -5,9 +5,9 @@ Measured on the v1 pilot, one constant string scored 0.490 on a task whose
 metric took three values, so any result near 0.5 there carried almost no
 information and anything below it was worse than a fixed reply.
 
-A floor is a property of the scorer, not of the tasks, so it has to be
-re-measured whenever a scoring policy changes -- which is what `scoring_version`
-is for.
+A floor is a property of the scorer and of this search, not of the tasks, so it
+has to be re-measured whenever either moves: `scoring_version` covers the
+scorer, `FLOORS_VERSION` covers what is searched here.
 
 The strategies are deliberately dumb, and the line they stay behind is stated
 rather than left to whatever the search happens to try: a strategy fixes, once
@@ -19,9 +19,9 @@ past it there is no stopping point short of a full solver.
 
 One constant for the whole item is not the widest fixed map that line allows.
 Where the answer key carries a component the task holds fixed -- `semantics_query`
-asks its claims under five semantics at once -- the answer a reader would reach
-for is one constant per semantics, and searching one constant per item put that
-floor at 0.459 where it is 0.671 (#95).
+asks its claims under as many as five semantics at once -- the answer a reader
+would reach for is one constant per semantics, and searching one constant per
+item put that floor at 0.459 where it is 0.671 (#95).
 """
 from __future__ import annotations
 
@@ -31,6 +31,12 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from arggym.core import registry
 from arggym.core.rows import row_task, score
 
+#: Bumped when the search changes: a strategy added or dropped, a candidate
+#: added, the key-group rule moved. A floor moves with the scorer and with the
+#: search, and `scoring_version` sees only the first, so two scoring artifacts
+#: carrying different floors for the same rows are otherwise identical.
+FLOORS_VERSION = 1
+
 #: Statuses a label-map task can answer with.
 _STATUSES = ("justified", "overruled", "undecided")
 
@@ -38,10 +44,28 @@ _STATUSES = ("justified", "overruled", "undecided")
 #: answer `semantics_query` asks for when a theory has no stable extension
 #: (`tasks/semantics_query.py:_render_prompt`), and leaving it out of the search
 #: was the same defect as searching one constant per item: an answer the format
-#: offers that nothing ever tries. Every group is offered it rather than only
-#: the stable one, so the search needs no table of which vocabulary belongs to
-#: which group -- a group whose gold never says it cannot fit it.
+#: offers that nothing ever tries. Which groups the format extends it to is a
+#: fact about one prompt's wording, and a second parser for that wording is a
+#: thing to keep in step with the first, so every group is offered every
+#: candidate and the fit drops the ones that do not pay.
 _CANDIDATES = _STATUSES + ("no stable extension",)
+
+#: Answered coordinates a fitted map must have per entry. A floor is a map with
+#: far fewer parameters than the labels it is scored against; below that it is
+#: the gold in another notation, and it reports 1.000. Measured on
+#: `semantics_query`: five entries over the 274 coordinates of the whole task
+#: (55 each) show no premium over a leave-one-row-out fit, five over the 56 of
+#: one level (11 each) show 0.088.
+MIN_COORDS_PER_ENTRY = 20
+
+
+class FittedFloorIsGold(RuntimeError):
+    """A fitted map reproduced the gold, so it is not a floor.
+
+    Raised rather than returned. A floor of 1.000 makes `corrected` zero for
+    every score in the group (`corrected`, below), which reads as a task no
+    model can beat rather than as a measurement that went wrong.
+    """
 
 
 def _asked(row: Dict[str, Any]) -> List[str]:
@@ -91,20 +115,30 @@ def _key_groups(rows: Sequence[Dict[str, Any]]) -> Tuple[int, ...]:
     uninformed answerer can write down before seeing an item; one constant per
     sampled claim would be the gold, spelled differently.
 
-    Derived from the asked coordinates, so no per-task table decides it. The
-    test is that a single item shows the whole vocabulary the task uses: a name
-    the item drew makes the pooled vocabulary grow with the rows, and a name the
-    task gave it does not. Two items are the minimum -- one cannot tell those
-    apart -- and where no component passes, the search stays on whole-item
-    constants.
+    Two tests decide it, both read off the asked coordinates, neither a per-task
+    table.
 
-    On the shipped grid that leaves ten tasks untouched and one group worth
-    something, `semantics_query`'s semantics. `formalization` also passes, on
-    the two literals `_asked` reads out of the answer-format example rather than
-    out of a question that lists none; they are the same two on every item, so
-    the rule is right about the vocabulary and wrong about what it is reading.
-    Nothing moves either way -- that task scores an operation list, and a label
-    line scores zero whichever status it carries.
+    **The vocabulary does not grow with the rows.** One item shows the whole of
+    it: a name the item drew makes the pooled set larger than any single row's,
+    a name the task gave it does not. Two items are the minimum, since one
+    cannot tell those apart.
+
+    **The map stays small**, at least `MIN_COORDS_PER_ENTRY` answered
+    coordinates per entry. The first test alone accepts the *claim* as soon as a
+    set of rows repeats an ask list -- which a filtered or partial run produces,
+    since a report fits per reporting group over the rows a run actually scored.
+    The map over (claim, semantics) is then the gold in another notation: it
+    reports a floor of 1.000, and `corrected` turns every score in the group
+    into 0.0 without raising. The budget is the sentence "a floor has far fewer
+    parameters than the labels it is scored against", written as a number.
+
+    On the shipped grid that leaves ten tasks on whole-item constants and one
+    group worth something, `semantics_query`'s semantics. `formalization` also
+    passes, on the two literals `_asked` reads out of the answer-format example
+    rather than out of a question that lists none; they are the same two on
+    every item, so the rule is right about the vocabulary and wrong about what
+    it is reading. Nothing moves either way -- that task scores an operation
+    list, and a label line is worth zero whichever status it carries.
     """
     keys = [[_key_parts(c) for c in _asked(row)] for row in rows]
     keys = [k for k in keys if k]
@@ -116,6 +150,11 @@ def _key_groups(rows: Sequence[Dict[str, Any]]) -> Tuple[int, ...]:
         per_row = [{k[i] for k in row} for row in keys]
         if len(set().union(*per_row)) <= max(len(s) for s in per_row):
             out.append(i)
+    if not out:
+        return ()
+    entries = {tuple(k[i] for i in out) for row in keys for k in row}
+    if len(entries) * MIN_COORDS_PER_ENTRY > sum(len(row) for row in keys):
+        return ()
     return tuple(out)
 
 
@@ -131,13 +170,9 @@ def _by_group(row: Dict[str, Any], idx: Sequence[int]) -> Dict[Tuple[str, ...], 
     return out
 
 
-def _lines(coords: Sequence[str], status: str) -> str:
-    return "\n".join(f"{c}: {status}" for c in coords)
-
-
 def _constant_labels(status: str) -> Callable[[Dict[str, Any]], str]:
     def make(row: Dict[str, Any]) -> str:
-        return _lines(_asked(row), status)
+        return "\n".join(f"{c}: {status}" for c in _asked(row))
     return make
 
 
@@ -155,32 +190,32 @@ def _fit_per_key_group(rows: Sequence[Dict[str, Any]]
                        ) -> Optional[Tuple[Callable[[Dict[str, Any]], str], Dict[str, str]]]:
     """One constant per key group, fitted on these rows, confirmed by the scorer.
 
-    Greedy: each group takes the candidate that scores best on the coordinates
-    that group owns, and the groups are fitted one at a time. That is the exact
-    argmax while the metric is linear in per-line correctness, which is where
-    the only task with more than one group sits -- a constant map answers every
-    asked coordinate exactly once, so `|pred| = |gold|` and `pair_f1` reduces to
-    `tp / n` (`core/pairs.py`). Any cross-line term breaks the decomposition:
-    the bloat gate and the all-or-nothing `success` in `core/scoring.py`,
-    `defeat_diagnosis`'s `0.85*f1 + 0.15*status_ok`, or an item that asked one
-    coordinate twice.
+    Each group takes the candidate that scores best with the other groups
+    pinned, and one pass over the groups is the exact argmax while two things
+    hold: every asked coordinate is answered exactly once, so `|pred|` is the
+    same whichever candidates the map carries; and the row's score is then an
+    affine function of its correct lines with a weight that does not move with
+    them, which `pair_f1` gives as `2*tp / (|pred| + |gold|)`
+    (`core/pairs.py`). Under those two the objective separates across groups and
+    one pass reaches the maximum. What breaks it is a cross-line term -- the
+    bloat gate and the all-or-nothing `success` in `core/scoring.py`, or
+    `defeat_diagnosis`'s `0.85*f1 + 0.15*status_ok`. Rounding survives as a
+    nuisance rather than a hole: over 70 buckets of `semantics_query` rows this
+    search found an exhaustive one's argmax every time, and on one bucket the
+    winning map's mean landed on 0.71875, where the fourth decimal goes either
+    way with the order the rows are added. Ranking a group by its own lines
+    alone does NOT hold: a partial answer changes `|pred|`, which reweights the
+    rows, and that search misses maps an exhaustive one finds.
 
-    So greedy only proposes. The number that comes back is the fitted map put
-    through the real `score()`, on the same text a model would submit, which
-    leaves the correctness of the floor independent of the argument above and
-    only its optimality resting on it. A scorer that later grows a cross-line
-    term makes this floor merely not the best fixed map, which is the failure
-    worth having.
+    So greedy proposes and the real scorer disposes. Every ranking here is a
+    whole answer put through `score()`, the same text a model would submit, and
+    so is the number that comes back. A scorer that later grows a cross-line
+    term leaves this floor true and merely stops it being the best fixed map.
 
-    The fit reads scores and never gold: a group's candidates are ranked by
-    submitting that group's lines alone, and every candidate then answers the
-    same coordinates, so ranking those scores ranks the number of correct lines.
-
-    The map is fitted on the rows it is then reported over, which is the same
-    transduction the `max` over the fixed strategies already does, with a few
-    more parameters. It costs something on a small group: five groups fitted
-    over the eight rows of one level is optimistic where the same five over
-    forty are not.
+    The fit reads scores and never gold. It is still fitted, so it belongs to
+    the rows it saw: fit it once over a whole task and hand the map down
+    (`floors`), rather than refitting on the eight rows of a level and then
+    correcting those same eight by it.
     """
     idx = _key_groups(rows)
     if not idx:
@@ -188,19 +223,30 @@ def _fit_per_key_group(rows: Sequence[Dict[str, Any]]
         # so there is nothing here they do not measure.
         return None
 
-    plan = [_by_group(row, idx) for row in rows]
-    fitted: Dict[Tuple[str, ...], str] = {}
-    for group in sorted({g for row in plan for g in row}):
-        asked = [(row, groups[group]) for row, groups in zip(rows, plan) if group in groups]
-        fitted[group] = max(_CANDIDATES, key=lambda c: sum(
-            score(_lines(coords, c), row).score for row, coords in asked))
+    groups = sorted({g for row in rows for g in _by_group(row, idx)})
+
+    def answer(mapping: Dict[Tuple[str, ...], str], row: Dict[str, Any]) -> str:
+        # A map fitted over a whole task covers every group its rows can ask.
+        # Where it does not, the caller paired a map with rows it was not fitted
+        # on, and answering the gap with a default would report a floor for a
+        # strategy nobody searched.
+        return "\n".join(f"{c}: {mapping[_group_of(c, idx)]}" for c in _asked(row))
+
+    def total(mapping: Dict[Tuple[str, ...], str]) -> float:
+        return sum(score(answer(mapping, row), row).score for row in rows)
+
+    fitted = {g: _CANDIDATES[0] for g in groups}
+    for group in groups:
+        fitted[group] = max(_CANDIDATES, key=lambda c: total({**fitted, group: c}))
+
+    if total(fitted) / len(rows) >= 1.0:
+        raise FittedFloorIsGold(
+            f"a map of {len(fitted)} entries scored 1.000 on the {len(rows)} rows "
+            f"it was fitted over, so it is the gold rather than a floor: "
+            f"{ {' '.join(g): s for g, s in fitted.items()} }")
 
     def make(row: Dict[str, Any]) -> str:
-        # In the order the question asks, not grouped: the answer a model
-        # submits follows the ask list, and the fit is what differs from a
-        # constant, not the shape of the text.
-        return "\n".join(f"{coord}: {fitted[_group_of(coord, idx)]}"
-                         for coord in _asked(row))
+        return answer(fitted, row)
 
     return make, {" ".join(g): s for g, s in fitted.items()}
 
@@ -212,9 +258,9 @@ STRATEGIES: Dict[str, Callable[[Dict[str, Any]], str]] = {
     **{f"all_{s}": _constant_labels(s) for s in _STATUSES},
 }
 
-#: Strategies whose map is fitted on the rows being measured rather than named
-#: in advance. Each returns the answerer and the map it fitted, or `None` where
-#: the task offers it nothing the fixed strategies do not already cover.
+#: Strategies whose map is fitted on rows rather than named in advance. Each
+#: returns the answerer and the map it fitted, or `None` where the task offers
+#: it nothing the fixed strategies do not already cover.
 FITTED: Dict[str, Callable[[Sequence[Dict[str, Any]]],
                            Optional[Tuple[Callable[[Dict[str, Any]], str],
                                           Dict[str, str]]]]] = {
@@ -235,13 +281,18 @@ def _mean(make: Callable[[Dict[str, Any]], str], rows: Sequence[Dict[str, Any]])
     return round(total / len(rows), 4) if rows else 0.0
 
 
-def floor_for(rows: Sequence[Dict[str, Any]]
+def floor_for(rows: Sequence[Dict[str, Any]],
+              fit_rows: Optional[Sequence[Dict[str, Any]]] = None
               ) -> Tuple[float, str, Dict[str, float], Optional[Dict[str, str]]]:
     """The best a fixed-map strategy does on these rows, and the map it fixed.
 
     The floor is the best of them, not the average: a reader comparing a model
     against chance is asking whether the model beat the easiest thing that
     works, and the easiest thing is whichever of these happens to fit.
+
+    `fit_rows` is where a fitted strategy's map comes from, defaulting to the
+    rows being measured. The two differ wherever a report corrects a subgroup:
+    the map is a property of the task, the number is a measurement of the rows.
 
     A tie goes to the fixed strategies, which come first: where a fitted map
     reaches nothing a named constant does not, the named one is the better
@@ -251,7 +302,7 @@ def floor_for(rows: Sequence[Dict[str, Any]]
                                for name, make in STRATEGIES.items()}
     details: Dict[str, Dict[str, str]] = {}
     for name, fit in FITTED.items():
-        got = fit(rows)
+        got = fit(rows if fit_rows is None else fit_rows)
         if got is None:
             continue
         make, details[name] = got
@@ -260,15 +311,28 @@ def floor_for(rows: Sequence[Dict[str, Any]]
     return means[best], best, means, details.get(best)
 
 
-def floors(rows: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    """Per task, because a floor is not a property of the benchmark."""
+def floors(rows: Sequence[Dict[str, Any]],
+           fit_rows: Optional[Sequence[Dict[str, Any]]] = None
+           ) -> Dict[str, Dict[str, Any]]:
+    """Per task, because a floor is not a property of the benchmark.
+
+    `fit_rows` is the taskset a fitted strategy's map is fitted over, grouped by
+    task the same way. Pass it wherever `rows` is a subgroup: a level-9 mean is
+    corrected by a level-9 floor, and fitting five constants on those same eight
+    rows made the floor 0.088 optimistic there by hindsight, where the same five
+    over the task's forty rows cost nothing. A task absent from `fit_rows` is
+    fitted on the rows in hand.
+    """
     by_task: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
         by_task.setdefault(row_task(row), []).append(row)
+    fit_by_task: Dict[str, List[Dict[str, Any]]] = {}
+    for row in fit_rows or ():
+        fit_by_task.setdefault(row_task(row), []).append(row)
 
     out: Dict[str, Dict[str, Any]] = {}
     for task in sorted(by_task):
-        value, best, means, detail = floor_for(by_task[task])
+        value, best, means, detail = floor_for(by_task[task], fit_by_task.get(task))
         out[task] = {"floor": value, "strategy": best, "detail": detail,
                      "n": len(by_task[task]),
                      "answer_shape": registry.get(task).answer_shape,

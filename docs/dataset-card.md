@@ -97,13 +97,16 @@ lower bound on what an uninformed answer gets, and the strategy is printed
 beside it so the two zeroes above never read as one.
 
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report
-floors beside the scores. They are a property of the scorer, so `arggym floors
-<taskset>` re-measures them from the rows and they move whenever
-`scoring_version` does. If a single headline number is wanted, chance-correct
-per task first: `(score - floor) / (1 - floor)`, which is `arggym.corrected`.
+floors beside the scores. They are a property of the scorer and of the search
+that measures them, so `arggym floors <taskset>` re-measures them from the rows,
+and they move when `scoring_version` moves or when `FLOORS_VERSION` does -- the
+change that gave `semantics_query` the map above moved its floor from 0.459 to
+0.671 with no scorer change at all. A scoring artifact records both. If a single
+headline number is wanted, chance-correct per task first:
+`(score - floor) / (1 - floor)`, which is `arggym.corrected`.
 
-**A program that reads no theory beats the floor on `semantics_query`.** That
-table measures a fixed map, one status per semantics. A short program that reads
+**A program that computes no extension beats the floor on `semantics_query`.**
+That table measures a fixed map, one status per semantics. A short program that reads
 the theory as text and computes no extension does better, because the shapes the
 generator uses are recognisable. On the stable column, 81.4% of answers (503 of
 618, over 400 items) fall to such a program: 51.8% to a rule that finds the
@@ -122,7 +125,7 @@ not as evidence it computed an extension.
 
 No floor bounds that program, and none should: a floor is what an answer that
 never reads the theory gets (`docs/dataset-contract.md` section 10), and this one
-reads it. What the floor does now carry is the spread between the columns, which
+reads the theory, cheaply and without computing an extension. What the floor does now carry is the spread between the columns, which
 a single constant pooled away: one status per semantics is worth 0.671 over the
 shipped grid against 0.459 for the best single constant (#95).
 

@@ -170,12 +170,18 @@ def _rate(numerator: int, denominator: int) -> Optional[float]:
     return round(numerator / denominator, 4) if denominator else None
 
 
-def _floors_of(rows: Sequence[Dict[str, Any]]
+def _floors_of(rows: Sequence[Dict[str, Any]], fit_rows: Sequence[Dict[str, Any]]
                ) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
     """Measured floors, what reached them, and why there are none when there are none.
 
-    `arggym.floors` scores every row with each constant strategy and does not
-    guard, so a single ungradeable row would abort the whole scoring pass --
+    Measured over `rows`, the ones this group scored; fitted over `fit_rows`, the
+    whole taskset. A fitted strategy searches a map, and a map searched against
+    the labels of the eight rows it then corrects is optimistic by hindsight --
+    0.088 on `semantics_query` at level 9. The map belongs to the dataset, the
+    number to the rows (`arggym/core/floors.py`).
+
+    `arggym.floors` scores every row with every strategy and does not guard, so
+    a single ungradeable row would abort the whole scoring pass --
     after `score_one` has already recorded that row politely. Losing every
     number to one bad row is the wrong trade.
 
@@ -185,7 +191,7 @@ def _floors_of(rows: Sequence[Dict[str, Any]]
     row would quietly remove a task's `corrected` column with nothing saying so.
     """
     try:
-        got = arggym.floors(list(rows))
+        got = arggym.floors(list(rows), fit_rows=list(fit_rows))
         return ({t: v["floor"] for t, v in got.items()},
                 {t: arggym.floor_strategy(v) for t, v in got.items()}, None)
     except Exception as e:  # noqa: BLE001 - recorded on the group and in _meta
@@ -220,7 +226,7 @@ def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
         out[name] = {}
         for key, got in sorted(buckets.items()):
             mine = [rows[r["id"]] for r in got if r["id"] in rows]
-            floors, strategies, why = _floors_of(mine)
+            floors, strategies, why = _floors_of(mine, list(rows.values()))
             task = key.split("|")[0]
             floor = floors.get(task)
             out[name][key] = _stats(got, floor, strategies.get(task))
@@ -276,6 +282,11 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
             "taskset_versions": ts_manifest.get("versions", {}),
             "run_status": run.get("status"),
             "arggym": arggym.__version__,
+            # A floor moves with the search as well as with the scorer, and
+            # `scoring_version` sees only the scorer. Without this, two of these
+            # files carrying different floors for the same rows are identical in
+            # every field they hold.
+            "floors_version": arggym.FLOORS_VERSION,
             "n_selected": run.get("n_selected"), "n_scored": len(records),
             # A run interrupted before it finished has fewer generations than
             # it selected, and this is the only sign of it once `run.json` is

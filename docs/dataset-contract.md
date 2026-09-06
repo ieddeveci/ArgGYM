@@ -522,7 +522,7 @@ separate repository for the same reason (`eval/README.md`).
 
 ## 10. Reporting
 
-Two rules, both from #9.
+Two rules, both from #9, and the definition the first one rests on.
 
 **Publish chance floors beside the scores.** `arggym floors <taskset>` measures
 what the best uninformed answer gets on each task, and it is not small: at level
@@ -533,8 +533,10 @@ what the best uninformed answer gets on each task, and it is not small: at level
 answer format. A score of 0.45 on `semantics_query` is worse than answering the
 same thing every time. Every floor is printed with the strategy that reached it,
 so 0.000 from `empty` is never read as "guessing does not pay here". A floor is
-a property of the scorer, so it is re-measured whenever `scoring_version`
-changes.
+a property of the scorer and of the search, so it is re-measured whenever
+`scoring_version` or `FLOORS_VERSION` moves, and a scoring artifact records
+both: the search that added the map above moved a floor by 0.21 without touching
+a scorer.
 
 What counts as uninformed is fixed here rather than left to whatever the search
 happens to try. A floor strategy fixes, once per task, the answer it gives to
@@ -542,16 +544,20 @@ each coordinate the answer format exposes; it reads the question only to learn
 which coordinates are asked, and never inspects the theory to decide what to
 answer -- equivalently, its answer is invariant under any change to the theory
 that leaves the ask list and the closed vocabularies alone. One constant per item
-is not the widest map that allows: `semantics_query` asks its claims under five
-semantics at once, and one constant per semantics is fixed in the same sense,
-worth 0.671 over the shipped grid against 0.459 for the best single constant
-(#95). A rule that reads the theory is a solver -- "an odd cycle of undercuts
-means no stable extension", "a rule consequent is usually justified", anything
-conditioned on theory size -- and reporting one as the floor would leave "the
+is not the widest map that allows: `semantics_query` asks its claims under as
+many as five semantics at once, and one constant per semantics is fixed in the
+same sense, worth 0.671 over the shipped grid against 0.459 for the best single
+constant (#95). Such a map is searched against labels, so it is fitted once over
+a whole task and reused for every group the report corrects, and it is admitted
+only while it stays far smaller than the answers it is scored against -- a map
+with one entry per coordinate is the gold, not a floor. A rule that reads the
+theory is a solver -- "an odd cycle of undercuts means no stable extension", "a
+rule consequent is usually justified", anything conditioned on theory size --
+and reporting one as the floor would leave "the
 model beat the floor" saying nothing, because past that line nothing stops short
 of a full solver. `copy_theory` is the one strategy outside the rule and it is
-not a guess: it echoes the input, and it is searched to check that no scorer
-rewards echoing.
+not a guess: it echoes the input, and it is searched to check what a scorer pays
+for echoing -- on `claim_chain` that is 0.155, which is that task's floor.
 
 **A floor is a lower bound, not the best score available without reasoning.** It
 is the best of what the search tried, and drawing the line above rules out

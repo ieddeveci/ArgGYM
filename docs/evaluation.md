@@ -158,7 +158,7 @@ the basket.
 
 Floors are printed beside every mean for the same reason. At level 3
 `semantics_query` sits at 0.806 and `status_query` at 0.375, so a model scoring
-0.45 on either is doing worse than answering the same thing every time. Where
+0.45 on the first is doing worse than answering the same thing every time. Where
 one figure per task is wanted, the chance-corrected column is
 `(score - floor) / (1 - floor)`, which is at least the same quantity across
 tasks.

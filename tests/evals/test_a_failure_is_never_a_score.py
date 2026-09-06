@@ -112,17 +112,17 @@ def test_a_floor_that_could_not_be_measured_is_reported_and_not_absorbed(
         tmp_path, rows, taskset_file, provider, monkeypatch):
     """`-` in the floor column must not mean two different things.
 
-    `arggym.floors` scores every row with each constant strategy and does not
-    guard, so it was called inside a bare `except` -- and one ungradeable row
-    then removed a task's floor and its `corrected` column silently, rendering
-    identically to a task that has no floor at all.
+    `arggym.floors` scores every row with every strategy and does not guard, so
+    it was called inside a bare `except` -- and one ungradeable row then removed
+    a task's floor and its `corrected` column silently, rendering identically to
+    a task that has no floor at all.
     """
     import arggym
 
     p = provider(answering(rows))
     run_dir = a_run(tmp_path, p.url, rows, taskset_file)
 
-    def refuses(_rows):
+    def refuses(_rows, fit_rows=None):
         raise RuntimeError("engine version mismatch")
 
     monkeypatch.setattr(arggym, "floors", refuses)
