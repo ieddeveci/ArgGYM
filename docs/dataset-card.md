@@ -93,6 +93,28 @@ floors beside the scores. They are a property of the scorer, so `arggym floors
 `scoring_version` does. If a single headline number is wanted, chance-correct
 per task first: `(score - floor) / (1 - floor)`, which is `arggym.corrected`.
 
+**The constant floor understates `semantics_query`.** That table measures one
+constant string. A short program that reads the theory as text and computes no
+extension does much better, because the shapes the generator uses are
+recognisable. On the stable column, 81.4% of answers (503 of 618, over 400
+items) fall to such a program: 51.8% to a rule that finds the literals carrying
+an odd ring of undercuts and reads which side of the contested pair they stand
+on, and the rest to a constant. The same program gets 53.2% before the odd-cycle
+cluster existed, when stable duplicated sceptical preferred and any rule that
+worked on one worked on both.
+
+The cluster hangs its ring one rule away from the literal the question asks
+about, so the program needs a lookup to connect them. That is a lookup, not an
+inference: it succeeds on 24 of 24 items carrying a shielded ring. Odd cycles
+are the only structure that separates stable from the preferred semantics at
+all, so a benchmark that asks about stable has to build one and cannot then hide
+it. Read the stable column as measuring whether a model finds that structure,
+not as evidence it computed an extension.
+
+This is why a floor from a constant is the wrong instrument for a task asking
+about five semantics at once: each column has its own floor and the pooled
+number hides the spread. #95 tracks that.
+
 **`success` and `mean_score` are not the same question.** For the construction
 tasks `success` means every goal met with the theory consistent; economy is a
 separate multiplier on top. A model can succeed at every item and still score

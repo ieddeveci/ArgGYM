@@ -328,12 +328,11 @@ def _odd_cycle(it, ridx, rng, unshielded: bool) -> Tuple[List[Operation], List[s
     that thinly, because the prompt promises the answer on every item that asks about
     stable and it would otherwise never be right.
 
-    Three things here are about not handing a solver the answer, and each was measured
-    rather than guessed. Scored through the real scorer over the exported grid, the best
-    solver that reads no theory -- a constant per semantics, plus whatever it can read off
-    the ring -- scores 0.7629 on main. A first cut of this cluster took it to 0.7877, so
-    the fix made the task easier to fake than the defect did. With all three it is
-    0.7424.
+    Three things here keep the cluster from handing a solver more than it has to. None of
+    them makes the item hard to fake: a program that reads the ring off the theory text and
+    computes no extension answers most of the stable column, and that is a property of odd
+    cycles rather than of this code. `docs/dataset-card.md` carries the measurement, and
+    #95 tracks what it means for chance floors on a task that asks about five semantics.
 
     * One literal is exposed as a query candidate, not both. Asking both put a
       complementary pair in every item under sceptical preferred, where the cluster makes
@@ -567,12 +566,20 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     # inspection -- the cluster separates the two on all four orderings whatever the rest
     # of the theory does, so nothing here reads the status it is selecting for.
     #
-    # Exactly one claim is then asked under both names, and it is the cluster's own only
-    # about half the time. Pairing the cluster's literal on every item made the pairing
-    # itself the answer: the cluster leaves both its literals in one preferred extension of
-    # two, so sceptical preferred calls them undecided by construction, and that column
-    # went to 88% one word. With a claim from another cluster carrying the pairing on the
-    # rest of the items, where the two names agree, the pairing says nothing.
+    # One claim is then asked under both names. Pairing the cluster's own literal on every
+    # item made the pairing itself the answer: the cluster leaves both its literals in one
+    # preferred extension of two, so sceptical preferred calls them undecided by
+    # construction. A claim from another cluster carries the pairing when the coin below
+    # says so and a decoy is available.
+    #
+    # The coin is fair and the realised split is not: the cluster's own literal carries the
+    # pairing on 174 of 213 items, 82%. Two causes, both measured. A decoy pairing adds a
+    # query, which raises `_target` and leaves the MAX_STATUS_SHARE gate below harder to
+    # pass, so the retry loop accepts cluster-paired items more often -- 47% of attempts
+    # draw a decoy against 57% of accepted items keeping the cluster. And on a decoy item
+    # the cluster's literal often survives the trim under both names anyway. So this
+    # mitigates the pattern rather than removing it, and the sceptical-preferred column
+    # should be read with that in mind.
     _forced: List[Tuple[str, str]] = [(c, STABLE) for c in _required_claims]
     if _required_claims:
         _decoys = [c for c in candidates if c not in _required_claims]

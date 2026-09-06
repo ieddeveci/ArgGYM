@@ -120,10 +120,13 @@ def test_the_two_semantics_disagree_about_claims_the_items_actually_ask(grid):
 def test_some_items_ask_one_claim_under_both_names_and_answer_it_differently(grid):
     """A theory that separates the two and an item that shows it are different things.
 
-    Not every item: the claim asked under both names is the cluster's own only about half
-    the time, and a claim from elsewhere carries the pairing on the rest. Asking the
-    cluster's literal under both on every item made the pairing itself the answer, since
-    the cluster makes it undecided under sceptical preferred by construction.
+    Not every item: a claim from another cluster carries the pairing on some of them, so
+    that "asked under both names" does not by itself mean "the cluster's literal, therefore
+    undecided under sceptical preferred". The coin is fair and the realised split is not --
+    the cluster's own literal still carries the pairing on 174 of 213 items, 82%, because
+    the retry loop accepts cluster-paired items more often and because the cluster's
+    literal often survives the trim under both names anyway. So this bounds the pattern
+    rather than removing it.
     """
     shown = 0
     for cell in ASKS_BOTH:
@@ -144,7 +147,17 @@ def test_no_semantics_answers_the_grid_with_one_word(grid):
 
     `MAX_STATUS_SHARE` cannot see this: it pools all five semantics into one per-item
     ratio, and the required queries are exempt from its per-step check. The first cut of
-    this change took sceptical preferred to 88% undecided while passing that gate.
+    this change took sceptical preferred to 88% undecided while passing that gate, and
+    these bounds are set to catch a regression of that size.
+
+    They are not evidence that any column improved. Forty items give a column of about 35
+    answers, and the standard error on a difference of two such shares is around 12 points,
+    so a few points either way on this grid says nothing. Two known consequences of that:
+    the sceptical-preferred share reads better than main here and worse at n = 14,000, and
+    the generic 0.9 bound sits about 1.6 points above the credulous-preferred column, which
+    is the one column this change measurably worsened (85.3% to 88.9% over 1,920 items,
+    from the cluster taking a menu slot that would otherwise draw `_defeated`). The bound
+    lets that through by design; `docs/dataset-card.md` reports it instead.
     """
     columns = collections.defaultdict(collections.Counter)
     for item in grid.values():
@@ -168,6 +181,48 @@ def test_the_cluster_literals_are_never_asked_where_their_answer_is_free(grid):
         for claim, sem in item.queries:
             assert not (claim in literals and sem in (sq.GROUNDED, sq.CRED_PREF)), (
                 f"{cell} asks {claim} under {sem}, which the cluster settles for free")
+
+
+#: Every cluster kind the generator can draw, and the function that builds it. Named here
+#: rather than read out of `build`'s source, because a test that greps source passes a
+#: dict dispatch that is broken and fails a refactor that is not.
+BUILDERS = {"floating": "_floating", "odd": "_odd_cycle", "defeated": "_defeated",
+            "settled": "_settled", "undermining": "_self_undermining",
+            "junction": "_junction_cluster", "strict_axiom": "_strict_axiom",
+            "negated_premise": "_negated_premise"}
+MENU = [k for k in BUILDERS if k not in ("floating", "odd")]
+
+
+def test_every_cluster_kind_reaches_a_builder_of_its_own(monkeypatch):
+    """`_odd` was dispatched from an `else` the menu could not reach, so it shipped
+    unbuilt for as long as it existed (#77).
+
+    The `else` now falls to `_negated_premise`, so a kind added to the menu and forgotten
+    in the dispatch would not crash -- it would quietly build the wrong cluster, which is
+    the same defect wearing the same clothes. Counting which builder each draw reaches
+    catches that: a forgotten kind shows up as one builder never called and
+    `_negated_premise` absorbing its share, which on the grid runs 15% against a fair
+    share of 17%.
+    """
+    calls = collections.Counter()
+    for kind, name in BUILDERS.items():
+        original = getattr(sq, name)
+
+        def spy(*args, _kind=kind, _original=original, **kwargs):
+            calls[_kind] += 1
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(sq, name, spy)
+    for level, ordering, seed in CELLS:
+        sq.make_item(level, seed, ordering)
+
+    missing = [k for k in BUILDERS if not calls[k]]
+    assert not missing, f"{missing} is dispatched to no builder of its own"
+    drawn = sum(calls[k] for k in MENU)
+    share = calls["negated_premise"] / drawn
+    assert share < 0.25, (
+        f"the else branch built {share:.0%} of the menu draws against a fair share of "
+        f"{1 / len(MENU):.0%}, so it is absorbing a kind the dispatch forgot")
 
 
 def test_the_unattacked_ring_is_balanced_over_levels_and_orderings():
