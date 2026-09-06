@@ -11,11 +11,16 @@ from __future__ import annotations
 import pytest
 
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED
-from arggym.core.prompting import permitted_block
+from arggym.core.prompting import (
+    formalization_notation,
+    permitted_block,
+    preference_block,
+)
 from arggym.core.scoring import score_item
 from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import attack_defense as ad
 from arggym.tasks import counter_argument as ca
+from arggym.tasks import formalization as fm
 from arggym.tasks import preference_construction as pc
 
 GRID = LEVELS
@@ -103,21 +108,36 @@ def test_the_strict_answer_is_permitted_exactly_where_the_prompt_says_it_is():
     assert checked, "no cell at this level takes the strict shortcut; pick another level"
 
 
-def test_the_block_is_a_function_of_its_flag_and_nothing_else():
+def test_a_block_is_a_function_of_its_variant_and_nothing_else():
     """Why the grid sweeps this file used to carry are gone.
 
-    `permitted_block` takes one boolean and its output is inserted verbatim, so one item
-    per variant settles it for every item. Sweeping levels 12 and 15 to re-read the same
-    two strings cost the slow tier about forty minutes and proved nothing the two lines
-    below do not. That every reference still scores 1.0 across the whole grid is checked
-    by `tests/e2e/test_generation.py::test_reference_scores_one`, which already runs there.
+    Four blocks cover the seven variants that carry one: `permitted_block` takes a
+    boolean, `preference_block` and `formalization_notation` take nothing, and each
+    output is inserted verbatim. So one item per variant settles it for every item.
+    Sweeping levels 12 and 15 to re-read the same strings cost the slow tier about forty
+    minutes and proved nothing the lines below do not. That every reference still scores
+    1.0 across the whole grid is checked by
+    `tests/e2e/test_generation.py::test_reference_scores_one`, which already runs there.
     """
     assert permitted_block(False) == permitted_block(False)
     blocks = {allow: {ca.make_item(lv, s, o, allow_strict=allow).prompt.split(HEADER)[1]
-                      for lv, o, s in CHEAP for _ in (0,)}
+                      for lv, o, s in CHEAP}
               for allow in (False, True)}
     for allow, seen in blocks.items():
         assert len(seen) == 1, f"the block varies between items at allow_strict={allow}"
+    for name, block, mod in (("preference_construction", preference_block(), pc),
+                             ("formalization", formalization_notation(), fm)):
+        # `block and`, because `"" in prompt` is true: an emptied block would otherwise
+        # delete the whole DSL from the question and pass every assertion here.
+        assert block, f"{name}: the block is empty"
+        built = 0
+        for lv, o, s in CHEAP:
+            it = mod.make_item(lv, s, o)
+            if it is None:
+                continue
+            built += 1
+            assert block in it.prompt, f"{name} L{lv} {o} seed {s}: block not verbatim"
+        assert built, f"no {name} item generated"
 
 
 @pytest.mark.parametrize("allow_strict", [False, True])

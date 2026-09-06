@@ -6,7 +6,7 @@ order the caller asked in, not on how many items were requested.
 """
 import pytest
 
-from arggym.core.answers import DEFAULT_TEMPLATE, AnswerTemplate
+from arggym.core.answers import DEFAULT_TEMPLATE
 from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
 from arggym.core.spec import SeedPolicy, TasksetSpec
 
@@ -77,23 +77,15 @@ def test_perturbation_carries_both_of_its_operation_lists():
     assert e["metadata"]["base_ops"] and e["metadata"]["pert_ops"]
 
 
-def test_a_row_asks_for_no_convention_unless_one_was_requested():
-    """Where the answer goes is the harness's sentence, so the question omits it and
-    the row says so rather than leaving a reader to infer it from the prompt text."""
+def test_a_row_asks_for_no_convention():
+    """Where the answer goes is the harness's sentence, and generation cannot write it.
+
+    The row records no template name either: there is nothing to record once the
+    question can only have been rendered one way.
+    """
     e = create(**CHEAP, size=1)[0]
-    assert e["metadata"]["answer_template"] is None
+    assert "answer_template" not in e["metadata"]
     assert DEFAULT_TEMPLATE.instruction not in e["question"]
-
-
-def test_asking_for_a_template_adds_one_sentence_and_records_it():
-    """The same item either way: only the question is re-rendered."""
-    plain = create(**CHEAP, size=1)[0]
-    boxed = AnswerTemplate("boxed", "\\boxed{", "}")
-    other = create(**CHEAP, size=1, template=boxed)[0]
-    assert other["metadata"]["answer_template"] == "boxed"
-    assert other["question"] == f"{plain['question']}\n{boxed.instruction}"
-    assert other["reference_answer"] == plain["reference_answer"]
-    assert other["metadata"]["gold"] == plain["metadata"]["gold"]
 
 
 def test_source_dataset_is_the_registry_key_so_a_composite_can_dispatch():

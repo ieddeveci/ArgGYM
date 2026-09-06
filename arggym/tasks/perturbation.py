@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
+from arggym.core.answers import ScoreResult, UnparseableAnswer
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -123,8 +123,7 @@ class PerturbItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL",
-          template: Optional[AnswerTemplate] = None) -> Optional[PerturbItem]:
+          profile: str = "FULL") -> Optional[PerturbItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "pert"))
     n_comp = max(2, min(2 + (level * 7 + 5) // 15, 9))
     depth = max(2, min(2 + (level * 5) // 15, 7))
@@ -331,7 +330,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     if max(counts.values()) / len(changed) > _max_share(need):
         return None
 
-    prompt = _render_prompt(render_ops(base), render_ops(pert), ordering, template)
+    prompt = _render_prompt(render_ops(base), render_ops(pert), ordering)
     n_status = len(set(changed.values()))
     return PerturbItem(
         prompt=prompt, theory_text=render_ops(base), perturbation_text=render_ops(pert),
@@ -358,8 +357,7 @@ TIE_NOTE = ("Preference is a preorder, so a pair declared stronger in both direc
             "equally preferred and settles nothing between them.")
 
 
-def _render_prompt(theory: str, pert: str, ordering: str,
-                   template: Optional[AnswerTemplate] = None) -> str:
+def _render_prompt(theory: str, pert: str, ordering: str) -> str:
     on = _ordering_phrase(ordering)
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
@@ -371,8 +369,7 @@ def _render_prompt(theory: str, pert: str, ordering: str,
             "every argument for it is defeated, and undecided otherwise.\n"
             f"{TIE_NOTE}\n\n"
             + answer_format("Answer format: one line per changed claim, written as "
-                            "`claim: status`.",
-                            template))
+                            "`claim: status`."))
 
 
 # One whole line, as the format clause above asks for (`core/pairs.py`).
@@ -477,10 +474,9 @@ def score(answer_text: str, item: PerturbItem) -> ScoreResult:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 40,
-              template: Optional[AnswerTemplate] = None) -> Optional[PerturbItem]:
+              tries: int = 40) -> Optional[PerturbItem]:
     for k in range(tries):
-        it = build(level, seed * 41 + k, ordering, profile, template)
+        it = build(level, seed * 41 + k, ordering, profile)
         if it is not None:
             return it
     return None

@@ -3,9 +3,9 @@
 Each of these modules used to define its own answer-region regex and score 0.0
 when it did not match, and each fused the delimiter phrase into the sentence that states
 what the answer has to contain. `docs/dataset-contract.md` section 1 puts delivery on the
-evaluator's side and content on ours, so the two are separate sentences now: the content
-clause is the task's and never moves, and the sentence naming the fence comes from the
-render-time template. A fenced answer and a bare one score the same.
+evaluator's side and content on ours, so the content clause is all the question carries
+and the sentence naming a fence comes from the harness. A fenced answer and a bare one
+score the same.
 
 Section 5 defines `success` per task. It is always returned, and it is not `score == 1.0`:
 `formalization` succeeds on behavioural equivalence alone, so a correct theory written with
@@ -17,12 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from arggym.core.answers import (
-    DEFAULT_TEMPLATE,
-    AnswerTemplate,
-    ScoreResult,
-    extract_answer,
-)
+from arggym.core.answers import DEFAULT_TEMPLATE, ScoreResult, extract_answer
 from arggym.tasks import (
     claim_chain,
     defeat_diagnosis,
@@ -31,11 +26,6 @@ from arggym.tasks import (
     semantics_query,
     status_query,
 )
-
-# Any convention at all: the point is that the template is the caller's, not the
-# dataset's. Square brackets are gone as a built-in because keeping a second
-# accepted fence meant honouring one no prompt asks for.
-OTHER_TEMPLATE = AnswerTemplate("boxed", "\\boxed{", "}")
 
 LEVEL, ORDERING, SEED = 3, "last_link_elitist", 0
 
@@ -119,13 +109,6 @@ def test_a_completion_is_not_an_answer(task, item):
 def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, item):
     assert DEFAULT_TEMPLATE.instruction not in item.prompt
     assert DEFAULT_TEMPLATE.open not in item.prompt
-
-
-@pytest.mark.parametrize("task", sorted(MODULES))
-def test_asking_for_a_template_adds_that_sentence_and_nothing_else(task, item):
-    """A caller who would rather the question carried the sentence can have it."""
-    other = MODULES[task].make_item(LEVEL, SEED, ORDERING, template=OTHER_TEMPLATE)
-    assert other.prompt == f"{item.prompt}\n{OTHER_TEMPLATE.instruction}"
 
 
 @pytest.mark.parametrize("task", sorted(MODULES))

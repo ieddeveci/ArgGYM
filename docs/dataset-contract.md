@@ -56,28 +56,28 @@ somewhere the parser will not see. Take that sentence out of the prompt entirely
 and a reasoning completion is read as a malformed answer, which scores zero for
 a reason that has nothing to do with argumentation.
 
-That sentence is therefore a render-time parameter. `AnswerTemplate` holds the
-delimiter pair and the sentence that asks for it; `arggym.XML_TAGS` is the
-common one, matching reasoning-gym, whose system prompts and `extract_answer`
-both use `<answer>` and `</answer>` (`reasoning_gym/utils.py:8,25`).
+That sentence belongs to the harness, and generation has no way to write it:
+no argument to `create()`, no metadata key, no task module that renders one.
+`AnswerTemplate` holds the delimiter pair and the sentence that asks for it;
+`arggym.XML_TAGS` is the common one, matching reasoning-gym, whose system
+prompts and `extract_answer` both use `<answer>` and `</answer>`
+(`reasoning_gym/utils.py:8,25`). Both ship in the package rather than in
+`evals/`, because `evals/` is not part of the wheel (`pyproject.toml`) and an
+adopter installing `arggym` alone would otherwise have neither.
 
 ```python
-ds = arggym.create("attack", level=6, template=arggym.XML_TAGS)
+ds = arggym.create("attack", level=6)
+question = ds[0]["question"] + "\n" + arggym.XML_TAGS.instruction
 ```
 
-The default is `template=None`, and the row records
-`metadata.answer_template` -- the template's name, or null -- so a frozen taskset
-says what its questions asked for instead of leaving a reader to infer it from
-the prompt text. `extract_answer` reads the `<answer>` region back and returns
-an unfenced completion whole. Nothing in ArgGYM calls it
-(`arggym/core/answers.py:52`); `examples/evaluate.py` names its convention once
-and derives both the instruction and the extraction from it, which is the shape
-a harness wants.
+`extract_answer` reads the `<answer>` region back and returns an unfenced
+completion whole. Nothing in ArgGYM calls it (`arggym/core/answers.py:52`);
+`examples/evaluate.py` names its convention once and derives both the
+instruction and the extraction from it, which is the shape a harness wants.
 
 The content half of the answer-format block belongs to the task and does not
 move: "one directive per line", "copied exactly as it appears above", "one line
-per claim, written as `claim: status`". A template only ever adds one sentence
-after them.
+per claim, written as `claim: status`". Nothing is appended to it in generation.
 
 ### What we refuse to generalize
 
@@ -110,7 +110,6 @@ to cite.
     "ordering": "weakest_link_elitist",
     "profile": "FULL",
 
-    "answer_template": null,              // the delivery sentence, if the caller asked for one
     "theory_schema": 1,
     "pyarg_version": "2.0.2",
 
@@ -328,13 +327,15 @@ the same answer. `success_rate` and `mean_score` answer two questions.
 
 `scoring_version` covers everything that moves a score without moving a prompt:
 `PARTIAL_CAP`, the partial-credit weights, the F1 details. `prompt_version`
-covers the question text. A rule stated in the prompt and enforced by the scorer
+covers the row a harness reads: the question text, and the metadata schema too,
+since dropping a key changes the taskset hash without changing a question.
+A rule stated in the prompt and enforced by the scorer
 moves both and bumps both -- the prompt hash records that the question changed,
 `scoring_version` records that an unchanged question is now scored differently.
 The bloat factor is stated twice on purpose, as
 `BLOAT_FACTOR = 2` (`arggym/core/scoring.py:12`) and as the sentence "more than
 twice the fewest directives that work scores zero"
-(`arggym/core/prompting.py:20`), because the model has to be told the rule it is
+(`arggym/core/prompting.py:39`), because the model has to be told the rule it is
 scored by. Changing it means changing both and bumping both versions.
 
 Strict parsing is not a parameter. Every prompt states the rule flatly, so an

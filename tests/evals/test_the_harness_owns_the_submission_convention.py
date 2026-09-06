@@ -1,9 +1,9 @@
 """The question names no fence. The harness names one, exactly once.
 
-`arggym/core/prompting.py:answer_format` renders no submission instruction
-unless a caller asks for one, and a frozen row records `answer_template: null`.
-So the convention lives here, and the sentence that asks for it and the
-extraction that reads it back come from the same `AnswerTemplate` object.
+`arggym/core/prompting.py:answer_format` renders no submission instruction at
+all, and generation takes no argument that would render one. So the convention
+lives here, and the sentence that asks for it and the extraction that reads it
+back come from the same `AnswerTemplate` object.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from evals.prompt import TEMPLATES, Elicitation, compose, region, template
 
 def test_the_frozen_question_names_no_fence(rows):
     for row in rows:
-        assert row["metadata"]["answer_template"] is None
+        assert "answer_template" not in row["metadata"]
         for fence in ("<answer>", "[answer]", r"\boxed"):
             assert fence not in row["question"], row["id"]
 

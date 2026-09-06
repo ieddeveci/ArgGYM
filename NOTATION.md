@@ -149,12 +149,18 @@ Constraints on directive answers:
 * every rule needs a name no rule in the theory, no earlier answer line, and no atom of
   the theory or of the answer has used (see "Rule names are distinct from literals" above:
   an atom is a name without its leading -, so `-ko1` uses the atom `ko1`)
+* a rule name starts with a letter and continues with letters, digits or underscores
 * rule antecedents must be literals ALREADY present in the theory
 * a new premise is permitted only as the negation of an ordinary premise already present
 * no new axioms; no strict rules, except in the tasks that say otherwise
+* preference construction takes preference directives only: no new rules or premises may be
+  added there
 * the target claim may not simply be asserted
 * the answer must be minimal: one using more than twice the fewest directives that work scores
   zero, and one directive that cannot be read at all scores the whole answer zero
+* an answer that reaches every goal while leaving the theory inconsistent also scores zero;
+  only the tasks that permit strict rules can reach it, since two contraries are both
+  justified only if both are firm
 
 **Extraction answers** (claim chain) -- the directives forming the line, copied exactly, in order from
 premise to claim.

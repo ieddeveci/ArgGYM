@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
-from arggym.core.answers import AnswerTemplate, ScoreResult, UnparseableAnswer
+from arggym.core.answers import ScoreResult, UnparseableAnswer
 from arggym.core.curriculum import (
     JUNCTION_CAPS,
     PROFILES,
@@ -104,8 +104,7 @@ class DDItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL",
-          template: Optional[AnswerTemplate] = None) -> Optional[DDItem]:
+          profile: str = "FULL") -> Optional[DDItem]:
     rng = random.Random(stable_seed(seed, level, ordering, "dd"))
     n_routes = 1 if level <= EASY_LEVELS else 3
     depth = max(2, min(2 + level // 3, 7))
@@ -316,7 +315,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             parts.append(f"survives_because: {d['survives_because']}")
         lines.append("; ".join(parts))
 
-    prompt = _render_prompt(render_ops(base), claim, ordering, bool(tower), template)
+    prompt = _render_prompt(render_ops(base), claim, ordering, bool(tower))
     return DDItem(
         prompt=prompt, theory_text=render_ops(base), base_ops=base, claim=claim,
         claim_status=st, diagnoses=diagnoses, ordering=ordering, level=level,
@@ -334,8 +333,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         })
 
 
-def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool,
-                   template: Optional[AnswerTemplate] = None) -> str:
+def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
     on = _ordering_phrase(ordering)
     extra = "   ...; survives_because: <rule>\n" if want_survival else ""
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
@@ -346,7 +344,7 @@ def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool,
                             "   first line: `status: overruled` or `status: undecided`\n"
                             "   then one line per failure point, as\n"
                             "   `defeated_at: <target>; defeater: <defeater>; "
-                            "kind: undermine|undercut|rebut`\n" + extra, template))
+                            "kind: undermine|undercut|rebut`\n" + extra))
 
 
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
@@ -495,10 +493,9 @@ def score(answer_text: str, item: DDItem) -> ScoreResult:
 
 
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
-              tries: int = 14,
-              template: Optional[AnswerTemplate] = None) -> Optional[DDItem]:
+              tries: int = 14) -> Optional[DDItem]:
     for k in range(tries):
-        it = build(level, seed * 83 + k, ordering, profile, template)
+        it = build(level, seed * 83 + k, ordering, profile)
         if it is not None:
             return it
     return None

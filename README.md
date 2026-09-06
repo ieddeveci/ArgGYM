@@ -31,13 +31,13 @@ the prompt, calling the thing, and pulling the answer out of what came back are 
 convention of ours is in your way.
 
 The question states the task and what a legal answer must contain, and says nothing about where to
-put it. If you want that sentence in the question, ask for it and you get exactly one more:
+put it. Adding that sentence is yours; `AnswerTemplate` and `extract_answer` are there if you want
+the common `<answer>` convention rather than your own:
 
 ```python
-ds = arggym.create("counter_argument", level=6, size=50,
-                   template=arggym.XML_TAGS)               # or your own AnswerTemplate
-entry = ds[0]                       # the question now ends with "Give your final answer between..."
-text = my_model(entry["question"])
+ds = arggym.create("counter_argument", level=6, size=50)
+entry = ds[0]
+text = my_model(entry["question"] + "\n" + arggym.XML_TAGS.instruction)
 result = ds.score(arggym.extract_answer(text), entry)      # a helper, not a requirement
 ```
 
@@ -97,7 +97,6 @@ skipped, so two exports can be compared by what they skipped and not only by the
   "metadata": {
     "source_dataset": "status_query", "source_index": 0, "seed": 0, "level": 9,
     "ordering": "weakest_link_elitist", "profile": "FULL",
-    "answer_template": null,     // the delivery sentence the question carried, if any
     "checker": "graded", "answer_shape": "label_map",
     "theory_schema": 1, "pyarg_version": "2.0.2",
     "base_ops": [ ... ],         // the theory, so the row scores without the generator
@@ -177,7 +176,7 @@ rewriting these files.
 | `invariants.py` | Checked helpers for the mistakes that recur. `minimal_subset_exact` finds a provably minimal answer using a forced-element prefilter; `split_atoms_and_rules` distinguishes a literal from a rule name, which matters because an undercut's consequent is a rule; `randomize_rule_names` strips ordering and role signal from names. These live here because writing them from memory got them wrong repeatedly. |
 | `minimality.py` | The minimum search for `attack_defense`, which has a different shape from the others: no single move is forced, but the task proves a lower bound of one move per chain, so the search starts there instead of at size one. |
 | `curriculum.py` | The level-indexed knobs several builders share: junction density, ternary junctions, the per-task junction cap, and the four language profiles. Those numbers came out of generation sweeps rather than being chosen. A level's item shape is not here -- each builder states its own, because the one that lived here had no readers (#31). |
-| `prompting.py` | The permitted-directive block, which states what `scoring.py` enforces: the legal forms, the naming rule, the antecedent rule and the minimality factor. It is identical on every item of a variant, so its content leaks nothing about the theory. |
+| `prompting.py` | The notation contract, written once: the legal forms, the naming rule, the antecedent rule and the minimality factor, stating what `scoring.py` enforces. Four blocks cover the seven variants that need one, because what an item permits is not a single axis, and each block's docstring names the scoring policy behind its clauses. A block is identical on every item of a variant, so its content leaks nothing about the theory. |
 | `nlforms.py` | The natural-language surface forms `formalization` writes its prose from, taken from the ASPIC+ and argumentation-schemes literature: eighteen construct banks holding 128 forms between them, plus the connectives that join them. Vocabulary is shared across banks where it can be, so that one word rarely decides which construct a sentence encodes. |
 | `spec.py`, `freeze.py` | A taskset is a spec file. `freeze` fills each cell to the size asked for, refuses a cell it cannot fill, and records every skipped seed with its reason. |
 | `floors.py` | What a constant answer scores, per task. A floor is a property of the scorer, so it is measured from rows rather than written down. |
