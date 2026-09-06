@@ -328,8 +328,11 @@ the same answer. `success_rate` and `mean_score` answer two questions.
 
 `scoring_version` covers everything that moves a score without moving a prompt:
 `PARTIAL_CAP`, the partial-credit weights, the F1 details. `prompt_version`
-covers the question text. The bloat factor is stated twice on purpose, as
-`BLOAT_FACTOR = 2` (`arggym/core/scoring.py:11`) and as the sentence "more than
+covers the question text. A rule stated in the prompt and enforced by the scorer
+moves both and bumps both -- the prompt hash records that the question changed,
+`scoring_version` records that an unchanged question is now scored differently.
+The bloat factor is stated twice on purpose, as
+`BLOAT_FACTOR = 2` (`arggym/core/scoring.py:12`) and as the sentence "more than
 twice the fewest directives that work scores zero"
 (`arggym/core/prompting.py:20`), because the model has to be told the rule it is
 scored by. Changing it means changing both and bumping both versions.

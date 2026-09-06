@@ -7,16 +7,24 @@ from typing import Dict, List, Sequence, Tuple
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import ASPICFramework, Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.invariants import split_atoms_and_rules
 
 BLOAT_FACTOR = 2
 PARTIAL_CAP = 0.25
+
+#: The rule-name grammar, written once. Every prompt states it in words ("a name
+#: starts with a letter and continues with letters, digits or underscores"), the
+#: text parser enforces it below, and `check_legality` enforces it again for
+#: answers that arrive as values and never pass a parser at all.
+_NAME = r"[A-Za-z]\w*"
+_LEGAL_NAME = re.compile(rf"^{_NAME}$")
 
 _PREMISE = re.compile(r"^\[(premise|axiom)\s*:\s*(-?[A-Za-z]\w*)\]$")
 # The name is required and separated from the kind by whitespace, and the arrow has to
 # be the one that kind uses. Written `\s*` with an optional name, the pattern read
 # `[stricttest: a => b]` as a strict rule named "test", accepted a rule with no name at
 # all under an invented one, and took either arrow for either kind (#19).
-_RULE = re.compile(r"^\[(defeasible|strict)\s+([A-Za-z]\w*)\s*:\s*(.+?)\s*(=>|->)\s*"
+_RULE = re.compile(rf"^\[(defeasible|strict)\s+({_NAME})\s*:\s*(.+?)\s*(=>|->)\s*"
                    r"(-?[A-Za-z]\w*)\]$")
 ARROW = {"defeasible": "=>", "strict": "->"}
 _PREF = re.compile(r"^\[prefer_(rule|premise)\s*:\s*(-?[A-Za-z]\w*)\s*>\s*(-?[A-Za-z]\w*)\]$")
@@ -82,6 +90,21 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
     ordinary = {o.content for o in base_ops if o.kind == "premise"}
     axioms = {o.content for o in base_ops if o.kind == "axiom"}
     rule_names = {o.name for o in base_ops if o.kind in ("strict", "defeasible")}
+    # #89: a rule named after an atom of the theory is not caught here or anywhere
+    # downstream, because `-<name>` is read as the undercut of rule `<name>`
+    # (NOTATION.md) whether or not an atom of that name also exists. The rule builds,
+    # the answer applies, and the atom's own contrary and preferences now resolve
+    # against the rule's on/off switch instead -- a perfect answer can lose this way
+    # with `illegal: []`, indistinguishable from reasoning badly. Separating the two
+    # namespaces would need new undercut syntax on every prompt to fix a scorer bug, so
+    # the collision is rejected instead, the same way a duplicate rule name already is.
+    #
+    # The answer's own atoms count. Read from `base_ops` alone this check missed a rule
+    # named after an atom the answer itself introduced a line earlier -- `[defeasible
+    # a1: p => zz]` followed by `[defeasible zz: q => k]` was kept with no reason given,
+    # which is the silent zero this check exists to remove. Both lists go in, so the
+    # verdict does not depend on which line introduced the atom.
+    atoms, _ = split_atoms_and_rules(list(base_ops) + list(ops))
     # NOTATION.md: "rule antecedents must be literals ALREADY present in the theory".
     # Nothing checked it, so a rule over two invented literals was accepted and an answer
     # could route its chain through an intermediate the theory never mentions (#35). A
@@ -114,6 +137,17 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
         if o.kind in ("strict", "defeasible"):
             if o.name in rule_names:
                 reasons.append(f"duplicate_rule_name:{o.name}")
+                continue
+            # A value-path answer never meets `_RULE`, so this is the only place the
+            # name grammar is enforced for it. Without it a rule named `-ip7` passed
+            # both checks below -- `atoms` holds names sign-stripped, so it matched
+            # nothing -- and flipped `-ip7` from OVERRULED to JUSTIFIED with an empty
+            # `illegal` list.
+            if not _LEGAL_NAME.match(o.name or ""):
+                reasons.append(f"illegal_rule_name:{o.name}")
+                continue
+            if o.name in atoms:
+                reasons.append(f"illegal_name_collides_with_atom:{o.name}")
                 continue
             unknown = [a for a in o.antecedents if a not in known]
             if unknown:

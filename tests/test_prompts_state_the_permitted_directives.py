@@ -123,7 +123,9 @@ def test_the_block_states_the_rules_that_zero_an_answer(allow_strict):
     """Each of these is enforced and was unsaid, so a model could only find it by losing."""
     block = permitted_block(allow_strict)
     assert "joined with AND" in block, "the parser accepts several antecedents"
-    assert "no earlier line of the answer, has used" in block, "duplicate names score 0"
+    assert "no earlier line of the answer" in block, "duplicate names score 0"
+    assert "atom of the theory or of your answer" in block, \
+        "a name shared with an atom scores 0, including an atom the answer introduces (#89)"
     assert "more than twice" in block, "the bloat factor scores 0"
     assert "without a leading -" in block, "only a positively written premise can be negated"
     assert "cannot be read at all" in block, "one unparseable line zeroes the answer"

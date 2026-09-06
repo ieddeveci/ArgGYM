@@ -3,6 +3,8 @@ from __future__ import annotations
 import itertools
 from typing import Callable, List, Optional, Sequence, Tuple, TypeVar
 
+from arggym.aspic.aspic import atoms_of
+
 T = TypeVar("T")
 
 
@@ -85,32 +87,28 @@ def strategy_candidates(base_ops, goal_claim: str, goal_status: str, ordering: s
 
 
 def split_atoms_and_rules(ops) -> Tuple[set, set]:
-    """Return (atoms, rule names); ``atoms & rules`` is the set of name collisions.
+    """Return (atoms, rule names) for an ``Operation`` list; ``atoms & rules`` is the
+    set of name collisions.
 
-    A consequent ``-<name>`` with ``<name>`` a rule is an undercut target, not an
-    atom (NOTATION.md, undercutting). Every other antecedent, consequent and
-    premise/axiom content is an atom, whether or not it shares a name with a rule.
-    A ``prefer_premise`` operand is a literal too, and is the only place an atom can
-    appear without being declared anywhere else. ``prefer_rule`` operands are rule
-    names, so they are left out.
+    An antecedent, a consequent and a premise/axiom content are literal slots, and so
+    is a ``prefer_premise`` operand -- the only slot where an atom can appear without
+    being declared anywhere else. ``prefer_rule`` operands name rules, so they stay
+    out. What a slot then contributes is ``atoms_of``'s decision, shared with
+    ``Theory.name_collisions`` so the two cannot drift.
     """
     rules = {o.name for o in ops
              if o.kind in ("defeasible", "strict") and getattr(o, "name", None)}
-    atoms = set()
+    literals: list = []
     for o in ops:
-        for a in (getattr(o, "antecedents", None) or ()):
-            atoms.add(a.lstrip("-"))
-        c = getattr(o, "consequent", None)
-        if c and not (c.startswith("-") and c[1:] in rules):
-            atoms.add(c.lstrip("-"))
+        literals.extend(getattr(o, "antecedents", None) or ())
         content = getattr(o, "content", None)
         if content:
-            atoms.add(content.lstrip("-"))
+            literals.append(content)
         if o.kind == "prefer_premise":
-            for x in (getattr(o, "stronger", None), getattr(o, "weaker", None)):
-                if x:
-                    atoms.add(x.lstrip("-"))
-    return atoms, rules
+            literals.extend(x for x in (getattr(o, "stronger", None),
+                                        getattr(o, "weaker", None)) if x)
+    consequents = [getattr(o, "consequent", None) for o in ops]
+    return atoms_of(rules, literals, consequents), rules
 
 
 RULE_POOL = [f"{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz" for b in "aeiouy" for c in "0123456789"]

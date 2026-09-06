@@ -45,6 +45,27 @@ def negate(literal: str) -> str:
     return literal[1:] if literal.startswith("-") else "-" + literal
 
 
+def atoms_of(rule_names: Set[str], literals: Iterable[str] = (),
+             consequents: Iterable[str] = ()) -> Set[str]:
+    """The atoms filling a set of literal slots, each stripped of a leading ``-``.
+
+    A consequent ``-<name>`` with ``<name>`` a rule is that rule's undercut target
+    rather than an atom (NOTATION.md, undercutting), and a consequent is the only
+    slot where that reading applies; every other slot contributes its atom whether
+    or not the name is also a rule's. So ``rule_names & atoms_of(rule_names, ...)``
+    is the set of names that mean two things at once, which is exactly when
+    ``-<name>`` is ambiguous. Which slots a theory has is the caller's business:
+    a ``Theory`` has facts and contraries, an ``Operation`` list has premise
+    contents and ``prefer_premise`` operands, and both share the rule underneath.
+    """
+    out = {str(x).lstrip("-") for x in literals if x}
+    for c in consequents:
+        c = str(c or "")
+        if c and not (c.startswith("-") and c[1:] in rule_names):
+            out.add(c.lstrip("-"))
+    return out
+
+
 @dataclass(frozen=True)
 class Fact:
     literal: str
@@ -258,19 +279,12 @@ class Theory:
 
     def name_collisions(self) -> Set[str]:
         names = self.rule_names
-        ordinary: Set[str] = set()
-        for f in self.facts:
-            ordinary.add(str(f.literal).lstrip("-"))
+        literals: List[str] = [f.literal for f in self.facts]
         for r in self.rules:
-            for a in r.antecedents:
-                ordinary.add(str(a).lstrip("-"))
-            c = str(r.consequent or "")
-            if not (c.startswith("-") and c[1:] in names):
-                ordinary.add(c.lstrip("-"))
+            literals.extend(r.antecedents)
         for cx in self.contraries:
-            ordinary.add(str(cx.source).lstrip("-"))
-            ordinary.add(str(cx.target).lstrip("-"))
-        return names & ordinary
+            literals.extend((cx.source, cx.target))
+        return names & atoms_of(names, literals, [r.consequent for r in self.rules])
 
     def validate(self) -> List[str]:
         problems: List[str] = []
