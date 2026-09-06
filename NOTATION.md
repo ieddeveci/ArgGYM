@@ -146,7 +146,8 @@ line, in the DSL of section 1.
 ```
 
 Constraints on directive answers:
-* every rule needs a name no rule in the theory and no earlier answer line has used
+* every rule needs a name no rule in the theory, no earlier answer line, and no literal in
+  the theory has used
 * rule antecedents must be literals ALREADY present in the theory
 * a new premise is permitted only as the negation of an ordinary premise already present
 * no new axioms; no strict rules, except in the tasks that say otherwise

@@ -23,7 +23,8 @@ UNREADABLE = "A directive that cannot be read at all scores the whole answer zer
 
 _TAIL = ("Every rule needs a name, written after the kind and separated from it by a space. "
          "A name starts with a letter and continues with letters, digits or underscores, "
-         "and no rule already in the theory, and no earlier line of the answer, has used it. "
+         "and no rule already in the theory, no earlier line of the answer, and no "
+         "literal in the theory, has used it. "
          "The arrow is => for a defeasible rule and -> for a strict one.\n"
          "Several antecedents are joined with AND. Rule antecedents must be literals "
          "already present in the theory. A rule name in a consequent, written -<name>, "

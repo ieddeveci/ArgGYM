@@ -7,6 +7,7 @@ from typing import Dict, List, Sequence, Tuple
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import ASPICFramework, Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.invariants import split_atoms_and_rules
 
 BLOAT_FACTOR = 2
 PARTIAL_CAP = 0.25
@@ -82,6 +83,15 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
     ordinary = {o.content for o in base_ops if o.kind == "premise"}
     axioms = {o.content for o in base_ops if o.kind == "axiom"}
     rule_names = {o.name for o in base_ops if o.kind in ("strict", "defeasible")}
+    # #89: a rule named after a literal already in the theory is not caught here or
+    # anywhere downstream, because `-<name>` is read as the undercut of rule `<name>`
+    # (NOTATION.md) whether or not a literal of that name also exists. The rule builds,
+    # the answer applies, and the literal's own contrary and preferences now resolve
+    # against the rule's on/off switch instead -- a perfect answer can lose this way
+    # with `illegal: []`, indistinguishable from reasoning badly. Separating the two
+    # namespaces would need new undercut syntax on every prompt to fix a scorer bug, so
+    # the collision is rejected instead, the same way a duplicate rule name already is.
+    literal_atoms, _ = split_atoms_and_rules(base_ops)
     # NOTATION.md: "rule antecedents must be literals ALREADY present in the theory".
     # Nothing checked it, so a rule over two invented literals was accepted and an answer
     # could route its chain through an intermediate the theory never mentions (#35). A
@@ -114,6 +124,9 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
         if o.kind in ("strict", "defeasible"):
             if o.name in rule_names:
                 reasons.append(f"duplicate_rule_name:{o.name}")
+                continue
+            if o.name in literal_atoms:
+                reasons.append(f"illegal_name_collides_with_literal:{o.name}")
                 continue
             unknown = [a for a in o.antecedents if a not in known]
             if unknown:

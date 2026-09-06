@@ -27,10 +27,10 @@ from arggym.core.spec import TasksetSpec, check_versions
 
 #: Bumped when the rendered question changes for any reason. A prompt change is
 #: a different taskset even when the theory behind it is identical.
-PROMPT_VERSION = 3
+PROMPT_VERSION = 4
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
-SCORING_VERSION = 3
+SCORING_VERSION = 4
 
 
 @dataclass
