@@ -115,12 +115,23 @@ def provider():
 
 def answering(rows: List[Dict[str, Any]], wrap: str = "<answer>\n{}\n</answer>",
               **kw: Any) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
-    """A handler that replies to each row with that row's own reference answer."""
-    keyed = {r["question"][:300]: r["reference_answer"] for r in rows}
+    """A handler that replies to each row with that row's own reference answer.
+
+    Keyed by the whole question, and the longest match wins. `counter_argument` and
+    `counter_argument_strict` are an ablation pair over one theory, so their questions
+    share a long prefix: at this fixture's cell they first differ 368 characters in, and
+    where the theory is identical they differ only in the permitted-forms block at the
+    end. A 300-character key put both rows in one dict entry, so the plain row was
+    answered with the strict row's reference -- a strict rule its own scorer refuses --
+    and the end-to-end test read that as the harness losing an answer (#37).
+    """
+    keyed = {r["question"]: r["reference_answer"] for r in rows}
+    assert len(keyed) == len(rows), (
+        "two rows share a question, so one would be answered with the other's reference")
 
     def handler(body: Dict[str, Any]) -> Dict[str, Any]:
         user = [m for m in body["messages"] if m["role"] == "user"][-1]["content"]
-        ref = next((v for k, v in keyed.items() if k in user), None)
-        return completion(wrap.format(ref) if ref else "no answer here", **kw)
+        hit = max((k for k in keyed if k in user), key=len, default=None)
+        return completion(wrap.format(keyed[hit]) if hit else "no answer here", **kw)
 
     return handler

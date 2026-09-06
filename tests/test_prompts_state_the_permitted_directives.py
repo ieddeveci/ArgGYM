@@ -23,9 +23,11 @@ CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 # The block is the same on every item of a variant, so sweeping the whole grid only
 # re-times generation. The cheap levels carry the default run; the sweep is marked slow.
 CHEAP = [(lv, o, s) for lv in (3, 6) for o in ALL_ORDERINGS for s in SEEDS]
-# Below level 8 `contested` is already True only for the strict arm, so the two variants
-# built different theories and the prompts differed for a reason that has nothing to do
-# with this change. Byte-identity, the defect in #37, held only from level 8 up.
+# Byte-identity, the defect in #37, held only from level 8 up when this was written:
+# below it `contested` was True for the strict arm alone, so the two variants built
+# different theories and their prompts differed for a reason that has nothing to do with
+# this change. The theories are shared from level 6 up now, and at level 3 wherever the
+# entry-level draw leaves `n_strict` alone; level 9 stays the cell these cases use.
 IDENTICAL_BEFORE = [(lv, o, s) for lv in GRID if lv >= 8 for o in ALL_ORDERINGS for s in SEEDS]
 CHEAPEST_IDENTICAL = [c for c in IDENTICAL_BEFORE if c[0] == 9]
 

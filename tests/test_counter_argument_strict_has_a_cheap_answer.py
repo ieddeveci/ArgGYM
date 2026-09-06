@@ -13,6 +13,13 @@ reports; levels 4 and 5 had it too, off the exported grid.
 From level 6 the shortcut arrives by a different route, `mid_target`, which is gated on
 `seed % 2 == 1`. So the level-6 assertions below hold only while `SEEDS` contains an odd
 number, and that is asserted rather than assumed.
+
+The one-directive answer is not the only strict answer any more. Where a chain does reach
+the target strictly, the generator breaks it first and the strict answer costs 1 + k for
+the k chains that block (#37), which is why the cheapest-answer question these tests ask
+stays "is there a one-directive answer here" while the ablation's own question, "does the
+strict arm answer more cheaply than the plain one", is asked next door in
+tests/test_the_strict_ablation_asks_its_own_question.py.
 """
 from __future__ import annotations
 
