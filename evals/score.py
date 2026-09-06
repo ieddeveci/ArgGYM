@@ -176,9 +176,9 @@ def _floors_of(rows: Sequence[Dict[str, Any]], fit_rows: Sequence[Dict[str, Any]
 
     Measured over `rows`, the ones this group scored; fitted over `fit_rows`, the
     whole taskset. A fitted strategy searches a map, and a map searched against
-    the labels of the eight rows it then corrects is optimistic by hindsight --
-    0.088 on `semantics_query` at level 9. The map belongs to the dataset, the
-    number to the rows (`arggym/core/floors.py`).
+    the labels of the ten rows it then corrects is optimistic by hindsight -- up
+    to 0.040 on `semantics_query`, on three of its ten reporting groups. The map
+    belongs to the dataset, the number to the rows (`arggym/core/floors.py`).
 
     `arggym.floors` scores every row with every strategy and does not guard, so
     a single ungradeable row would abort the whole scoring pass --

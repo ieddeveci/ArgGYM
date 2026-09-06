@@ -106,14 +106,14 @@ headline number is wanted, chance-correct per task first:
 `(score - floor) / (1 - floor)`, which is `arggym.corrected`.
 
 **A program that computes no extension beats the floor on `semantics_query`.**
-That table measures a fixed map, one status per semantics. A short program that reads
-the theory as text and computes no extension does better, because the shapes the
-generator uses are recognisable. On the stable column, 81.4% of answers (503 of
-618, over 400 items) fall to such a program: 51.8% to a rule that finds the
-literals carrying an odd ring of undercuts and reads which side of the contested
-pair they stand on, and the rest to a constant. The same program gets 53.2%
-before the odd-cycle cluster existed, when stable duplicated sceptical preferred
-and any rule that worked on one worked on both.
+That table measures a fixed map, one status per semantics. A short program that
+reads the theory as text and computes no extension does better, because the
+shapes the generator uses are recognisable. On the stable column, 81.4% of
+answers (503 of 618, over 400 items) fall to such a program: 51.8% to a rule
+that finds the literals carrying an odd ring of undercuts and reads which side
+of the contested pair they stand on, and the rest to a constant. The same
+program gets 53.2% before the odd-cycle cluster existed, when stable duplicated
+sceptical preferred and any rule that worked on one worked on both.
 
 The cluster hangs its ring one rule away from the literal the question asks
 about, so the program needs a lookup to connect them. That is a lookup, not an
@@ -124,10 +124,10 @@ it. Read the stable column as measuring whether a model finds that structure,
 not as evidence it computed an extension.
 
 No floor bounds that program, and none should: a floor is what an answer that
-never reads the theory gets (`docs/dataset-contract.md` section 10), and this one
-reads the theory, cheaply and without computing an extension. What the floor does now carry is the spread between the columns, which
-a single constant pooled away: one status per semantics is worth 0.671 over the
-shipped grid against 0.459 for the best single constant (#95).
+never reads the theory gets (`docs/dataset-contract.md` section 10), and this
+one reads it. What the floor does now carry is the spread between the columns,
+which a single constant pooled away: one status per semantics is worth 0.671
+over the shipped grid against 0.459 for the best single constant (#95).
 
 **`success` and `mean_score` are not the same question.** For the construction
 tasks `success` means every goal met with the theory consistent; economy is a

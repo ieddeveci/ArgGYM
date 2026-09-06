@@ -26,7 +26,7 @@ item put that floor at 0.459 where it is 0.671 (#95).
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from arggym.core import registry
 from arggym.core.rows import row_task, score
@@ -50,13 +50,37 @@ _STATUSES = ("justified", "overruled", "undecided")
 #: candidate and the fit drops the ones that do not pay.
 _CANDIDATES = _STATUSES + ("no stable extension",)
 
-#: Answered coordinates a fitted map must have per entry. A floor is a map with
-#: far fewer parameters than the labels it is scored against; below that it is
-#: the gold in another notation, and it reports 1.000. Measured on
+#: Answered coordinates a fitted map must have per entry. It prices a map that
+#: is really the gold rather than forbidding one -- enough rows repeating an ask
+#: list buy any number of entries -- so what forbids it is `FittedFloorIsGold`
+#: below, and what makes it hard to reach is the cap. Measured on
 #: `semantics_query`: five entries over the 274 coordinates of the whole task
-#: (55 each) show no premium over a leave-one-row-out fit, five over the 56 of
-#: one level (11 each) show 0.088.
+#: (55 each) reproduce themselves on a fit that never saw the rows, five over
+#: the 56 of one level (11 each) buy up to 0.040.
 MIN_COORDS_PER_ENTRY = 20
+
+#: Entries a fitted map may have at all, whatever the row count. The vocabularies
+#: a task fixes are small -- five semantics on `semantics_query`, two literals on
+#: `formalization` -- while a map keyed by anything an item samples has as many
+#: entries as that item has coordinates, dozens. A count is a harder invariant to
+#: slip past than a ratio: 24 rows sharing one ask list clear the budget and
+#: report the majority gold per coordinate as a floor, and this refuses them.
+MAX_MAP_ENTRIES = 8
+
+
+class Fit(NamedTuple):
+    """What a fitted strategy came back with.
+
+    Three cases, and a reader of a floor has to be able to tell them apart: a
+    map, no key group at all, and a key group found and then refused. The last
+    one leaves the floor at a constant, which is the same number a task with no
+    group would report, so the reason travels with the result and
+    `floor_strategy` prints it.
+    """
+
+    make: Optional[Callable[[Dict[str, Any]], str]] = None
+    detail: Optional[Dict[str, str]] = None
+    refused: Optional[str] = None
 
 
 class FittedFloorIsGold(RuntimeError):
@@ -105,8 +129,12 @@ def _key_parts(coord: str) -> Tuple[str, ...]:
     return (m.group(1), m.group(2)) if m else (coord,)
 
 
-def _key_groups(rows: Sequence[Dict[str, Any]]) -> Tuple[int, ...]:
+def _key_groups(rows: Sequence[Dict[str, Any]]
+                ) -> Tuple[Tuple[int, ...], Optional[str]]:
     """Which components of the answer key the task fixes rather than the item.
+
+    Returns the components, and where a set of them was found and then refused
+    for the size of the map it implies, why.
 
     A key group is a component drawn from a vocabulary the task holds fixed:
     `semantics_query`'s semantics is five names scheduled by level
@@ -123,16 +151,25 @@ def _key_groups(rows: Sequence[Dict[str, Any]]) -> Tuple[int, ...]:
     a name the task gave it does not. Two items are the minimum, since one
     cannot tell those apart.
 
-    **The map stays small**, at least `MIN_COORDS_PER_ENTRY` answered
-    coordinates per entry. The first test alone accepts the *claim* as soon as a
-    set of rows repeats an ask list -- which a filtered or partial run produces,
-    since a report fits per reporting group over the rows a run actually scored.
-    The map over (claim, semantics) is then the gold in another notation: it
-    reports a floor of 1.000, and `corrected` turns every score in the group
-    into 0.0 without raising. The budget is the sentence "a floor has far fewer
-    parameters than the labels it is scored against", written as a number.
+    **The map stays small**: at most `MAX_MAP_ENTRIES` entries, and at least
+    `MIN_COORDS_PER_ENTRY` answered coordinates for each of them. The first test
+    alone accepts the *claim* as soon as a set of rows repeats an ask list --
+    which a filtered or partial run produces, since a report measures per
+    reporting group over the rows a run actually scored. The map over (claim,
+    semantics) is then the gold in another notation: it reports a floor of
+    1.000, and `corrected` turns every score in the group into 0.0 without
+    raising.
 
-    On the shipped grid that leaves ten tasks on whole-item constants and one
+    Both numbers, because they fail differently. The ratio prices a gold fit;
+    enough repeated rows pay for it. The cap says what a task-fixed vocabulary
+    looks like -- a handful of names -- and no row count buys past it.
+
+    Refusal comes back as a reason rather than as silence. A floor that fell
+    back to a constant because the map was priced out reads exactly like a floor
+    on a task with no key group at all, which is the ambiguity `floor_strategy`
+    exists to remove.
+
+    On the shipped grid this leaves ten tasks on whole-item constants and one
     group worth something, `semantics_query`'s semantics. `formalization` also
     passes, on the two literals `_asked` reads out of the answer-format example
     rather than out of a question that lists none; they are the same two on
@@ -144,18 +181,22 @@ def _key_groups(rows: Sequence[Dict[str, Any]]) -> Tuple[int, ...]:
     keys = [k for k in keys if k]
     arity = {len(k) for row in keys for k in row}
     if len(keys) < 2 or len(arity) != 1:
-        return ()
+        return (), None
     out = []
     for i in range(arity.pop()):
         per_row = [{k[i] for k in row} for row in keys]
         if len(set().union(*per_row)) <= max(len(s) for s in per_row):
             out.append(i)
     if not out:
-        return ()
+        return (), None
     entries = {tuple(k[i] for i in out) for row in keys for k in row}
-    if len(entries) * MIN_COORDS_PER_ENTRY > sum(len(row) for row in keys):
-        return ()
-    return tuple(out)
+    coords = sum(len(row) for row in keys)
+    if len(entries) > MAX_MAP_ENTRIES:
+        return (), f"{len(entries)} entries, over the cap of {MAX_MAP_ENTRIES}"
+    if len(entries) * MIN_COORDS_PER_ENTRY > coords:
+        return (), (f"{len(entries)} entries over {coords} coordinates, under one "
+                    f"per {MIN_COORDS_PER_ENTRY}")
+    return tuple(out), None
 
 
 def _group_of(coord: str, idx: Sequence[int]) -> Tuple[str, ...]:
@@ -186,8 +227,7 @@ def _copy_theory(row: Dict[str, Any]) -> str:
     return "\n".join(re.findall(r"^\[[^\]]*\]$", q, re.M))
 
 
-def _fit_per_key_group(rows: Sequence[Dict[str, Any]]
-                       ) -> Optional[Tuple[Callable[[Dict[str, Any]], str], Dict[str, str]]]:
+def _fit_per_key_group(rows: Sequence[Dict[str, Any]]) -> Fit:
     """One constant per key group, fitted on these rows, confirmed by the scorer.
 
     Each group takes the candidate that scores best with the other groups
@@ -217,20 +257,29 @@ def _fit_per_key_group(rows: Sequence[Dict[str, Any]]
     (`floors`), rather than refitting on the eight rows of a level and then
     correcting those same eight by it.
     """
-    idx = _key_groups(rows)
+    idx, refused = _key_groups(rows)
     if not idx:
         # One group is the whole-item constant the fixed strategies already try,
-        # so there is nothing here they do not measure.
-        return None
+        # so there is nothing here they do not measure -- but say so where a
+        # group set was found and priced out, since that floor is understated.
+        return Fit(refused=refused)
 
     groups = sorted({g for row in rows for g in _by_group(row, idx)})
 
     def answer(mapping: Dict[Tuple[str, ...], str], row: Dict[str, Any]) -> str:
-        # A map fitted over a whole task covers every group its rows can ask.
-        # Where it does not, the caller paired a map with rows it was not fitted
-        # on, and answering the gap with a default would report a floor for a
-        # strategy nobody searched.
-        return "\n".join(f"{c}: {mapping[_group_of(c, idx)]}" for c in _asked(row))
+        out = []
+        for coord in _asked(row):
+            group = _group_of(coord, idx)
+            if group not in mapping:
+                raise KeyError(
+                    f"the fitted map has no status for the key group "
+                    f"{' '.join(group)!r}, so it was fitted on rows that never "
+                    f"ask it and these rows are not the ones it belongs to. "
+                    f"Filling the gap with a default would report a floor for a "
+                    f"strategy nobody searched. It has: "
+                    f"{sorted(' '.join(g) for g in mapping)}")
+            out.append(f"{coord}: {mapping[group]}")
+        return "\n".join(out)
 
     def total(mapping: Dict[Tuple[str, ...], str]) -> float:
         return sum(score(answer(mapping, row), row).score for row in rows)
@@ -248,7 +297,7 @@ def _fit_per_key_group(rows: Sequence[Dict[str, Any]]
     def make(row: Dict[str, Any]) -> str:
         return answer(fitted, row)
 
-    return make, {" ".join(g): s for g, s in fitted.items()}
+    return Fit(make, {" ".join(g): s for g, s in fitted.items()})
 
 
 STRATEGIES: Dict[str, Callable[[Dict[str, Any]], str]] = {
@@ -259,11 +308,9 @@ STRATEGIES: Dict[str, Callable[[Dict[str, Any]], str]] = {
 }
 
 #: Strategies whose map is fitted on rows rather than named in advance. Each
-#: returns the answerer and the map it fitted, or `None` where the task offers
-#: it nothing the fixed strategies do not already cover.
-FITTED: Dict[str, Callable[[Sequence[Dict[str, Any]]],
-                           Optional[Tuple[Callable[[Dict[str, Any]], str],
-                                          Dict[str, str]]]]] = {
+#: returns a `Fit`: the answerer and the map, or an empty one where the task
+#: offers nothing the fixed strategies do not already cover.
+FITTED: Dict[str, Callable[[Sequence[Dict[str, Any]]], Fit]] = {
     "per_key_group": _fit_per_key_group,
 }
 
@@ -283,7 +330,8 @@ def _mean(make: Callable[[Dict[str, Any]], str], rows: Sequence[Dict[str, Any]])
 
 def floor_for(rows: Sequence[Dict[str, Any]],
               fit_rows: Optional[Sequence[Dict[str, Any]]] = None
-              ) -> Tuple[float, str, Dict[str, float], Optional[Dict[str, str]]]:
+              ) -> Tuple[float, str, Dict[str, float], Optional[Dict[str, str]],
+                         Dict[str, str]]:
     """The best a fixed-map strategy does on these rows, and the map it fixed.
 
     The floor is the best of them, not the average: a reader comparing a model
@@ -297,18 +345,25 @@ def floor_for(rows: Sequence[Dict[str, Any]],
     A tie goes to the fixed strategies, which come first: where a fitted map
     reaches nothing a named constant does not, the named one is the better
     description of the same number.
+
+    The last value is what was refused and why, which is not the same as never
+    having been tried: a floor that fell back to a constant because its map was
+    priced out is understated, and only that string says so.
     """
     means: Dict[str, float] = {name: _mean(make, rows)
                                for name, make in STRATEGIES.items()}
     details: Dict[str, Dict[str, str]] = {}
+    refused: Dict[str, str] = {}
     for name, fit in FITTED.items():
         got = fit(rows if fit_rows is None else fit_rows)
-        if got is None:
+        if got.refused:
+            refused[name] = got.refused
+        if got.make is None:
             continue
-        make, details[name] = got
-        means[name] = _mean(make, rows)
+        details[name] = got.detail
+        means[name] = _mean(got.make, rows)
     best = max(means, key=lambda k: means[k])
-    return means[best], best, means, details.get(best)
+    return means[best], best, means, details.get(best), refused
 
 
 def floors(rows: Sequence[Dict[str, Any]],
@@ -317,11 +372,10 @@ def floors(rows: Sequence[Dict[str, Any]],
     """Per task, because a floor is not a property of the benchmark.
 
     `fit_rows` is the taskset a fitted strategy's map is fitted over, grouped by
-    task the same way. Pass it wherever `rows` is a subgroup: a level-9 mean is
-    corrected by a level-9 floor, and fitting five constants on those same eight
-    rows made the floor 0.088 optimistic there by hindsight, where the same five
-    over the task's forty rows cost nothing. A task absent from `fit_rows` is
-    fitted on the rows in hand.
+    task the same way. Pass it wherever `rows` is a subgroup: an ordering's mean
+    is corrected by that ordering's floor, and fitting five constants on those
+    ten rows bought up to 0.040 of hindsight over fitting them on the task's
+    forty. A task absent from `fit_rows` is fitted on the rows in hand.
     """
     by_task: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
@@ -332,9 +386,10 @@ def floors(rows: Sequence[Dict[str, Any]],
 
     out: Dict[str, Dict[str, Any]] = {}
     for task in sorted(by_task):
-        value, best, means, detail = floor_for(by_task[task], fit_by_task.get(task))
+        value, best, means, detail, refused = floor_for(by_task[task],
+                                                        fit_by_task.get(task))
         out[task] = {"floor": value, "strategy": best, "detail": detail,
-                     "n": len(by_task[task]),
+                     "refused": refused, "n": len(by_task[task]),
                      "answer_shape": registry.get(task).answer_shape,
                      "by_strategy": means}
     return out
@@ -347,13 +402,17 @@ def floor_strategy(entry: Dict[str, Any]) -> str:
     baseline: `0.0000 empty` means the search found nothing that fits the answer
     format, which is a different sentence from "guessing does not pay here".
     A fitted strategy's name does not say what it fitted either, so the map
-    comes with it.
+    comes with it, and a strategy that was refused says why -- a constant that
+    won because the map above it was priced out is a floor with a known
+    understatement, and the name alone hides that.
     """
     detail = entry.get("detail")
-    if not detail:
-        return entry["strategy"]
-    body = ", ".join(f"{k}={v}" for k, v in sorted(detail.items()))
-    return f"{entry['strategy']}({body})"
+    out = entry["strategy"]
+    if detail:
+        out += "(" + ", ".join(f"{k}={v}" for k, v in sorted(detail.items())) + ")"
+    for name, why in sorted((entry.get("refused") or {}).items()):
+        out += f"; {name} refused ({why})"
+    return out
 
 
 def corrected(score_value: float, floor: float) -> float:
@@ -361,6 +420,13 @@ def corrected(score_value: float, floor: float) -> float:
 
     The only defensible way to put twelve metrics on one axis, and still not a
     reason to average them.
+
+    A floor of 1.0 collapses the scale, and the two ways of reaching one are not
+    the same event. A fixed strategy that scores 1.000 is a finding about the
+    scorer -- one constant answers the task -- and the clamp reports it as a task
+    with no room above chance, which it is. A fitted map that scores 1.000 has
+    reproduced the gold, a fitting artifact rather than a finding, so it raises
+    (`FittedFloorIsGold`) and never reaches here.
     """
     if floor >= 1.0:
         return 0.0
