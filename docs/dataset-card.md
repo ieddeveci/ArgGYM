@@ -141,6 +141,18 @@ proven globally minimal. An answer shorter than the reference is possible, and
 efficiency is clamped at 1.0, so it earns full credit rather than extra. The
 manifest records the caveat with the taskset.
 
+**`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
+set of theories.** The two arms publish the same theory -- byte for byte on 35
+of their 40 cells -- and vary one thing, whether the answer may add a strict
+rule. Permitting one buys a cheaper minimum on every cell, so the pair is one
+comparison rather than two independent measurements. On 22 of those 35 cells
+the arms no longer accept the same answers at all: the plain arm's own
+reference, submitted to the strict item, runs past twice the strict minimum and
+scores zero for bloat, and on the other 13 it scores between 0.75 and 0.92 and
+never 1.0. Forty rows of a release therefore carry no theory the other arm has
+not already published, and a model evaluated on both arms reads each of those
+theories twice.
+
 **Preference direction is arbitrary, deliberately.** ASPIC+ takes the ordering
 as a parameter and derives nothing; Modgil and Prakken define the set orderings
 "assuming a preordering over the elements". ArgGYM's own choice is a per-item
