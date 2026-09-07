@@ -543,12 +543,15 @@ what the best uninformed answer gets on each task, and it is not small: at level
 0.219, `claim_chain` at 0.190, `perturbation` at 0.153 and `defeat_diagnosis` at
 0.131, while the six engine-checked tasks sit at 0.000 because no fixed answer
 reaches a goal. A score of 0.45 on `semantics_query` is worse than answering the
-same thing every time. Every floor is printed with the strategy that reached it,
-so 0.000 from `empty` is never read as "guessing does not pay here". A floor is
-a property of the scorer and of the search, so it is re-measured whenever
-`scoring_version` or `FLOORS_VERSION` moves, and a scoring artifact records
-both: the search that added the map above moved a floor by 0.21 without touching
-a scorer.
+same thing every time. Every floor is printed with the strategy that reached
+it, so a zero says which of two things happened: the search found nothing that
+fits the answer format, or nothing that fits it pays. `formalization` was the
+first and read as the second until the search learned to write a directive.
+Ties go to `empty`, which is listed first, so the six zeroes above are the
+second case. A floor is a property of the scorer and of the search, so it is
+re-measured whenever `scoring_version` or `FLOORS_VERSION` moves, and a scoring
+artifact records both: the search that added the map above moved a floor by 0.21
+without touching a scorer.
 
 What counts as uninformed is fixed here rather than left to whatever the search
 happens to try. A floor strategy fixes, once per task, the answer it gives to
@@ -556,15 +559,26 @@ each coordinate the answer format exposes; it reads the item only to learn which
 coordinates are asked, and never inspects the theory to decide what to answer --
 equivalently, its answer is invariant under any change to the theory that leaves
 the ask list and the closed vocabularies alone. Enumerating the asked
-coordinates is not deciding an answer to them, and it stays on this side of the
-line even where the theory is the only place they are written: `perturbation`
-asks which claims of the original theory changed status and lists none of them,
-so its ask list is every claim that theory mentions, and the status it gives
-each of them is still one constant fixed once per task. One constant per item is
-not the widest map that allows: `semantics_query` asks its claims under as many
-as five semantics at once, and one constant per semantics is fixed in the same
-sense, worth 0.671 over the shipped grid against 0.459 for the best single
-constant (#95). Such a map is searched against labels, so it is fitted
+coordinates is not deciding an answer to them, and that holds where the theory
+is the only place they are written: `perturbation` asks which claims of the
+original theory changed status and lists none of them, so its ask list is every
+claim that theory mentions, and the status it gives each of them is one constant
+fixed once per task. The enumeration has to be total, and *every* is the word
+carrying that. Choosing which of the exposed coordinates to answer is deciding
+an answer to the ones left out, and it pays: `pair_f1` is `2tp/(|pred| +
+|gold|)`, so on this task, where the floor answers 3152 coordinates against a
+gold of 1076 over the shipped grid, dropping the claims nothing in the theory
+attacks would raise the number by shrinking the denominator alone. That rule
+reads the theory to decide, which is the next paragraph's definition of a
+solver. The invariance covers less here than elsewhere for the same reason: an
+edit to a `perturbation` theory usually moves its ask list, so what this floor
+is invariant under is the edits that leave the theory's claims alone.
+
+One constant per item is not the widest map that allows: `semantics_query` asks
+its claims under as many as five semantics at once, and one constant per
+semantics is fixed in the same sense, worth 0.671 over the shipped grid against
+0.459 for the best single constant (#95). Such a map is searched against labels,
+so it is fitted
 once over a whole task and reused for every group the report corrects, and it is
 admitted only while it stays small: a handful of entries, each answering many
 coordinates. A map with one entry per coordinate is the gold, not a floor.

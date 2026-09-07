@@ -33,9 +33,13 @@ from arggym.core.rows import MissingField, row_task, score
 from arggym.core.serialize import ops_from_json
 
 #: Bumped when the search changes: a strategy added or dropped, a candidate
-#: added, the key-group rule moved. A floor moves with the scorer and with the
-#: search, and `scoring_version` sees only the first, so two scoring artifacts
-#: carrying different floors for the same rows are otherwise identical.
+#: added, the key-group rule moved, the ask list a strategy answers over moved.
+#: The last of those moves a floor with no strategy touched -- narrowing
+#: `perturbation`'s ask list to the claims of the original theory took it from
+#: 0.1645 to 0.1734 under the same `all_overruled`. A floor moves with the
+#: scorer and with the search, and `scoring_version` sees only the first, so two
+#: scoring artifacts carrying different floors for the same rows are otherwise
+#: identical.
 FLOORS_VERSION = 2
 
 #: Statuses a label-map task can answer with.
@@ -156,12 +160,16 @@ def _asked(row: Dict[str, Any]) -> List[str]:
     """The keys a label-map question asks about, read from the row's own record.
 
     Not from `metadata.gold`: a strategy that read the gold would not be
-    uninformed. From `metadata.state`, which the registry defines as the scoring
-    inputs the question already gives away (`core/registry.py`), so reading it
-    back is reading the question in a form that cannot be reworded.
+    uninformed. Three of the four come from `metadata.state`, which the registry
+    defines as the scoring inputs the question already gives away
+    (`core/registry.py`), so reading one back is reading the question in a form
+    that cannot be reworded. `perturbation` has no such field and its question
+    names no claims, so it reads the theory -- `_claims_of_the_theory` above,
+    and `docs/dataset-contract.md` section 10 for why a total enumeration of the
+    coordinates stays inside the line where choosing among them would not.
 
-    That last part is the point. This scraped the question with one regex per
-    phrasing, so a prompt reword silently zeroed a floor -- and one already was:
+    Reworded is the point. This scraped the question with one regex per
+    phrasing, so a prompt edit silently zeroed a floor -- and one already had:
     `formalization`'s question lists no coordinates, the fallback regex found
     the two literals of the answer-format example instead, and the task reported
     0.0000 `empty` (#103, #105).
@@ -286,10 +294,14 @@ def _premise_per_ask(row: Dict[str, Any]) -> str:
 def _status_line(status: str) -> Callable[[Dict[str, Any]], str]:
     """The status line `defeat_diagnosis` opens with, and nothing else.
 
-    Its score is `0.85*f1 + 0.15*status_ok` (`tasks/defeat_diagnosis.py`), so
-    the header alone collects the status term on every item it is right about
-    and lists no failure points to be wrong about. One constant for the whole
-    item, with no ask list at all: the strictest form section 10 allows.
+    Its score carries a 0.15 status term under either branch:
+    `0.85*f1 + 0.15*status_ok`, or `0.60*f1 + 0.15*status_ok + 0.25*surv` where
+    the gold names a `survives_because` (`tasks/defeat_diagnosis.py`), which 32
+    of the 40 shipped rows do. The header collects that term on every item it
+    names right and lists no failure point to be wrong about, so the floor is
+    0.15 times the share of items it names right and nothing else. One constant
+    for the whole item, with no ask list at all: the strictest form section 10
+    allows.
     """
     def make(row: Dict[str, Any]) -> str:
         return f"status: {status}"
@@ -379,11 +391,11 @@ def _fit_per_key_group(rows: Sequence[Dict[str, Any]]) -> Fit:
     return Fit(make, {" ".join(g): s for g, s in fitted.items()})
 
 
-#: Every strategy is offered to every task, the way `_CANDIDATES` is: a table of
-#: which answer format belongs to which task is a second copy of the registry to
-#: keep in step, and a strategy a task cannot read scores zero and drops out of
-#: the max by itself. The last four fit no label map at all, and exist because
-#: two tasks had no strategy that fits theirs.
+#: Every strategy is offered to every task, the way `_CANDIDATES` is. Gating
+#: them by answer shape would move no floor -- a strategy a task's scorer cannot
+#: read scores zero and drops out of the max by itself -- so the search stays
+#: one list. The last four fit no label map, and are here because two tasks had
+#: no strategy that fits theirs.
 STRATEGIES: Dict[str, Callable[[Dict[str, Any]], str]] = {
     "empty": lambda row: "",
     "copy_theory": _copy_theory,

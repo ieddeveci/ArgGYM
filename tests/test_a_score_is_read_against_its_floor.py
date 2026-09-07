@@ -24,6 +24,7 @@ import arggym
 from arggym.core import floors as floors_module
 from arggym.core.answers import ScoreResult
 from arggym.core.floors import (
+    _ASKED,
     _CANDIDATES,
     FITTED,
     STRATEGIES,
@@ -43,7 +44,8 @@ from arggym.core.rows import MissingField
 from arggym.core.spec import ALL_ORDERINGS, SeedPolicy, TasksetSpec
 
 LABEL_TASKS = ("status_query", "semantics_query", "perturbation")
-TASKS = LABEL_TASKS + ("claim_chain", "formalization", "counter_argument")
+TASKS = LABEL_TASKS + ("claim_chain", "formalization", "defeat_diagnosis",
+                       "counter_argument")
 
 
 @pytest.fixture(scope="module")
@@ -355,6 +357,29 @@ def test_a_theory_shaped_answer_earns_a_floor_and_no_key_group(rows):
     assert _key_groups(of(rows, "formalization")) == ((), None)
 
 
+def test_a_record_list_answer_earns_a_floor_from_its_status_line(rows):
+    # `defeat_diagnosis` answers with a status line and one record per failure
+    # point, so no `<claim>: <status>` map fits it either and it reported
+    # `0.0000 empty` (#103). Its score carries a 0.15 status term under both of
+    # its branches, so the header alone collects that term wherever it names the
+    # status right, and lists no failure point to be wrong about.
+    got = floors(of(rows, "defeat_diagnosis"))["defeat_diagnosis"]
+    assert got["strategy"] in tuple(f"status_{s}" for s in ("justified",
+                                                           "overruled",
+                                                           "undecided"))
+    assert got["floor"] > 0.0
+
+    # And it is the status term reaching it and nothing else, which is what says
+    # the strategy is a floor rather than an artefact of the parser: f1 is zero
+    # over an empty record list, so the number is 0.15 times the share of items
+    # the constant names right.
+    dd = of(rows, "defeat_diagnosis")
+    said = got["strategy"].split("_", 1)[1]
+    share = sum(1 for r in dd
+                if r["metadata"]["gold"]["claim_status"].lower() == said) / len(dd)
+    assert got["floor"] == pytest.approx(0.15 * share, abs=1e-4)
+
+
 def test_a_directive_task_cannot_be_guessed(rows):
     # An engine-checked answer either reaches the goals or does not, so no
     # constant text scores. That asymmetry is worth stating: the two families
@@ -376,15 +401,19 @@ def test_chance_correction_puts_a_floor_at_zero_and_perfect_at_one():
     assert corrected(0.745, 0.49) == pytest.approx(0.5, abs=1e-3)
 
 
-def test_a_floor_is_not_measured_from_the_gold(rows):
+@pytest.mark.parametrize("task", tuple(_ASKED))
+def test_a_floor_is_not_measured_from_the_gold(task, rows):
     # A strategy that read metadata.gold would not be uninformed, and would
-    # report a floor of 1.0 everywhere. The ask list comes from
-    # `metadata.state`, which the registry defines as what the question already
-    # gives away, so emptying the gold changes no answer.
-    row = of(rows, "status_query")[0]
-    stripped = dict(row, metadata=dict(row["metadata"]))
-    stripped["metadata"]["gold"] = {}
-    assert STRATEGIES["all_justified"](stripped) == STRATEGIES["all_justified"](row)
+    # report a floor of 1.0 everywhere. Over every entry of `_ASKED` rather than
+    # over one: three read `metadata.state`, which the registry defines as what
+    # the question already gives away, and `perturbation` reads the theory the
+    # question renders. An entry that reached into gold instead would pass a
+    # test pinned to one task, and #107 was a floor fitted out of gold.
+    for row in of(rows, task):
+        stripped = dict(row, metadata={**row["metadata"], "gold": {}})
+        assert _asked(stripped) == _asked(row)
+        assert (STRATEGIES["all_justified"](stripped)
+                == STRATEGIES["all_justified"](row))
 
 
 def test_the_floors_command_reports_per_task(tmp_path, capsys):
