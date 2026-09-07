@@ -114,10 +114,18 @@ def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, cell):
 
 # The directive forms, written out rather than read from `core.prompting`. Every block
 # shares them through one constant now, so a test that imported it would pass on an empty
-# one and take all seven variants down at once -- and no rejection reason is behind these
-# lines, since a malformed preference is only `unparseable_lines`.
-PREFERENCE_FORMS = ("   [prefer_rule: <rule> > <rule>]",
-                    "   [prefer_premise: <literal> > <literal>]")
+# one and take all seven variants down at once.
+#
+# The preference placeholders carry both halves, and a reason is behind each. Get the kind
+# wrong and it is `rejected_preference`: the engine orders defeasible rules against
+# defeasible rules and ordinary premises against ordinary premises and refuses everything
+# else (`arggym/aspic/engine.py`), which is what `<rule>` and `<literal>` failed to say.
+# Get the syntax wrong -- a whole rule written where its name belongs -- and it is
+# `unparseable_lines`, which zeroes the answer, which is what those two did say. So the
+# placeholder names the kind and the thing typed.
+PREFERENCE_FORMS = ("   [prefer_rule: <defeasible rule name> > <defeasible rule name>]",
+                    "   [prefer_premise: <ordinary premise literal> > <ordinary premise "
+                    "literal>]")
 DEFEASIBLE_FORM = "   [defeasible <name>: <antecedent> => <consequent>]"
 STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]"
 PREMISE_FORM = "   [premise: -<literal>]"
@@ -143,6 +151,13 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, cell):
                "these forms:" in it.prompt
         assert UNREADABLE + ", so write only directives." in it.prompt
         assert pc.TIE_NOTE in it.prompt
+        # The operand rule, anchored to the theory text because this block shows neither
+        # a [defeasible ...] nor a [premise: ...] form of its own, and without
+        # `permitted_block`'s clause about what the answer added: this task's answer can
+        # add nothing that survives `check_legality`.
+        assert "A preference naming anything else is dropped" in it.prompt
+        assert "a defeasible rule is a [defeasible ...] line" in it.prompt
+        assert "your answer added" not in it.prompt
         # And the forms it does not accept, since the header promises an exact list.
         for form in (DEFEASIBLE_FORM, STRICT_FORM, PREMISE_FORM):
             assert form not in it.prompt, f"preference_construction offers {form!r}"
@@ -170,6 +185,12 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, cell):
                    "Rule antecedents must be literals already present in the theory.",
                    "A rule name in a consequent, written -<name>, switches that rule off.",
                    "New axioms may not be added.",
+                   "A prefer_rule may name only defeasible rules and a prefer_premise "
+                   "only ordinary premises,",
+                   "A preference naming anything else is dropped and still counts as a "
+                   "directive used.",
+                   "A preference may name a defeasible rule or ordinary premise your "
+                   "answer added.",
                    "A directive that cannot be read at all scores the whole answer zero."):
         assert clause in it.prompt, f"{task}: lost {clause!r}"
 
