@@ -75,7 +75,11 @@ not a reversal. Adding the reverse preference is how a settled conflict is made 
 **A preference cannot create support.** A claim with no argument for it stays unjustified whatever the
 weighting.
 
-**Strict rules cannot be out-preferred.**
+**A preference orders defeasible rules and ordinary premises, and nothing else.** `prefer_rule`
+names two defeasible rules, `prefer_premise` two ordinary premises, and neither names the same
+one twice. A strict rule, an axiom, a derived literal or a name the theory does not have is not
+out-preferred by naming it: the directive is refused and orders nothing. What that refusal costs
+an answer is in section 6.
 
 ---
 
@@ -158,6 +162,8 @@ Constraints on directive answers:
 * the target claim may not simply be asserted
 * the answer must be minimal: one using more than twice the fewest directives that work scores
   zero, and one directive that cannot be read at all scores the whole answer zero
+* a preference names only what section 3 allows, from the theory or added by the answer; a
+  preference naming anything else is dropped and still counts as a directive used
 * an answer that reaches every goal while leaving the theory inconsistent also scores zero;
   only the tasks that permit strict rules can reach it, since two contraries are both
   justified only if both are firm
@@ -176,4 +182,6 @@ defeated_at: <target>; defeater: <defeater>; kind: undercut; survives_because: <
 for it only where the item has one.
 
 **Formalization answers** -- the full theory in the DSL of section 1. Rule names are your own choice
-and are not scored; structure and directive types are.
+and are not scored; structure and directive types are. Here a refused preference and a line that
+cannot be read both score the whole answer zero, rather than costing one directive: the answer is
+the theory, so it is built in one piece and there is nothing left to score without it.

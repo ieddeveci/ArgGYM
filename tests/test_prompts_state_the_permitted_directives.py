@@ -12,6 +12,9 @@ import pytest
 
 from arggym.core.curriculum import ATTACK, DEFENCE, MIXED
 from arggym.core.prompting import (
+    PREFERENCE_DROPPED,
+    PREFERENCE_OPERANDS,
+    UNREADABLE,
     formalization_notation,
     permitted_block,
     preference_block,
@@ -154,6 +157,36 @@ def test_the_block_states_the_rules_that_zero_an_answer(allow_strict):
     # are both JUSTIFIED only if both are firm, firmness needs an axiom and a strict rule,
     # and no answer may add an axiom -- so only a strict variant can reach the branch.
     assert ("leaving the theory inconsistent" in block) is allow_strict
+
+
+def test_formalization_states_the_two_rules_that_zero_its_answer():
+    """The half of #102 that no other guard reaches.
+
+    `formalization` is `MODULE`-scored, so the clause table in
+    `tests/test_the_notation_contract_is_stated_where_it_is_enforced.py` skips it, and
+    `test_a_block_is_a_function_of_its_variant_and_nothing_else` above asserts the block
+    ships verbatim whatever it says. Deleting either sentence used to fail nothing.
+
+    Both cost the whole answer, not a directive. `parse` raises on any line the DSL cannot
+    read -- the shipped reference inside a markdown fence scores 0.0 with
+    `unparseable_lines:2` -- and `status_map` swallows the engine's refusal of a
+    preference into an empty map that `score_value` turns into `engine_rejected`, so a
+    `prefer_rule` over the answer's own strict rule, or a `prefer_premise` over its own
+    axiom, scores 0.0 where the same directive costs one line of economy on the six
+    engine tasks (`arggym/tasks/formalization.py`).
+    """
+    block = formalization_notation()
+    assert UNREADABLE in block, "one unreadable line zeroes the answer"
+    # The operand rule itself, or "anything else" below names nothing.
+    assert PREFERENCE_OPERANDS in block, "a preference the engine refuses zeroes the answer"
+    # The whole sentence, not its tail. `UNREADABLE` ends in the same six words, so
+    # `"scores the whole answer zero" in block` passed with this clause deleted -- the one
+    # clause the split of `PREFERENCE_OPERANDS` from `PREFERENCE_DROPPED` exists to get
+    # right. A subject-bearing assertion is the only kind that can tell the two apart.
+    assert "A preference naming anything else scores the whole answer zero." in block
+    # And not `PREFERENCE_DROPPED`: nothing is dropped here, the answer is.
+    assert PREFERENCE_DROPPED not in block
+    assert "counts as a directive used" not in block
 
 
 def test_preference_construction_states_the_rule_that_zeroes_its_answer():

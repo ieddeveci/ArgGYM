@@ -33,11 +33,11 @@ from arggym.core.rows import score as score_row
 from arggym.core.spec import TasksetSpec, check_versions
 
 #: Bumped when the row a harness reads changes shape or wording: the rendered
-#: question for any reason, and the metadata schema too. A prompt change is a
-#: different taskset even when the theory behind it is identical, and so is a
-#: dropped metadata key -- version 5 removes `answer_template`, which moves
-#: `taskset_hash` without moving a single question.
-PROMPT_VERSION = 5
+#: question for any reason, and the metadata schema too. Either half moves it on
+#: its own. Version 5 removed `answer_template`, which moved `taskset_hash`
+#: without moving a single question; version 6 states two rules the scorer was
+#: already enforcing, which moves 280 of the 480 questions and no metadata at all.
+PROMPT_VERSION = 6
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:

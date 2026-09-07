@@ -24,9 +24,17 @@ What this does NOT catch:
   maintained, and a fourth added tomorrow fails nothing. Four more zeroing outcomes are
   outside the table altogether because no clause could state them: `no_directives`,
   `all_directives_illegal`, `engine_rejected` and `goal_not_met`.
-- It reaches the six engine-scored tasks. `formalization` scores its own answers, and it
-  zeroes an unreadable directive (`arggym/tasks/formalization.py`) while stating that
-  nowhere -- an accepted gap, tracked on #102 with the one below.
+- It reaches the six engine-scored tasks and no others. The six `MODULE`-scored tasks
+  score their own answers, and each of them zeroes the whole answer on a single stray
+  token -- `unparseable_tokens` on four of them and `unparseable_lines` on
+  `formalization` and `perturbation`. `formalization` now says so, because its answer is
+  the same DSL and `prompting.UNREADABLE` is already the right sentence for it; the other
+  five answer in five other shapes and need five sentences of their own, which is #125.
+  `claim_chain` is the one to read carefully there: its parser falls back to whole lines
+  when the answer quotes nothing, so a fully prose answer parses and scores 0.0 with
+  reason `ok` rather than raising. The rule it needs stated is still real -- prose mixed
+  in *among* quoted directives does raise -- but its sentence cannot promise a stray word
+  will be reported as unreadable.
 """
 from __future__ import annotations
 
@@ -83,7 +91,14 @@ CLAUSES: Dict[str, Clause] = {
     "illegal_asserted_contrary": Clause(
         "permitted only as the negation of an ordinary premise",
         "permitted only as the negation of an ordinary premise"),
-    "rejected_preference": Clause(None, None),
+    # The engine, not `check_legality`, is what refuses this one: a preference reaches
+    # `build_framework` untouched and `add_rule_preference` / `add_premise_preference`
+    # raise on an operand that is not a defeasible rule / not an ordinary premise
+    # (`arggym/aspic/engine.py`). So a strict rule or an axiom the theory does show is
+    # refused just as a name it does not show is.
+    "rejected_preference": Clause(
+        "A preference naming anything else is dropped",
+        "A preference naming anything else is dropped"),
     "bloated": Clause(
         "more than twice the fewest directives that work scores zero",
         "more than twice the fewest directives that work scores zero", appended=False),
@@ -96,12 +111,11 @@ CLAUSES: Dict[str, Clause] = {
         appended=False),
 }
 
-#: Enforced and stated nowhere, on purpose. Closing it means new question text on
-#: shipped items, which moves PROMPT_VERSION for a reason of its own. Tracked on #102.
-ACCEPTED_GAPS = {
-    "rejected_preference":
-        "the engine drops a prefer_rule naming a rule the framework lacks (#102)",
-}
+#: Enforced and stated nowhere, on purpose, keyed by reason and holding why. Empty since
+#: #102 stated the last of them. Kept rather than deleted: it is the only way to leave a
+#: blank row in the table, and `test_the_gaps_are_exactly_the_rows_the_table_leaves_blank`
+#: is what makes the next blank row cost a written reason.
+ACCEPTED_GAPS: Dict[str, str] = {}
 
 ENGINE_TASKS = sorted(n for n, s in registry.REGISTRY.items()
                       if s.scorer == registry.ENGINE)
