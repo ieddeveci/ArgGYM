@@ -489,7 +489,8 @@ def api_generate():
                         "meta": cit.metadata,
                         "spec": f"L{cit.level} counter_argument {cit.ordering.replace('_link_', '-link ').replace('_', '-')} | "
                                 f"{cit.metadata['n_chains']} chains "
-                                f"({cit.metadata['n_strict_final']} strict-final) depth "
+                                f"({cit.metadata['n_strict_final']} reaching the target "
+                                f"strictly) depth "
                                 f"{cit.metadata['chain_depth']} | strategy "
                                 f"{cit.metadata['strategy']}"})
     if mode not in {m[0] for m in MODES}:

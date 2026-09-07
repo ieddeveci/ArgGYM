@@ -83,29 +83,28 @@ def test_attack_defense_ships_the_block_it_already_had(mode):
 def test_the_strict_answer_is_permitted_exactly_where_the_prompt_says_it_is():
     """The behaviour behind the wording, not the wording alone.
 
-    Only the cells whose strict item accepts the one-directive answer: the shortcut is
-    offered to `bank` and taken only when it reaches both goals, so `min_directives == 1`
-    is the test for whether this cell has anything to say.
+    Permitted is about legality, not about winning. The check used to score the strict
+    one-liner 1.0 on the strict arm, which read as one assertion but was two: the scorer
+    accepts a strict rule here, and this line is a whole answer. The second half was #93's
+    defect and it is gone, so the cells it needed -- `min_directives == 1` at level 9 --
+    are gone with it and the skip that hunted for them went too. Legality is a property of
+    every cell, so all eight are checked now instead of the few that took the shortcut.
     """
-    checked = 0
     for level, ordering, seed in CHEAPEST_IDENTICAL:
         strict = ca.make_item(level, seed, ordering, allow_strict=True)
         plain = ca.make_item(level, seed, ordering, allow_strict=False)
         assert strict is not None and plain is not None
-        if strict.min_directives != 1:
-            continue
-        checked += 1
+        where = (level, ordering, seed)
         answer = f"[strict cs: {strict.seed_lit} -> -{strict.target}]"
 
         accepted = score_item(answer, ca.as_score_input(strict))
-        assert accepted.score == pytest.approx(1.0), (level, ordering, seed, accepted)
+        assert accepted.diagnostics["illegal"] == [], (where, accepted)
         assert STRICT_FORM in strict.prompt
 
         rejected = score_item(answer, ca.as_score_input(plain))
-        assert rejected.score == 0.0
-        assert "illegal" in rejected.reason, rejected.reason
+        assert rejected.score == 0.0, (where, rejected)
+        assert "illegal" in rejected.reason, (where, rejected.reason)
         assert NO_STRICT in plain.prompt
-    assert checked, "no cell at this level takes the strict shortcut; pick another level"
 
 
 def test_a_block_is_a_function_of_its_variant_and_nothing_else():

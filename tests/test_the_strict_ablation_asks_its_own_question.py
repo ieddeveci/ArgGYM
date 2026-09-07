@@ -9,17 +9,20 @@ read.
 
 Over the 40 exported cells the strict arm cost exactly what the plain arm cost on 19 of
 them, and 15 of those shipped the same reference answer as well (#37). The one-directive
-strict counter-argument is consistent only where every chain reaching the target ends in
-a defeasible rule -- otherwise that chain derives the target strictly, the answer derives
-its contrary strictly, and the framework is inconsistent -- and whether such a chain
-exists was decided by `seed % 2` through `mid_target`. The generator now breaks those
-chains first, one undercut each, which is the cost law asserted below: one directive
-where nothing blocks and 1 + k where k chains do.
+strict counter-argument is consistent only where every chain reaches the target through a
+defeasible rule -- otherwise that chain derives the target strictly, the answer derives
+its contrary strictly, and the framework is inconsistent. So the generator breaks those
+chains first, one undercut each, which is the cost law asserted below: 1 + k directives
+for the k chains that reach the target strictly.
 
-What this file does not test is whether the strict answer can be written without reading
-the theory. It can: parse the theory back, take the strict rules concluding the target,
-undercut the rule each of them fires from. That holds on `main` too, so it is not this
-change, and it is #93.
+`k` is `n_strict_final`, on every cell. It used to be zero on a mid-chain-target item
+whatever that item's strict rules said, because the strict flag named the chain's last
+rule and the mid-chain target sits before it, so no chain reached the target strictly and
+`[strict cs: <premise> -> -<target>]` was the whole answer on all 16 of them (#93). The
+flag names the target-reaching rule now, so the law has one branch rather than two.
+
+Whether either arm can be answered without reading the theory is asked next door, in
+tests/test_neither_arm_answers_from_the_question_line_and_one_grep.py.
 
 One test per cell, asserting everything about that cell, because comparing the arms means
 building both and the level 12 and 15 weakest-link-democratic cells are the dearest items
@@ -64,8 +67,7 @@ def _the_ablation_holds(level: int, ordering: str, seed: int) -> None:
         f"{plain.min_directives}, so the wider answer space bought nothing here")
     assert strict.reference != plain.reference, (
         f"{where}: the two arms ship one answer between them:\n{plain.reference}")
-    blocked = (0 if strict.metadata["mid_chain_target"]
-               else strict.metadata["n_strict_final"])
+    blocked = strict.metadata["n_strict_final"]
     assert strict.min_directives == 1 + blocked, (
         f"{where}: {strict.min_directives} directives against {blocked} chains reaching "
         f"the target strictly, and the answer is the strict counter-argument plus one "
