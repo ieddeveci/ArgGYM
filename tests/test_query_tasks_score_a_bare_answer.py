@@ -190,7 +190,7 @@ def test_formalization_fails_when_a_queried_status_moves(items):
 def test_perturbation_does_not_offer_an_answer_no_item_can_have():
     """`none` scored zero on every item in the benchmark.
 
-    `build` returns None when nothing changed, and the status-diversity guards under it
+    `build` rejects a draw where nothing changed, and the status-diversity guards under it
     would reject such a draw anyway, so gold is never empty. Inviting `none` offered a
     model an answer that is wrong by construction. The scorer still understands the
     word, because that is what it would mean if no-change items were ever generated.

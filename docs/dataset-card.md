@@ -172,10 +172,18 @@ coin flip. If preference direction always matched plausibility, a model could
 answer from priors and the verified oracle would be decorative.
 
 **Elitist and democratic diverge only where a preference decides between sets
-with more than one element**, so on eight of the twelve tasks the two halves of
-that axis produce the same answers (#72). Both are generated because measuring
-where they diverge is only possible if both exist, not because every task uses
-the distinction.
+with more than one element**, and the published theories almost never hold one.
+Over 720 theories -- every task at five levels, four orderings, three seeds --
+the two orderings of a family give the same defeat relation and the same status
+map everywhere except `status_query`, which carries an argument with two last
+defeasible rules on 12 of its 30 last-link theories. The axis reaches an answer
+on two tasks, and only under weakest-link: a `preference_construction` reference
+re-scored under its partner ordering falls off 1.0 on 24 of 30 items and a
+`counter_argument` one on 13 of 30, because the answer's own preference
+directives are what put several defeasible rules into an argument. No reference
+breaks under last-link (#72). Both halves are generated because measuring where
+they diverge is only possible if both exist, not because every task uses the
+distinction.
 
 **A frozen row is re-scorable only against the pinned engine.** Scoring the
 construction tasks runs `python-argumentation==2.0.2` at scoring time, not just

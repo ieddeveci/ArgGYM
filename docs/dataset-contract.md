@@ -410,13 +410,16 @@ and `prompt_version` and `scoring_version` may be pinned the same way as
 `arggym` and `pyarg` when a spec wants to assert them.
 
 ```jsonc
-"status_query|L12|last_link_elitist": {
+"semantics_query|L9|last_link_elitist": {
   "n": 2,
-  "seeds_used": [1, 4],
-  "seeds_skipped": [{"seed": 0, "reason": "build_returned_none"}, ...],
-  "reason_counts": {"build_returned_none": 2},
-  "scan_end": 4,
-  "acceptance_rate": 0.5
+  "seeds_used": [0, 1],
+  "seeds_skipped": [],           // {"seed": 0, "tries": 24, "reason": ...} when one fails
+  "reason_counts": {},           // over seeds_skipped
+  "scan_end": 1,
+  "acceptance_rate": 1.0,
+  "build_calls": 7,              // candidates build was asked for, across every seed
+  "build_rejections": {"theory_over_max_directives": 3, "one_status_over_its_share": 2},
+  "build_acceptance_rate": 0.2857
 }
 ```
 
@@ -433,13 +436,19 @@ hash".** Compare `seeds_skipped` first: if the skip lists match and the hash
 differs, a renderer or a scorer changed; if the skip lists differ, a generator
 changed. The hash alone cannot tell you which.
 
-**The reason field carries one value today.** `build` returns `None` without
-saying why, so every skip is recorded as `build_returned_none`
-(`arggym/core/freeze.py:102-105`) and the counts cannot separate the five
-distinct rejection sites in `claim_chain.build` alone. Making `build` report a
-reason is #72; the field is already in the manifest so that "L12
-last_link_elitist rejects 60%" can become "it rejects because the reference
-fails the irredundance check" without a format change.
+**The build counts, not just the seed counts.** `seeds_skipped` records a seed
+that exhausted its retry budget, and the grid barely uses it: across the 96
+cells of levels 3 and 9, not one seed failed and every `acceptance_rate` came
+out 1.00. The cell above still throws away five candidates out of seven. So `build` answers `Rejected(reason)` rather than
+`None` (#72), and the cell records how many candidates it asked for and what
+each refusal was, counted over every seed rather than only the failed ones. A
+reason is a short stable key naming the check that failed, so it stays a
+histogram bucket; `arggym/core/build.py` holds the vocabulary.
+
+Read `build_acceptance_rate` when asking whether a cell is healthy. Two exports
+whose reasons move while the hash holds mean a generator changed what it
+discards without changing what it ships. `min_acceptance` still gates the seed
+rate alone, which is a decision left open on #72.
 
 ### `profile` is recorded, and refused
 

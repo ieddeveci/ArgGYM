@@ -10,7 +10,7 @@ import json
 import pytest
 
 from arggym.core import freeze as F
-from arggym.core.dataset import BuildFailed
+from arggym.core.build import BuildReport
 from arggym.core.spec import SeedPolicy, TasksetSpec
 
 CHEAP = TasksetSpec(tasks=("claim_chain",), levels=(3,),
@@ -24,10 +24,10 @@ class _Refusing:
     def __init__(self, real, bad):
         self._real, self._bad = real, bad
 
-    def __getitem__(self, k):
+    def build_at(self, k):
         if k in self._bad:
-            raise BuildFailed(f"seed {k}")
-        return self._real[k]
+            return None, BuildReport(None, 3, {"refused_by_the_test": 3})
+        return self._real.build_at(k)
 
 
 def _patch(monkeypatch, bad):

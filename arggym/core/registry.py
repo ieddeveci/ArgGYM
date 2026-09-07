@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from importlib import import_module
 from typing import Any, Dict, Optional, Tuple
 
+from arggym.core.build import BuildReport
+
 # How an answer is judged. `exact` means a normalized comparison against the
 # reference is sound; `graded` a continuous scorer over a unique gold; and
 # `verified` that the engine is run on theory plus answer. No task is `exact`
@@ -90,10 +92,15 @@ class TaskSpec:
     #: recomputed from the row.
     policy: Dict[str, Any] = field(default_factory=dict)
 
+    def make_item_report(self, level: int, seed: int, ordering: str,
+                         **kwargs: Any) -> BuildReport:
+        """The item, and how many candidates the retry loop discarded reaching it."""
+        mod = import_module(f"arggym.tasks.{self.module}")
+        return mod.make_item_report(level, seed, ordering, **{**self.variant, **kwargs})
+
     def make_item(self, level: int, seed: int, ordering: str,
                   **kwargs: Any) -> Optional[Any]:
-        mod = import_module(f"arggym.tasks.{self.module}")
-        return mod.make_item(level, seed, ordering, **{**self.variant, **kwargs})
+        return self.make_item_report(level, seed, ordering, **kwargs).item
 
 
 #: On every task. `item.metadata` is the generator's own statistics, and most of

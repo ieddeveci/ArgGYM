@@ -32,9 +32,12 @@ tasks:
 levels: [3, 6, 9, 12, 15]
 
 # All four set orderings. Elitist and democratic differ only where a preference
-# decides between sets with more than one element, so on eight of the twelve
-# tasks the axis is currently inert (#72). They stay in the grid because the
-# audit that measures that is only possible if both are generated.
+# decides between sets with more than one element, and the theories rarely hold
+# one: over 720 measured, only status_query separates the two, and only in its
+# own defeat relation. Where the axis changes an answer is under weakest-link on
+# preference_construction and counter_argument, whose reference directives put
+# several defeasible rules into an argument (#72). Both halves stay in the grid
+# because the audit that measures that is only possible if both are generated.
 orderings:
   - last_link_elitist
   - last_link_democratic

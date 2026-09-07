@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import (
     ATTACK,
     DEFENCE,
@@ -110,7 +111,7 @@ def _atoms_and_rules(ops: Sequence[Operation]) -> Tuple[set, set]:
 
 
 def build_attack_item(level: int, seed: int, ordering: str,
-                      profile: str = "FULL") -> Optional[Item]:
+                      profile: str = "FULL") -> Union[Item, Rejected]:
     import random
     rng = random.Random(stable_seed(seed, level, ordering, "atkmix"))
     # Both caps came from `ItemSpec`, as `min(2 + L // 2, 10)` on the chain count and
@@ -132,7 +133,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
     rng.shuffle(picks)
     want_distinct = 1 if level <= 3 else (2 if level <= 9 else 3)
     if len(set(picks)) < min(want_distinct, len(pool)):
-        return None
+        return Rejected("too_few_distinct_configs")
 
     it = iter(_names(stable_seed(seed, level, ordering, "atk"), _POOL))
     target = next(it)
@@ -181,7 +182,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
         chains.append(ch)
         ops.extend(ch.to_ops())
     if not any(c.rules[-1].get("strict") for c in chains):
-        return None
+        return Rejected("no_strict_chain_ending")
     for j in range(n_decoy_strict):
         dr, dm, dc = next(it), next(it), next(it)
         ridx += 1
@@ -201,13 +202,15 @@ def build_attack_item(level: int, seed: int, ordering: str,
 
     atoms, rnames = _atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
     try:
         v = ASPICVerifier.from_operations(base, ordering=ordering)
         if str(v.status(target)) != "JUSTIFIED":
-            return None
-    except Exception:
-        return None
+            return Rejected("target_not_justified")
+    except Exception as exc:
+        # The class name is stable and bounded, so it stays a histogram bucket while
+        # still saying which engine call refused.
+        return Rejected(f"verifier_error:{type(exc).__name__}")
 
     n_ch = len(chains)
     if n_ch >= 5:
@@ -221,13 +224,13 @@ def build_attack_item(level: int, seed: int, ordering: str,
     if not mn["found"]:
         mn = find_minimum_decomposed(base, chains, target, src, "OVERRULED", ordering)
     if not mn.get("found") or mn.get("required_moves") is None:
-        return None
+        return Rejected("no_minimum_found")
 
     ref_lines = []
     for i, c in enumerate(chains):
         dfs = c.defeasible_rules()
         if not dfs:
-            return None
+            return Rejected("chain_without_defeasible_rule")
         ref_lines.append(f"[defeasible k{i+1}: {src} => -{dfs[0]['name']}]")
     ref = remap_text("\n".join(ref_lines), _rmap)
 
@@ -262,7 +265,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
                     "clean_premise_available": True,
                 })
     if not reference_ok(score_item(item.reference, item.as_score_input())):
-        return None
+        return Rejected("reference_scores_below_one")
     return item
 
 
@@ -332,7 +335,7 @@ def _n_junctions(ops: Sequence[Operation]) -> int:
 
 
 def build_defence_item(level: int, seed: int, ordering: str,
-                       profile: str = "FULL") -> Optional[Item]:
+                       profile: str = "FULL") -> Union[Item, Rejected]:
     n, sup, atk_d, n_strict, n_decoy, n_ds = _defence_shape(level)
     it = iter(_names(stable_seed(seed, level, ordering, "def"), _POOL))
     # One level decides the flag and the budget together, so the recorded budget cannot
@@ -346,7 +349,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
                       n_strict_attackers=n_strict, n_decoys=n_decoy,
                       attacker_depth=atk_d)
     if d is None:
-        return None
+        return Rejected("defence_not_built")
     extra: List[Operation] = []
     for j in range(n_ds):
         a, b2, c2 = next(it), next(it), next(it)
@@ -361,7 +364,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
     base = _ops_ordered(_allops, shuffle_seed=stable_seed(seed, level, ordering, "dshuf"))
     atoms, rnames = _atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
     n_moves_est = len(d.attackers) * (atk_d + 1)
     if n_moves_est <= 14:
         mn = verify_defence_minimum(d)
@@ -370,7 +373,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
     else:
         mn = verify_defence_decomposed(d)
     if mn.get("witness_moves") is None:
-        return None
+        return Rejected("no_defence_witness")
     src = None
     for o in d.ops:
         if o.kind == "premise":
@@ -400,12 +403,12 @@ def build_defence_item(level: int, seed: int, ordering: str,
                     "base_status": d.status(),
                 })
     if not reference_ok(score_item(item.reference, item.as_score_input())):
-        return None
+        return Rejected("reference_scores_below_one")
     return item
 
 
 def build_mixed_item(level: int, seed: int, ordering: str,
-                     profile: str = "FULL") -> Optional[Item]:
+                     profile: str = "FULL") -> Union[Item, Rejected]:
     n_atk = max(2, min(4, 2 + level // 5))
     it = iter(_names(stable_seed(seed, level, ordering, "mix"), _POOL))
     depth = max(2, min(5, 2 + level // 4))
@@ -419,13 +422,13 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                     n_junctions=n_junc,
                     ternary=wants_ternary(level, 0))
     if m is None:
-        return None
+        return Rejected("mixed_not_built")
     inter = check_interference(m)
     if not inter["interferes"]:
-        return None
+        return Rejected("attack_does_not_interfere")
     sol = solve_mixed(m)
     if not sol["achieved"] or not sol["all_necessary"]:
-        return None
+        return Rejected("no_minimal_joint_solution")
     extra: List[Operation] = []
     n_ds = 0 if level < 4 else min(1 + (level - 4) // 4, 3)
     for j in range(n_ds):
@@ -441,7 +444,7 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     base = _ops_ordered(_allops, shuffle_seed=stable_seed(seed, level, ordering, "mshuf"))
     atoms, rnames = _atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
     src = None
     for o in m.ops:
         if o.kind == "premise":
@@ -473,7 +476,7 @@ def build_mixed_item(level: int, seed: int, ordering: str,
                     "all_reference_directives_necessary": sol["all_necessary"],
                 })
     if not reference_ok(score_item(item.reference, item.as_score_input())):
-        return None
+        return Rejected("reference_scores_below_one")
     return item
 
 
@@ -484,22 +487,23 @@ def reference_ok(result: ScoreResult) -> bool:
 MODE_BUILDERS = {ATTACK: build_attack_item, DEFENCE: build_defence_item, MIXED: build_mixed_item}
 
 
-def make_item(level: int, seed: int, ordering: str, mode: str,
-              profile: str = "FULL", tries: int = 12) -> Optional[Item]:
+def make_item_report(level: int, seed: int, ordering: str, mode: str,
+                     profile: str = "FULL", tries: int = 12) -> BuildReport:
     # The mode is part of the task identity: `core/registry.py` registers `attack`,
     # `defence` and `attack_defense` separately and names the mode on each, so no
     # caller wants a default. It used to take one from `spec_for(...).mode`, chosen off
     # the seed's parity -- a curriculum nothing else in the module consulted, and
     # unreachable because the registry always passes a mode (#31). Raising says
-    # "caller error" where returning None would read as a cell that rejected every
+    # "caller error" where a rejection would read as a cell that refused every
     # candidate. `ordering` loses its default because a required argument cannot follow
     # an optional one and `tests/e2e/registry.py` passes the mode positionally.
     if mode not in MODE_BUILDERS:
         raise ValueError(f"attack_defense needs a mode, one of "
                          f"{', '.join(sorted(MODE_BUILDERS))}; got {mode!r}")
     fn = MODE_BUILDERS[mode]
-    for k in range(tries):
-        it = fn(level, seed * 31 + k, ordering, profile)
-        if it is not None:
-            return it
-    return None
+    return retry(lambda k: fn(level, seed * 31 + k, ordering, profile), tries)
+
+
+def make_item(level: int, seed: int, ordering: str, mode: str,
+              profile: str = "FULL", tries: int = 12) -> Optional[Item]:
+    return make_item_report(level, seed, ordering, mode, profile, tries).item

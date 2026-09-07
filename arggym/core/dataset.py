@@ -21,10 +21,11 @@ it is recorded (`core/spec.py`).
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from arggym.core import registry
 from arggym.core.answers import ScoreResult
+from arggym.core.build import BuildReport, reasons_text
 from arggym.core.rows import encode_fields
 from arggym.core.rows import score as score_row
 from arggym.core.rows import score_value as score_row_value
@@ -76,21 +77,36 @@ class TaskDataset:
         for i in range(self.size):
             yield self[i]
 
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        if not 0 <= idx < self.size:
-            raise IndexError(idx)
+    def build_at(self, idx: int) -> Tuple[Optional[Dict[str, Any]], BuildReport]:
+        """The row at `idx`, and what the retry loop spent reaching it.
+
+        Separate from `__getitem__` because the export wants the report on the
+        seeds that succeeded as much as on the ones that did not. Seed-level
+        failures are rare -- a freeze over 96 grid cells skipped none -- while a
+        cell spending 30 candidates on 4 items is common and invisible, and that
+        gap is what #72 is about. So this never raises; `__getitem__` does.
+        """
         seed = self.seed + idx
         # `profile` is deliberately not passed: counter_argument and
         # semantics_query take none at all. The constructor refuses anything but
         # FULL, which is every generator's own default, so the recorded value is
         # what built the item rather than what the caller hoped for.
-        item = self.spec.make_item(self.level, seed, self.ordering)
-        if item is None:
+        report = self.spec.make_item_report(self.level, seed, self.ordering)
+        if report.item is None:
+            return None, report
+        return self.entry(report.item, seed, idx), report
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        if not 0 <= idx < self.size:
+            raise IndexError(idx)
+        entry, report = self.build_at(idx)
+        if entry is None:
             raise BuildFailed(
-                f"{self.task} L{self.level} {self.ordering} seed {seed} built no item "
-                f"after its retry budget. The index is the seed, so this seed is not "
-                f"silently replaced; export with a spec to skip it and record why.")
-        return self.entry(item, seed, idx)
+                f"{self.task} L{self.level} {self.ordering} seed {self.seed + idx} built "
+                f"no item in {report.calls} candidates ({reasons_text(report.reasons)}). "
+                f"The index is the seed, so this seed is not silently replaced; export "
+                f"with a spec to skip it and record why.")
+        return entry
 
     def entry(self, item: Any, seed: int, index: int) -> Dict[str, Any]:
         """One item as the row a harness reads.

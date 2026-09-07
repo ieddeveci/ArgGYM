@@ -4,11 +4,12 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import (
     JUNCTION_CAPS,
     PROFILES,
@@ -120,7 +121,7 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[CCItem]:
+          profile: str = "FULL") -> Union[CCItem, Rejected]:
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
     tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)
@@ -248,7 +249,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     if branch_decoys and depth >= 4:
         _line_rules = [o for o in line_ops if o.kind in ("defeasible", "strict") and o.consequent]
         if not _line_rules:
-            return None
+            return Rejected("no_line_rule_to_anchor")
         anchor = _line_rules[min(len(_line_rules) - 1, depth // 3)].consequent
         cur = anchor
         for j in range(2):
@@ -302,18 +303,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
     if status(base, claim, ordering) != "JUSTIFIED":
-        return None
+        return Rejected("claim_not_justified")
 
     for d in decoy_info:
         sub = [o for o in base if not (o.kind == "defeasible" and o.name in d["rules"])]
         if status(sub, claim, ordering) != "JUSTIFIED":
-            return None
+            return Rejected("decoy_is_load_bearing")
     without_true = [o for o in base
                     if not (o.kind == "defeasible" and o.name == line_ops[1].name)]
     if status(without_true, claim, ordering) == "JUSTIFIED":
-        return None
+        return Rejected("line_rule_not_necessary")
 
     ref_lines = [render_op(o) for o in line_ops]
     prompt = _render_prompt(render_ops(base), claim, ordering)
@@ -480,10 +481,11 @@ def score(answer_text: str, item: CCItem) -> ScoreResult:
     return score_value(value, item)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     profile: str = "FULL", tries: int = 14) -> BuildReport:
+    return retry(lambda k: build(level, seed * 71 + k, ordering, profile), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 14) -> Optional[CCItem]:
-    for k in range(tries):
-        it = build(level, seed * 71 + k, ordering, profile)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, profile, tries).item
