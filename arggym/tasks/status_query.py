@@ -14,7 +14,7 @@ from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import PROFILES, junctions_for
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
-from arggym.core.prompting import answer_format
+from arggym.core.prompting import STRAY_TEXT, answer_format
 
 TASK = "status_query"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -420,7 +420,8 @@ def _render_prompt(theory: str, queried: Sequence[str], ordering: str) -> str:
             "Possible statuses: justified, overruled, undecided.\n"
             "A claim is justified when some argument for it is accepted, overruled when every argument for it is defeated, and undecided otherwise.\n"
             "\n"
-            + answer_format("Answer format: one line per claim, written as `claim: status`."))
+            + answer_format("Answer format: one line per claim, written as `claim: status`."
+                            "\n" + STRAY_TEXT))
 
 
 # One whole line, as the format clause above asks for. See `core/pairs.py` for why the

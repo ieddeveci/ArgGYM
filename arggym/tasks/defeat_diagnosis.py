@@ -19,7 +19,7 @@ from arggym.core.curriculum import (
     wants_ternary,
 )
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
-from arggym.core.prompting import answer_format
+from arggym.core.prompting import STRAY_TEXT, answer_format
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -46,6 +46,18 @@ EASY_LEVELS = 3
 _L = "abcdefghijklmnopqrstuvwxy"
 
 UNDERMINE, UNDERCUT, REBUT = "undermine", "undercut", "rebut"
+#: The second rule that zeroes a whole answer here, stated beside the three words it is
+#: about. `parse` below raises `invalid_kind` on any other word, before it has scored
+#: anything, so a synonym costs the answer rather than the record it sits in: rewriting
+#: every `kind:` of a shipped reference as `rebuttal`, `rebutting`, `undercutting` or
+#: `undermining` scores 0.0 on all 40 rows, where the reference scores 1.0 (#125).
+#: `prompting.STRAY_TEXT` does not reach it -- the bad word sits inside a well-shaped
+#: line, not outside one. The sentence says capitalisation is free because `parse`
+#: lowercases before it compares and a model reading only the question cannot tell:
+#: rewriting every `kind:` of a shipped reference in upper case, title case or
+#: alternating case leaves 1.0 on all 40 rows. What it rules out is a fourth word.
+KIND_RULE = ("The kind must be written as one of those three words, in any "
+             "capitalisation; any other scores the whole answer zero.")
 
 
 def stable_seed(*parts) -> int:
@@ -336,16 +348,22 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
     on = _ordering_phrase(ordering)
-    extra = "   ...; survives_because: <rule>\n" if want_survival else ""
+    extra = "\n   ...; survives_because: <rule>" if want_survival else ""
     return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
             f"with {on}.\n\n{theory}\n\n"
             f"The claim {claim} is not justified.\n"
             f"State its status, and identify every point at which its support fails.\n\n"
+            # Two whole-answer rules, both after the whole format block so that "those
+            # three words" and "these lines" each point back at all of it. `answer_format`
+            # used to rstrip a trailing newline off this clause, so `extra` now leads with
+            # one instead of trailing one and the block above is byte-identical.
             + answer_format("Answer format:\n"
                             "   first line: `status: overruled` or `status: undecided`\n"
                             "   then one line per failure point, as\n"
                             "   `defeated_at: <target>; defeater: <defeater>; "
-                            "kind: undermine|undercut|rebut`\n" + extra))
+                            "kind: undermine|undercut|rebut`" + extra
+                            + "\n" + KIND_RULE
+                            + "\n" + STRAY_TEXT))
 
 
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)

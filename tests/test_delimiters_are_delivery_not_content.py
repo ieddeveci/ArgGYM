@@ -29,11 +29,31 @@ ORDERING = "last_link_elitist"
 LEVELS = tuple(range(1, 16))
 CELLS = [(task, level) for task in sorted(registry.task_names()) for level in LEVELS]
 
+# `prompting.STRAY_TEXT` and `defeat_diagnosis.KIND_RULE`, written out rather than
+# imported so that emptying either constant fails the table below.
+_STRAY = "\nAny word in your answer outside these lines scores the whole answer zero."
+_KIND = ("\nThe kind must be written as one of those three words, in any capitalisation; "
+         "any other scores the whole answer zero.")
+
 #: The last thing each question says, which is the content clause `answer_format` was
 #: handed. Naming the ending rather than a list of forbidden fences is what makes this
 #: exhaustive: any sentence appended after the clause fails, whatever it says, not only
 #: the five delimiters somebody thought of. `defeat_diagnosis` takes two, because its
 #: format block gains a `survives_because` line on the items that have one.
+#:
+#: Five entries now run past one line: `status_query`, `semantics_query`, `perturbation`,
+#: `claim_chain` and `defeat_diagnosis` close their clause with `prompting.STRAY_TEXT`,
+#: and `defeat_diagnosis` with `defeat_diagnosis.KIND_RULE` before it (#125). Each keeps
+#: its own clause above the shared sentence rather than dropping to the sentence alone,
+#: which would collapse the five to one string and stop this table pinning which format
+#: clause each task ends on. Both sentences are written out above rather than imported,
+#: so emptying either constant fails here -- the hole #126's first guard had.
+#:
+#: `endswith` still sees only the tail, so a sentence inserted between the format clause
+#: and the shared one passes here. `ANSWER_BLOCK`
+#: (`tests/test_query_tasks_score_a_bare_answer.py`) pins the whole block by equality for
+#: those five; what this table adds over it is the other seven tasks and the claim that
+#: nothing whatever follows the clause.
 #:
 #: The six query tasks state these clauses again in `CONTENT_CLAUSES`
 #: (`tests/test_query_tasks_score_a_bare_answer.py`). Both are asserted against the same
@@ -47,15 +67,16 @@ TERMINAL_CLAUSE = {
     "preference_construction": ("Answer format: one directive per line.",),
     "formalization": ("Answer format: one directive per line.",),
     "claim_chain": ("Answer format: one directive per line, copied exactly as it "
-                    "appears above.",),
-    "status_query": ("Answer format: one line per claim, written as `claim: status`.",),
+                    "appears above." + _STRAY,),
+    "status_query": ("Answer format: one line per claim, written as `claim: status`."
+                     + _STRAY,),
     "semantics_query": ("Answer format: one line per query, written as "
-                        "`claim under semantics: status`.",),
+                        "`claim under semantics: status`." + _STRAY,),
     "perturbation": ("Answer format: one line per changed claim, written as "
-                     "`claim: status`.",),
+                     "`claim: status`." + _STRAY,),
     "defeat_diagnosis": ("`defeated_at: <target>; defeater: <defeater>; "
-                         "kind: undermine|undercut|rebut`",
-                         "...; survives_because: <rule>"),
+                         "kind: undermine|undercut|rebut`" + _KIND + _STRAY,
+                         "...; survives_because: <rule>" + _KIND + _STRAY),
 }
 
 

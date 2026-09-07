@@ -22,8 +22,11 @@ a level off the grid, which is why the level axis comes here.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from arggym.core import prompting
 from arggym.core.answers import DEFAULT_TEMPLATE, ScoreResult, extract_answer
 from arggym.tasks import (
     claim_chain,
@@ -36,6 +39,12 @@ from arggym.tasks import (
 
 ORDERING, SEED = "last_link_elitist", 0
 LEVELS = tuple(range(1, 16))
+#: The four the curriculum ships. `ORDERING` above is the one `item_at` builds at,
+#: so anything rendered conditionally on the ordering needs these as well.
+ORDERINGS = ("last_link_elitist", "last_link_democratic",
+             "weakest_link_elitist", "weakest_link_democratic")
+#: One level for the ordering row. Every task builds here on all four.
+BLOCK_LEVEL = 3
 
 MODULES = {
     "status_query": status_query,
@@ -145,6 +154,167 @@ def test_the_stable_sentence_is_stated_exactly_where_stable_is_asked(level):
                 "`no stable extension`.")
     asked = semantics_query.STABLE in semantics_query.semantics_for(level)
     assert (sentence in item_at("semantics_query", level).prompt) is asked
+
+
+#: The five that carry `prompting.STRAY_TEXT`. `formalization` is the sixth `MODULE`
+#: task and states the same all-or-nothing rule through `prompting.UNREADABLE`, in the
+#: notation block #126 gave it: its answer is the DSL, so "a directive that cannot be
+#: read" is the right noun there and the shared sentence would state the rule twice.
+STRAY_TASKS = tuple(t for t in sorted(MODULES) if t != "formalization")
+
+#: The two sentences, written out rather than imported. `x in prompt` is true of the
+#: empty string, so a guard that only imported the constant would still pass with that
+#: constant emptied -- the hole #126's first guard had. Written out, the constant has to
+#: equal this, so a rewording fails rather than drifting.
+STRAY_SENTENCE = "Any word in your answer outside these lines scores the whole answer zero."
+KIND_SENTENCE = ("The kind must be written as one of those three words, in any "
+                 "capitalisation; any other scores the whole answer zero.")
+
+#: The whole last paragraph of each question, which is the answer-format block and
+#: nothing else -- verified over all 15 levels and all four orderings, where every one of
+#: the five renders exactly the block below and `defeat_diagnosis` one of its two.
+#:
+#: Pinning the whole block rather than its ending is what `TERMINAL_CLAUSE`
+#: (`tests/test_delimiters_are_delivery_not_content.py`) cannot do. `endswith` sees the
+#: tail, so a sentence inserted between the clause and the shared one passes there, and
+#: so does `answer_format` growing a line of its own above the clause. Equality over the
+#: paragraph sees both.
+ANSWER_BLOCK = {
+    "status_query": (
+        "Answer format: one line per claim, written as `claim: status`.\n"
+        + STRAY_SENTENCE,),
+    "semantics_query": (
+        "Answer format: one line per query, written as `claim under semantics: status`.\n"
+        + STRAY_SENTENCE,),
+    "perturbation": (
+        "Answer format: one line per changed claim, written as `claim: status`.\n"
+        + STRAY_SENTENCE,),
+    "claim_chain": (
+        "Answer format: one directive per line, copied exactly as it appears above.\n"
+        + STRAY_SENTENCE,),
+    # Keyed by `requires_survival_reason`, so the variant is checked against the item's
+    # own record of whether it asks for one rather than against a list that accepts
+    # either. A build that stopped rendering the template line would otherwise match the
+    # False entry on every item and fail nothing.
+    "defeat_diagnosis": {
+        False: ("Answer format:\n"
+                "   first line: `status: overruled` or `status: undecided`\n"
+                "   then one line per failure point, as\n"
+                "   `defeated_at: <target>; defeater: <defeater>; "
+                "kind: undermine|undercut|rebut`\n"
+                + KIND_SENTENCE + "\n" + STRAY_SENTENCE),
+        True: ("Answer format:\n"
+               "   first line: `status: overruled` or `status: undecided`\n"
+               "   then one line per failure point, as\n"
+               "   `defeated_at: <target>; defeater: <defeater>; "
+               "kind: undermine|undercut|rebut`\n"
+               "   ...; survives_because: <rule>\n"
+               + KIND_SENTENCE + "\n" + STRAY_SENTENCE),
+    },
+}
+
+
+def expected_block(task: str, item) -> str:
+    if task == "defeat_diagnosis":
+        return ANSWER_BLOCK[task][item.metadata["requires_survival_reason"]]
+    return ANSWER_BLOCK[task][0]
+
+
+def rendered_block(item) -> str:
+    """The question's last blank-line-separated paragraph."""
+    return item.prompt.split("\n\n")[-1]
+
+
+@pytest.mark.parametrize("task,level",
+                         [(t, lv) for t in STRAY_TASKS for lv in LEVELS])
+def test_the_question_ends_with_exactly_its_answer_format_block(task, level):
+    """Every level of each column, against the block written out here.
+
+    What this does NOT catch: a sentence added to the question somewhere above this
+    paragraph. The theory text is in there, so no table can pin the whole question, and
+    a body sentence reading "you may add a short explanation" would leave every
+    assertion in this file green while contradicting the block below it. Reviewing a
+    change to a `_render_prompt` is what covers that.
+    """
+    item = item_at(task, level)
+    assert rendered_block(item) == expected_block(task, item)
+
+
+@pytest.mark.parametrize("task", STRAY_TASKS)
+def test_the_answer_format_block_does_not_vary_with_the_ordering(task):
+    """The axis the column above holds fixed, and the one a conditional would hide in.
+
+    `item_at` builds at `last_link_elitist` alone, so a block rendered only under that
+    ordering keeps 30 of the 40 shipped rows of a task and passes every other assertion
+    here. One level over the four orderings is enough to see it, since the level axis is
+    already walked above.
+    """
+    for ordering in ORDERINGS:
+        item = MODULES[task].make_item(BLOCK_LEVEL, SEED, ordering)
+        assert item is not None, f"{task}: no item at L{BLOCK_LEVEL} {ordering}"
+        assert rendered_block(item) == expected_block(task, item), (
+            f"{task}: the block moved under {ordering}")
+
+
+def test_both_defeat_diagnosis_blocks_are_reached():
+    """Neither entry of the table above is dead, so neither passes by never being used."""
+    seen = {item_at("defeat_diagnosis", lv).metadata["requires_survival_reason"]
+            for lv in LEVELS}
+    assert seen == {False, True}
+
+
+@pytest.mark.parametrize("task,level",
+                         [(t, lv) for t in STRAY_TASKS for lv in LEVELS])
+def test_the_prompt_states_that_a_stray_word_zeroes_the_answer(task, level):
+    """The rule these five enforce and none of them used to state (#125).
+
+    Behavioural as well as textual. All five refuse a stray word out of the parser --
+    `unparseable_tokens:1` on four and `unparseable_lines:1` on `perturbation` -- and it
+    is that refusal the second half guards: the junk check still zeroes a word the format
+    clause did not license. A wording check alone would survive the junk check going
+    away.
+
+    It does not guard `claim_chain`'s bracketing, which is what makes a *prose-only*
+    answer worth nothing there without raising. Stripping the brackets off both gold and
+    the parsed lines leaves this test green and fails
+    `tests/test_an_answer_is_a_value_not_its_text.py` instead.
+
+    One word, not one line: each of the five discards a bullet or a bare numeral before
+    it counts, so a bulleted or numbered reference still scores 1.0 while `therefore`
+    on a line of its own scores 0.0.
+    """
+    item = item_at(task, level)
+    assert prompting.STRAY_TEXT == STRAY_SENTENCE
+    assert STRAY_SENTENCE in item.prompt, f"{task}: lost the stray-word sentence"
+    ref = reference_of(item)
+    assert MODULES[task].score(ref, item).score == pytest.approx(1.0)
+    assert MODULES[task].score(ref + "\ntherefore", item).score == 0.0
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_defeat_diagnosis_states_that_only_three_kind_words_are_read(level):
+    """Its second whole-answer rule, which `STRAY_SENTENCE` does not cover.
+
+    The bad word sits inside a well-shaped line rather than outside one, so nothing
+    about stray text reaches it: `parse` raises `invalid_kind` on any `kind:` word
+    outside the three and the answer scores 0.0 before a record is compared. The
+    capitalisation half of the sentence is asserted too, in the direction that costs a
+    model something: a shipped reference with every kind upper-cased still scores 1.0.
+    """
+    item = item_at("defeat_diagnosis", level)
+    assert defeat_diagnosis.KIND_RULE == KIND_SENTENCE
+    assert KIND_SENTENCE in item.prompt, "lost the kind sentence"
+    ref = reference_of(item)
+    kinds = re.compile(r"kind:\s*(undermine|undercut|rebut)\b")
+    assert kinds.search(ref), "the reference names no kind, so this proves nothing"
+    assert defeat_diagnosis.score(ref, item).score == pytest.approx(1.0)
+
+    result = defeat_diagnosis.score(kinds.sub("kind: rebuttal", ref), item)
+    assert result.score == 0.0
+    assert result.reason.startswith("invalid_kind")
+
+    shouted = kinds.sub(lambda m: "kind: " + m.group(1).upper(), ref)
+    assert defeat_diagnosis.score(shouted, item).score == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("task,level", CELLS)

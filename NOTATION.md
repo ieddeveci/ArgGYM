@@ -125,11 +125,13 @@ definition.
 The shapes below are what an answer says. Where it goes is the harness's choice: the question
 states what a legal answer must contain and stops there, so a fence, a JSON schema, a tool call or
 a solver that returns the answer directly all work (`docs/dataset-contract.md` section 1).
-Whitespace, blank lines, bullets and numbering are ignored; content is what is parsed. A solver
-that produces the answer as a value rather than as text can submit it with `score_value` and skip
-this section entirely.
+Whitespace, blank lines, bullets and numbering are ignored; content is what is parsed. Anything
+else outside the lines a shape below asks for -- a word of prose, a label, a heading -- scores the
+whole answer zero. A solver that produces the answer as a value rather than as text can submit it
+with `score_value` and skip this section entirely.
 
-**Status queries** -- one line per claim.
+**Status queries** (status query, perturbation) -- one line per claim; perturbation answers only
+for the claims whose status the added directives moved.
 ```
 ab1: justified
 cd2: undecided
@@ -179,7 +181,8 @@ defeated_at: <target>; defeater: <defeater>; kind: undercut; survives_because: <
 ```
 `defeated_at` is the CLAIM attacked for undermine and rebut, and the RULE switched off for undercut.
 `survives_because` names the rule that attacks that defeater and is itself defeated; a question asks
-for it only where the item has one.
+for it only where the item has one. `kind` takes one of those three words in any capitalisation; a
+fourth word is not a wrong diagnosis but an unreadable one, and scores the whole answer zero.
 
 **Formalization answers** -- the full theory in the DSL of section 1. Rule names are your own choice
 and are not scored; structure and directive types are. Here a refused preference and a line that

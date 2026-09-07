@@ -23,7 +23,7 @@ from arggym.core.invariants import (
     randomize_rule_names,
     split_atoms_and_rules,
 )
-from arggym.core.prompting import answer_format
+from arggym.core.prompting import STRAY_TEXT, answer_format
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -340,7 +340,7 @@ def _render_prompt(theory: str, claim: str, ordering: str) -> str:
             f"Write all and only the directives that form the argumentation line justifying {claim}, "
             "in order from the premise to the claim.\n\n"
             + answer_format("Answer format: one directive per line, copied exactly as it "
-                            "appears above."))
+                            "appears above.\n" + STRAY_TEXT))
 
 
 def _in_support_order(picked: Sequence[Operation]) -> Tuple[int, int]:

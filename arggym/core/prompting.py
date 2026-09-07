@@ -40,6 +40,44 @@ _NAME_GRAMMAR = ("name starts with a letter and continues with letters, digits o
 MINIMALITY = ("The answer must be minimal: one using more than twice the fewest "
               "directives that work scores zero.")
 UNREADABLE = "A directive that cannot be read at all scores the whole answer zero"
+# The same all-or-nothing rule for the five `MODULE`-scored tasks with no block above
+# their answer-format clause, and so with no `UNREADABLE`: every `MODULE`-scored task but
+# `formalization`, whose notation block took that sentence in #126. All five refuse a
+# stray word and report the refusal. Appending `therefore` on a line of its own to a
+# shipped reference gives `unparseable_tokens:1` on four of them and
+# `unparseable_lines:1` on `perturbation`, whose counter is over tokens too (#127), and
+# takes all 40 rows of each from 1.0 to 0.0 (#125).
+#
+# `claim_chain` differs only on an answer with no brackets at all, which is the
+# prose-only case rather than the case this sentence is about: `parse` falls back to whole
+# lines, so it reports `ok` instead of raising, and the answer still scores 0.0 on all 40
+# rows, because gold comes from `render_op` and carries brackets no bare line can match.
+# So a prose-only answer is worth nothing on all five as well, and the sentence states
+# that outcome without promising which reason string comes back.
+#
+# It names no unit, which is what lets one sentence do that. `UNREADABLE` says "a
+# directive", and four of these five answer in something else -- `claim: status` lines,
+# `claim under semantics: status` lines, `defeated_at:` records. "these lines" points at
+# the answer-format clause this is appended to, which names the task's own shape just
+# above, so the noun is written once and in that task's words. That is also why this is a
+# caller's argument rather than something `answer_format` appends -- see there.
+#
+# "word", not "line" or "token", is measured. All five discard two kinds of token before
+# they count: one left empty by `.strip(",;.-*•()[]")`, which `claim_chain` does
+# without the brackets, and one matching `\d+[.)]?`. So a reference rewritten as a
+# bulleted list or a numbered one still scores 1.0 on all 40 rows of all five, while a
+# leading `Answer:` zeroes all five.
+#
+# "in your answer" is there because without it the sentence claims more than the scorer
+# does. A harness composes this question with a submission convention of its own and
+# hands the extracted region to `score`, so text outside that region is never seen and
+# never costs anything (`docs/dataset-contract.md` section 1, and the reasoning a model
+# writes before answering is exactly what that section puts outside it). Unscoped, "any
+# word" reads on one of its two readings as a penalty on the whole completion -- a
+# question stating a rule the scorer does not enforce, which is this constant's own
+# defect with the sign flipped. Scoped, it names the string every measurement behind
+# this sentence was taken on, and narrows nothing.
+STRAY_TEXT = "Any word in your answer outside these lines scores the whole answer zero."
 # What a preference may name, which no prompt used to say. `check_legality` inspects every
 # other kind and lets a preference through untouched (`core/scoring.py`), so the engine is
 # the first thing that reads one: `add_rule_preference` looks its operands up among the
@@ -210,6 +248,13 @@ def answer_format(clause: str) -> str:
     likes, and extracts the answer before handing it back. So the question says
     nothing about a fence, on any task and for any caller
     (`docs/dataset-contract.md` section 1).
+
+    `STRAY_TEXT` arrives inside the clause rather than being appended here, and that is
+    why it is a caller's argument. Four of the nine call sites -- `render` below,
+    `counter_argument`, `formalization` and `preference_construction` -- put a block
+    above their clause that already carries `UNREADABLE`, so a sentence added here would
+    state the same all-or-nothing rule to them twice. The five that pass `STRAY_TEXT` are
+    the five with no such block.
 
     One line of work, kept as a function because this is where that rule is written
     for the nine task modules that call it.
