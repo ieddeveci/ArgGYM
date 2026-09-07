@@ -85,16 +85,18 @@ task, and on four of them it is worth a lot. Measured at level 3:
 |---|---|---|
 | `semantics_query` | 0.806 | "undecided" under grounded, "justified" under credulous preferred |
 | `status_query` | 0.375 | answer "justified" to every query |
+| `formalization` | 0.219 | `[premise: x]` for every literal the question queries |
 | `claim_chain` | 0.190 | hand the theory back |
-| `perturbation` | 0.147 | one status for every literal in the theory |
+| `perturbation` | 0.153 | "overruled" for every claim of the original theory |
+| `defeat_diagnosis` | 0.131 | the line `status: overruled`, and no failure points |
 | the six engine-checked tasks | 0.000 | no fixed answer reaches a goal |
-| `formalization`, `defeat_diagnosis` | 0.000 | the search carries nothing that fits their answer format |
 
-The last row is a gap in the instrument, not a property of those two tasks: both
-are scored by their module rather than by the engine, and an answer shaped like
-their format does score. The floor is the best of what was searched, so it is a
-lower bound on what an uninformed answer gets, and the strategy is printed
-beside it so the two zeroes above never read as one.
+The floor is the best of what the search tried, so it is a lower bound on what
+an uninformed answer gets, and every one of them is printed with the strategy
+that reached it: `0.000 empty` says the search found nothing that fits the
+answer format, which is a different sentence from "guessing does not pay here".
+`formalization` and `defeat_diagnosis` read 0.000 until the search learned to
+write a directive and a status line (#103).
 
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report
 floors beside the scores. They are a property of the scorer and of the search
