@@ -11,7 +11,12 @@ Section 5 defines `success` per task. It is always returned, and it is not `scor
 `formalization` succeeds on behavioural equivalence alone, so a correct theory written with
 one spare directive is a success below 1.0.
 
-One cheap cell per task. The grid is `tests/e2e`'s job.
+One cheap column per task, every level of it. What a question states and what its own
+reference scores are properties of an item, and they were asserted at level 3 alone
+(#110); `TasksetSpec` accepts any level the curriculum spans, so the column has to. The
+ordering and seed axes stay with `tests/e2e`, which walks the two last-link/weakest-link
+elitist orderings and both seeds -- and only the five exported levels
+(`tests/e2e/conftest.py:22,36-38`), which is why the level axis comes here.
 """
 from __future__ import annotations
 
@@ -27,7 +32,8 @@ from arggym.tasks import (
     status_query,
 )
 
-LEVEL, ORDERING, SEED = 3, "last_link_elitist", 0
+ORDERING, SEED = "last_link_elitist", 0
+LEVELS = tuple(range(1, 16))
 
 MODULES = {
     "status_query": status_query,
@@ -58,14 +64,20 @@ CONTENT_CLAUSES = {
 }
 
 
-@pytest.fixture(scope="module")
-def items():
-    built = {}
-    for task, module in MODULES.items():
-        item = module.make_item(LEVEL, SEED, ORDERING)
-        assert item is not None, f"{task}: no item at L{LEVEL} {ORDERING} seed {SEED}"
-        built[task] = item
-    return built
+CELLS = [(task, level) for task in sorted(MODULES) for level in LEVELS]
+
+#: Six tests walk all 90 cells and seven more walk one or three columns of them, so one
+#: build serves thirteen. Under xdist they scatter across workers and each rebuilds what
+#: it is handed; the cache is what keeps a serial run of this file cheap.
+_CACHE: dict = {}
+
+
+def item_at(task: str, level: int):
+    if (task, level) not in _CACHE:
+        it = MODULES[task].make_item(level, SEED, ORDERING)
+        assert it is not None, f"{task}: no item at L{level} {ORDERING} seed {SEED}"
+        _CACHE[task, level] = it
+    return _CACHE[task, level]
 
 
 def reference_of(item) -> str:
@@ -73,18 +85,18 @@ def reference_of(item) -> str:
 
 
 @pytest.fixture
-def item(request, items):
-    return items[request.getfixturevalue("task")]
+def item(task, level):
+    return item_at(task, level)
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_the_stored_reference_carries_no_delimiters(task, item):
     ref = reference_of(item)
     for d in ("<answer>", "</answer>"):
         assert d not in ref, f"{task}: the stored reference carries {d}"
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_the_bare_reference_scores_one(task, item):
     result = MODULES[task].score(reference_of(item), item)
     assert isinstance(result, ScoreResult)
@@ -92,7 +104,7 @@ def test_the_bare_reference_scores_one(task, item):
     assert result.success is True
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_a_completion_is_not_an_answer(task, item):
     """The scorer reads what it is handed, so a wrapper is unreadable answer text.
 
@@ -105,29 +117,33 @@ def test_a_completion_is_not_an_answer(task, item):
     assert MODULES[task].score(extract_answer(fenced), item).score == pytest.approx(1.0)
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, item):
     assert DEFAULT_TEMPLATE.instruction not in item.prompt
     assert DEFAULT_TEMPLATE.open not in item.prompt
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_the_prompt_states_its_answer_content_rules(task, item):
     for clause in CONTENT_CLAUSES[task]:
         assert clause in item.prompt, f"{task}: lost `{clause}`"
 
 
-def test_the_stable_sentence_survives_where_stable_is_asked():
-    """The conditional clause is content, and level 3 is below the level that asks it."""
-    level = next(l for l in (6, 9, 12, 15)
-                 if semantics_query.STABLE in semantics_query.semantics_for(l))
-    item = semantics_query.make_item(level, SEED, ORDERING)
-    assert item is not None
-    assert ("Under stable semantics, if the theory has no stable extension, answer "
-            "`no stable extension`." in item.prompt)
+@pytest.mark.parametrize("level", LEVELS)
+def test_the_stable_sentence_is_stated_exactly_where_stable_is_asked(level):
+    """The conditional clause is content, so it belongs on the levels that schedule stable.
+
+    Asserted in both directions over the range: a clause stated where nothing asks for it
+    is noise a model has to read past, and this file is now the place that would notice
+    `SEMANTICS_BY_LEVEL` and the prompt disagreeing.
+    """
+    sentence = ("Under stable semantics, if the theory has no stable extension, answer "
+                "`no stable extension`.")
+    asked = semantics_query.STABLE in semantics_query.semantics_for(level)
+    assert (sentence in item_at("semantics_query", level).prompt) is asked
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_an_empty_answer_is_scored_as_empty_not_as_undelivered(task, item):
     result = MODULES[task].score("", item)
     assert result.score == 0.0
@@ -143,7 +159,9 @@ def flip(line: str, statuses=("justified", "overruled", "undecided")) -> str:
     return f"{head}: {next(s for s in statuses if s != status.strip().lower())}"
 
 
-@pytest.mark.parametrize("task", ["status_query", "semantics_query", "perturbation"])
+@pytest.mark.parametrize("task,level", [(t, lv) for t in
+                                        ("status_query", "semantics_query", "perturbation")
+                                        for lv in LEVELS])
 def test_a_label_map_is_a_success_only_on_an_exact_match(task, item):
     lines = reference_of(item).splitlines()
     result = MODULES[task].score("\n".join([flip(lines[0])] + lines[1:]), item)
@@ -151,16 +169,18 @@ def test_a_label_map_is_a_success_only_on_an_exact_match(task, item):
     assert 0.0 < result.score < 1.0, "one wrong label, not a parse failure"
 
 
-def test_claim_chain_needs_the_order_as_well_as_the_directives(items):
-    item = items["claim_chain"]
+@pytest.mark.parametrize("level", LEVELS)
+def test_claim_chain_needs_the_order_as_well_as_the_directives(level):
+    item = item_at("claim_chain", level)
     result = claim_chain.score("\n".join(reversed(item.reference.splitlines())), item)
     assert result.diagnostics["exact_match"] is True, "all and only the gold directives"
     assert result.diagnostics["correct_order"] is False
     assert result.success is False
 
 
-def test_defeat_diagnosis_needs_the_status_as_well_as_the_failure_points(items):
-    item = items["defeat_diagnosis"]
+@pytest.mark.parametrize("level", LEVELS)
+def test_defeat_diagnosis_needs_the_status_as_well_as_the_failure_points(level):
+    item = item_at("defeat_diagnosis", level)
     lines = item.reference.splitlines()
     result = defeat_diagnosis.score("\n".join([flip(lines[0])] + lines[1:]), item)
     assert result.diagnostics["f1"] == pytest.approx(1.0), "every failure point is right"
@@ -168,9 +188,10 @@ def test_defeat_diagnosis_needs_the_status_as_well_as_the_failure_points(items):
     assert result.success is False
 
 
-def test_formalization_succeeds_on_behaviour_alone(items):
+@pytest.mark.parametrize("level", LEVELS)
+def test_formalization_succeeds_on_behaviour_alone(level):
     """A spare inert premise costs shape credit and changes no queried status."""
-    item = items["formalization"]
+    item = item_at("formalization", level)
     result = formalization.score(item.reference + "\n[premise: zzz9]", item)
     assert result.diagnostics["behavioural"] == pytest.approx(1.0)
     assert result.diagnostics["shape_f1"] < 1.0
@@ -178,16 +199,45 @@ def test_formalization_succeeds_on_behaviour_alone(items):
     assert result.success is True
 
 
-def test_formalization_fails_when_a_queried_status_moves(items):
-    item = items["formalization"]
+def dropping_a_rule(item):
+    """Each rule of the reference, dropped, with what the rest of it then scores.
+
+    A rule the answer still parses without: dropping `q_14` out of a reference that also
+    writes `[prefer_rule: q_14 > q_15]` leaves a preference naming nothing and the engine
+    rejects the theory, which is a different outcome from a status that moved.
+    """
     lines = item.reference.splitlines()
-    dropped = next(l for l in lines if l.startswith(("[defeasible", "[strict")))
-    result = formalization.score("\n".join(l for l in lines if l != dropped), item)
-    assert result.diagnostics["behavioural"] < 0.999
-    assert result.success is False
+    for rule in (l for l in lines if l.startswith(("[defeasible", "[strict"))):
+        result = formalization.score("\n".join(l for l in lines if l != rule), item)
+        if result.diagnostics["behavioural"] is not None:
+            yield rule, result
 
 
-def test_perturbation_does_not_offer_an_answer_no_item_can_have():
+@pytest.mark.parametrize("level", [
+    pytest.param(2, marks=pytest.mark.xfail(strict=True, reason=(
+        "#121: at level 2 the item queries one claim and writes two routes to it, so "
+        "every rule is on a redundant route and no removal moves a status"))),
+    *[lv for lv in LEVELS if lv != 2],
+])
+def test_formalization_fails_when_a_queried_status_moves(level):
+    """Which rule the queried statuses rest on is found rather than assumed.
+
+    Dropping the first rule written was the probe, and it stops probing wherever the item
+    concludes a queried claim more than one way -- at level 14 `ik7` has three routes, so
+    the first of them can go and the answer is still behaviourally right. So the rule is
+    chosen for its effect, and that a rule with an effect exists is asserted rather than
+    relied on: an item without one scores `success` on an answer missing any rule.
+    """
+    item = item_at("formalization", level)
+    moved = [(rule, r) for rule, r in dropping_a_rule(item)
+             if r.diagnostics["behavioural"] < 0.999]
+    assert moved, "no rule in the reference moves a queried status, so success cannot fail"
+    for rule, result in moved:
+        assert result.success is False, f"a moved status still succeeded without {rule}"
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_perturbation_does_not_offer_an_answer_no_item_can_have(level):
     """`none` scored zero on every item in the benchmark.
 
     `build` rejects a draw where nothing changed, and the status-diversity guards under it
@@ -195,7 +245,7 @@ def test_perturbation_does_not_offer_an_answer_no_item_can_have():
     model an answer that is wrong by construction. The scorer still understands the
     word, because that is what it would mean if no-change items were ever generated.
     """
-    it = perturbation.make_item(LEVEL, SEED, ORDERING)
+    it = item_at("perturbation", level)
     assert it.gold, "a shipped item with empty gold would put the sentence back"
     assert "none" not in it.prompt.rsplit("Answer format", 1)[1]
     assert perturbation.score("none", it).reason == "predicted_none"

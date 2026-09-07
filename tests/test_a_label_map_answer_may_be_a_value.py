@@ -20,11 +20,19 @@ from arggym.tasks import perturbation as pt
 from arggym.tasks import semantics_query as smq
 from arggym.tasks import status_query as sq
 
-LEVEL, SEED, ORDERING = 3, 0, "last_link_elitist"
+SEED, ORDERING = 0, "last_link_elitist"
 STATUSES = ("JUSTIFIED", "OVERRULED", "UNDECIDED")
 PROSE = "The theory is intricate and I would rather explain my reasoning than label anything."
 
 MODULES = {"status_query": sq, "semantics_query": smq, "perturbation": pt}
+
+#: The whole curriculum range, not the five exported levels. The value-versus-text seam
+#: is a property of an item, and it was asserted at level 3 alone (#110) -- a spec may
+#: name any level in this range and freeze it. One seed and one ordering, because those
+#: two axes are `tests/e2e`'s and `weakest_link_democratic` is where the generation cost
+#: lives (#111).
+LEVELS = tuple(range(1, 16))
+CELLS = [(task, level) for task in sorted(MODULES) for level in LEVELS]
 
 
 def line_of(task: str, key, status: str) -> str:
@@ -44,22 +52,26 @@ def other_status(status: str) -> str:
     return next(s for s in STATUSES if s != status)
 
 
-@pytest.fixture(scope="module")
-def items():
-    out = {}
-    for task, module in MODULES.items():
-        item = module.make_item(LEVEL, SEED, ORDERING)
-        assert item is not None, f"{task}: no item at level {LEVEL} seed {SEED}"
-        out[task] = item
-    return out
+#: Ten tests walk the same 45 cells and an eleventh walks the `perturbation` column, so
+#: one build serves all eleven. Under xdist they scatter across workers and each rebuilds
+#: what it is handed; the cache is what keeps a serial run of this file cheap.
+_CACHE: dict = {}
+
+
+def item_at(task: str, level: int):
+    if (task, level) not in _CACHE:
+        it = MODULES[task].make_item(level, SEED, ORDERING)
+        assert it is not None, f"{task}: no item at level {level} seed {SEED}"
+        _CACHE[task, level] = it
+    return _CACHE[task, level]
 
 
 @pytest.fixture
-def item(request, items):
-    return items[request.getfixturevalue("task")]
+def item(task, level):
+    return item_at(task, level)
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_the_value_path_and_the_text_path_give_the_same_result(task, item):
     module = MODULES[task]
     text = text_of(task, item.gold)
@@ -68,7 +80,7 @@ def test_the_value_path_and_the_text_path_give_the_same_result(task, item):
     assert from_value.as_dict() == from_text.as_dict()
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_a_solver_may_write_one_status_per_claim_as_a_plain_string(task, item):
     """The shape a mapping actually has: no sequence anywhere, and no string built."""
     module = MODULES[task]
@@ -80,13 +92,13 @@ def test_a_solver_may_write_one_status_per_claim_as_a_plain_string(task, item):
     assert result.as_dict() == module.score(text_of(task, item.gold), item).as_dict()
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_parse_reads_the_reference_into_the_gold_mapping(task, item):
     module = MODULES[task]
     assert module.parse(text_of(task, item.gold), item) == {k: [s] for k, s in item.gold.items()}
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_one_wrong_label_costs_the_same_as_a_value_as_it_does_as_text(task, item):
     module = MODULES[task]
     key, gold_status = next(iter(item.gold.items()))
@@ -96,7 +108,7 @@ def test_one_wrong_label_costs_the_same_as_a_value_as_it_does_as_text(task, item
     assert module.score_value(value, item).as_dict() == from_text.as_dict()
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_a_claim_labelled_twice_arrives_as_a_sequence(task, item):
     """The one shape only text can produce, and the one the mapping still has to carry."""
     module = MODULES[task]
@@ -111,7 +123,7 @@ def test_a_claim_labelled_twice_arrives_as_a_sequence(task, item):
     assert from_text.diagnostics["contradicted"]
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_a_claim_labelled_twice_the_same_way_is_one_prediction(task, item):
     """Folding a repeat is a scoring decision, so `parse` keeps it and `score_value` folds it."""
     module = MODULES[task]
@@ -123,7 +135,7 @@ def test_a_claim_labelled_twice_the_same_way_is_one_prediction(task, item):
     assert result.diagnostics["contradicted"] == []
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_prose_raises_rather_than_scoring_zero(task, item):
     module = MODULES[task]
     with pytest.raises(UnparseableAnswer) as raised:
@@ -131,7 +143,7 @@ def test_prose_raises_rather_than_scoring_zero(task, item):
     assert raised.value.reason.startswith("unparseable_")
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_score_turns_that_back_into_a_row(task, item):
     """A harness scoring a whole taskset needs a row, not an exception."""
     module = MODULES[task]
@@ -144,7 +156,7 @@ def test_score_turns_that_back_into_a_row(task, item):
     assert result.diagnostics["contradicted"] == []
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_an_answer_that_names_no_claim_raises(task, item):
     module = MODULES[task]
     with pytest.raises(UnparseableAnswer):
@@ -152,7 +164,7 @@ def test_an_answer_that_names_no_claim_raises(task, item):
     assert module.score("", item).score == 0.0
 
 
-@pytest.mark.parametrize("task", sorted(MODULES))
+@pytest.mark.parametrize("task,level", CELLS)
 def test_score_value_scores_a_mapping_it_cannot_recognize_rather_than_raising(task, item):
     """A solver that submits a value has done its own parsing, and its failures are its own."""
     module = MODULES[task]
@@ -162,9 +174,10 @@ def test_score_value_scores_a_mapping_it_cannot_recognize_rather_than_raising(ta
     assert result.reason == "ok"
 
 
-def test_perturbation_reads_none_as_the_empty_mapping(items):
+@pytest.mark.parametrize("level", LEVELS)
+def test_perturbation_reads_none_as_the_empty_mapping(level):
     """`none` says no claim changed status, which is what an empty mapping says."""
-    item = items["perturbation"]
+    item = item_at("perturbation", level)
     assert pt.parse("none", item) == {}
     assert pt.score_value({}, item).as_dict() == pt.score("none", item).as_dict()
     assert pt.score("none", item).reason == "predicted_none"

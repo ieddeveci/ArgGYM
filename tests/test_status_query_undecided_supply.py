@@ -21,19 +21,37 @@ from __future__ import annotations
 import pytest
 
 from arggym.core.curriculum import JUNCTION_START
-from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
+from arggym.core.spec import ALL_ORDERINGS, SEEDS
 from arggym.tasks import status_query as sq
 
-CELLS = [(lv, o, s) for lv in LEVELS for o in ALL_ORDERINGS for s in SEEDS]
+#: The curriculum range, not the five exported levels. Every assertion below is a
+#: property of the item the cell built, and `TasksetSpec` accepts any level the
+#: curriculum spans, so the invariant has to cover the range rather than the export.
+#: `status_query` is cheap on every ordering: all 120 cells build in under two
+#: seconds, so the cache pays for the widening and the file ends up faster than it
+#: was on the five levels.
+GRID = tuple(range(1, 16))
+CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 
 SHAPES = ("justified", "overruled", "undecided")
+
+#: Three tests walk every cell and two more walk a level's eight, so one build serves
+#: five. Under xdist they scatter across workers and each rebuilds what it is handed;
+#: the cache is what keeps a serial run of this file cheap.
+_CACHE: dict = {}
+
+
+def item_at(level: int, ordering: str, seed: int):
+    if (level, ordering, seed) not in _CACHE:
+        it = sq.make_item(level, seed, ordering)
+        assert it is not None, f"L{level}/{ordering}/s{seed} generated nothing"
+        _CACHE[level, ordering, seed] = it
+    return _CACHE[level, ordering, seed]
 
 
 @pytest.mark.parametrize("level,ordering,seed", CELLS)
 def test_every_cell_asks_as_many_questions_as_its_level_says(level, ordering, seed):
-    item = sq.make_item(level, seed, ordering)
-    assert item is not None, f"L{level}/{ordering}/s{seed} generated nothing"
-    m = item.metadata
+    m = item_at(level, ordering, seed).metadata
     assert m["n_queried"] == m["target_n_query"], (
         f"L{level}/{ordering}/s{seed} asked {m['n_queried']} of {m['target_n_query']}: "
         f"{m['status_counts']}")
@@ -49,8 +67,7 @@ def test_the_theory_supplies_enough_undecided_literals(level, ordering, seed):
     what separates a generator that stopped producing undecided literals from a selection
     loop that stopped using them.
     """
-    item = sq.make_item(level, seed, ordering)
-    assert item is not None
+    item = item_at(level, ordering, seed)
     sm = sq.full_status_map(item.base_ops, item.ordering)
     assert sm, "the theory has no status map"
     supply = sum(1 for lit, st in sm.items()
@@ -63,15 +80,13 @@ def test_the_theory_supplies_enough_undecided_literals(level, ordering, seed):
 
 @pytest.mark.parametrize("level,ordering,seed", CELLS)
 def test_no_status_exceeds_the_share_cap(level, ordering, seed):
-    item = sq.make_item(level, seed, ordering)
-    assert item is not None
-    counts = item.metadata["status_counts"]
+    counts = item_at(level, ordering, seed).metadata["status_counts"]
     assert len(counts) == 3, f"a status is missing: {counts}"
     assert max(counts.values()) / sum(counts.values()) <= sq.MAX_STATUS_SHARE
 
 
-@pytest.mark.parametrize("level", LEVELS)
-def test_every_group_shape_still_reaches_the_grid(level):
+@pytest.mark.parametrize("level", GRID)
+def test_every_group_shape_still_reaches_every_level(level):
     """The junction takes the whole group, so an uncapped budget erases the other shapes.
 
     With the budget above the number of groups it may land on, every justified and every
@@ -81,8 +96,7 @@ def test_every_group_shape_still_reaches_the_grid(level):
     seen: set = set()
     for o in ALL_ORDERINGS:
         for s in SEEDS:
-            it = sq.make_item(level, s, o)
-            assert it is not None
+            it = item_at(level, o, s)
             seen |= {k for k, v in it.metadata["group_shapes"].items() if v}
     missing = [k for k in SHAPES if k not in seen]
     assert not missing, f"L{level} builds no group of shape {missing}; saw {sorted(seen)}"
@@ -90,13 +104,11 @@ def test_every_group_shape_still_reaches_the_grid(level):
         assert "junction" in seen, f"L{level} builds no junction group"
 
 
-@pytest.mark.parametrize("level", [lv for lv in LEVELS if lv >= 6])
+@pytest.mark.parametrize("level", [lv for lv in GRID if lv >= 6])
 def test_the_junction_leaves_some_groups_to_their_own_shape(level):
     for o in ALL_ORDERINGS:
         for s in SEEDS:
-            it = sq.make_item(level, s, o)
-            assert it is not None
-            shapes = it.metadata["group_shapes"]
+            shapes = item_at(level, o, s).metadata["group_shapes"]
             own = shapes.get("justified", 0) + shapes.get("overruled", 0)
             assert own > 0 and shapes.get("junction", 0) > 0, (
                 f"L{level}/{o}/s{s}: {shapes}")

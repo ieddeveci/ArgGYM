@@ -20,7 +20,14 @@ from arggym.core.answers import (
     extract_answer,
 )
 
-LEVEL, ORDERING = 3, "last_link_elitist"
+ORDERING = "last_link_elitist"
+
+#: The curriculum range, not the five exported levels. Where a question ends is a
+#: property of the rendered item and was asserted at level 3 alone (#110), while a spec
+#: may name any level in this range and freeze it. No cache here: each cell is built by
+#: one test and read once, so there is nothing to reuse.
+LEVELS = tuple(range(1, 16))
+CELLS = [(task, level) for task in sorted(registry.task_names()) for level in LEVELS]
 
 #: The last thing each question says, which is the content clause `answer_format` was
 #: handed. Naming the ending rather than a list of forbidden fences is what makes this
@@ -57,8 +64,8 @@ def test_the_ending_table_covers_the_registry():
     assert set(TERMINAL_CLAUSE) == set(registry.task_names())
 
 
-@pytest.mark.parametrize("task", sorted(registry.task_names()))
-def test_no_task_renders_a_delivery_sentence(task):
+@pytest.mark.parametrize("task,level", CELLS)
+def test_no_task_renders_a_delivery_sentence(task, level):
     """Generation has no way to say where the answer goes, on any of the twelve.
 
     It used to: every `build` took a template and threaded it into `answer_format`, so
@@ -70,9 +77,9 @@ def test_no_task_renders_a_delivery_sentence(task):
     instead let "then put your response inside `<solution>` tags" through, which is the
     same defect in a wording nobody enumerated.
     """
-    q = arggym.TaskDataset(task, LEVEL, ORDERING, size=1)[0]["question"]
+    q = arggym.TaskDataset(task, level, ORDERING, size=1)[0]["question"]
     assert q.rstrip().endswith(TERMINAL_CLAUSE[task]), (
-        f"{task}: something follows the answer-format clause")
+        f"{task} L{level}: something follows the answer-format clause")
     # Named separately because it is the exact sentence #53 was about, and because a
     # fence could in principle arrive somewhere other than the end.
     assert DEFAULT_TEMPLATE.instruction not in q
