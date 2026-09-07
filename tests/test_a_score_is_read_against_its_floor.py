@@ -24,6 +24,7 @@ import arggym
 from arggym.core import floors as floors_module
 from arggym.core.answers import ScoreResult
 from arggym.core.floors import (
+    _ASKED,
     _CANDIDATES,
     FITTED,
     STRATEGIES,
@@ -39,10 +40,12 @@ from arggym.core.floors import (
     floors,
 )
 from arggym.core.freeze import freeze
+from arggym.core.rows import MissingField
 from arggym.core.spec import ALL_ORDERINGS, SeedPolicy, TasksetSpec
 
 LABEL_TASKS = ("status_query", "semantics_query", "perturbation")
-TASKS = LABEL_TASKS + ("claim_chain", "formalization", "counter_argument")
+TASKS = LABEL_TASKS + ("claim_chain", "formalization", "defeat_diagnosis",
+                       "counter_argument")
 
 
 @pytest.fixture(scope="module")
@@ -66,10 +69,26 @@ def of(rows, task):
 
 
 def a_row(coords, gold=None):
-    """A row carrying nothing but an ask list, and a gold for the fake scorer."""
-    lines = "".join(f"   {c}\n" for c in coords)
-    return {"question": "State the status of each claim UNDER THE SEMANTICS "
-                        f"NAMED BESIDE IT:\n{lines}\n", "gold": gold or {}}
+    """A row carrying nothing but an ask list, and a gold for the fake scorer.
+
+    `_asked` reads the ask list off the row's own record of it, so an ask list
+    is a `source_dataset` and a state field rather than a question phrased the
+    way one task phrases it.
+    """
+    return {"metadata": {"source_dataset": "semantics_query",
+                         "state": {"queries": [c.split(" under ") for c in coords]}},
+            "gold": gold or {}}
+
+
+#: Where each task writes the coordinates it scores an answer on. From
+#: `metadata.gold`, which is what makes the ask-list test below say something:
+#: `_asked` may not read any of this.
+GOLD_COORDS = {
+    "status_query": lambda m: set(m["gold"]["gold"]),
+    "formalization": lambda m: set(m["gold"]["gold_status"]),
+    "perturbation": lambda m: set(m["gold"]["gold"]),
+    "semantics_query": lambda m: {f"{c} under {s}" for c, s, _ in m["gold"]["gold"]},
+}
 
 
 def test_every_task_gets_a_floor(rows):
@@ -93,6 +112,41 @@ def test_a_constant_label_is_actually_submitted(task, rows):
     for row in of(rows, task):
         text = STRATEGIES["all_justified"](row)
         assert text.strip(), f"{task}: the constant strategy produced no answer"
+
+
+@pytest.mark.parametrize("task", tuple(GOLD_COORDS))
+def test_the_ask_list_names_every_coordinate_the_gold_is_scored_on(task, rows):
+    # An *empty* ask list is caught above. A *partial* one was not: a strategy
+    # that finds half the coordinates reports a lower floor and nothing
+    # complains, which is the same silent understatement (#105). `formalization`
+    # failed this on all 313 of its queried literals -- its ask list was the two
+    # literals of the answer-format example -- and reported 0.0000 (#103).
+    #
+    # Containment, not equality. `perturbation`'s gold holds only the claims
+    # that changed status, so its ask list is properly a superset and a length
+    # check fails on a correct one.
+    for row in of(rows, task):
+        missing = GOLD_COORDS[task](row["metadata"]) - set(_asked(row))
+        assert not missing, f"{task}: {len(missing)} scored coordinates not asked"
+
+
+@pytest.mark.parametrize("task", ("status_query", "semantics_query"))
+def test_the_two_tasks_that_list_their_asks_ask_exactly_what_is_scored(task, rows):
+    # Where the question names its coordinates, the ask list and the graded set
+    # coincide, so containment is the weaker statement and equality is available.
+    for row in of(rows, task):
+        assert GOLD_COORDS[task](row["metadata"]) == set(_asked(row))
+
+
+def test_a_row_that_lost_its_ask_list_refuses_instead_of_reporting_zero(rows):
+    # The failure mode this module's docstring names. Every strategy answers
+    # nothing over an empty ask list, so the task reports 0.000 and the run
+    # exits successfully -- indistinguishable from a task where guessing does
+    # not pay. `_mean` does not guard for the same reason.
+    row = of(rows, "status_query")[0]
+    stripped = dict(row, metadata={**row["metadata"], "state": {}})
+    with pytest.raises(MissingField):
+        _asked(stripped)
 
 
 def test_answering_justified_to_everything_pays_on_the_query_tasks(rows):
@@ -286,21 +340,44 @@ def test_every_candidate_is_a_status_the_scorer_accepts(rows):
         assert arggym.score_row(answer, row).reason == "ok", status
 
 
-def test_a_key_group_that_reads_the_answer_format_changes_nothing(rows, monkeypatch):
-    # `formalization`'s question lists no coordinates, so `_asked` falls through
-    # to the literals of the answer-format example and returns the same two on
-    # every item. That passes the fixed-vocabulary rule on the shipped grid, and
-    # it is inert: the task scores an operation list, so a label line is worth
-    # zero whichever status it carries.
-    #
-    # Eight rows are 16 coordinates, so the budget refuses this map here and the
-    # monkeypatch is what makes the path run at all. The shipped grid reaches it
-    # honestly, at 40 rows and 80 coordinates; the inertness is the same either
-    # way, since it is a property of the scorer rather than of the row count.
-    monkeypatch.setattr(floors_module, "MIN_COORDS_PER_ENTRY", 0)
+def test_a_theory_shaped_answer_earns_a_floor_and_no_key_group(rows):
+    # `formalization` answers with a theory, so every `<claim>: <status>` line
+    # is unparseable there and the search reported 0.0000 `empty` -- nothing it
+    # carried fitted the answer format, which is not "guessing does not pay
+    # here" (#103). A bare premise per queried literal is the same guess in the
+    # format the task reads, and it pays.
     got = floors(of(rows, "formalization"))["formalization"]
-    assert got["floor"] == 0.0 and got["strategy"] == "empty"
-    assert got["by_strategy"]["per_key_group"] == 0.0
+    assert got["strategy"] == "premise_per_ask"
+    assert got["floor"] > 0.0
+
+    # And no key group. The old ask list was the two literals of the
+    # answer-format example, the same two on every item, so a map over them
+    # passed the fixed-vocabulary rule and fitted nothing. The queried literals
+    # are sampled per item, so the vocabulary grows with the rows (#105).
+    assert _key_groups(of(rows, "formalization")) == ((), None)
+
+
+def test_a_record_list_answer_earns_a_floor_from_its_status_line(rows):
+    # `defeat_diagnosis` answers with a status line and one record per failure
+    # point, so no `<claim>: <status>` map fits it either and it reported
+    # `0.0000 empty` (#103). Its score carries a 0.15 status term under both of
+    # its branches, so the header alone collects that term wherever it names the
+    # status right, and lists no failure point to be wrong about.
+    got = floors(of(rows, "defeat_diagnosis"))["defeat_diagnosis"]
+    assert got["strategy"] in tuple(f"status_{s}" for s in ("justified",
+                                                           "overruled",
+                                                           "undecided"))
+    assert got["floor"] > 0.0
+
+    # And it is the status term reaching it and nothing else, which is what says
+    # the strategy is a floor rather than an artefact of the parser: f1 is zero
+    # over an empty record list, so the number is 0.15 times the share of items
+    # the constant names right.
+    dd = of(rows, "defeat_diagnosis")
+    said = got["strategy"].split("_", 1)[1]
+    share = sum(1 for r in dd
+                if r["metadata"]["gold"]["claim_status"].lower() == said) / len(dd)
+    assert got["floor"] == pytest.approx(0.15 * share, abs=1e-4)
 
 
 def test_a_directive_task_cannot_be_guessed(rows):
@@ -324,13 +401,19 @@ def test_chance_correction_puts_a_floor_at_zero_and_perfect_at_one():
     assert corrected(0.745, 0.49) == pytest.approx(0.5, abs=1e-3)
 
 
-def test_a_floor_is_measured_from_the_question_not_from_the_gold(rows):
+@pytest.mark.parametrize("task", tuple(_ASKED))
+def test_a_floor_is_not_measured_from_the_gold(task, rows):
     # A strategy that read metadata.gold would not be uninformed, and would
-    # report a floor of 1.0 everywhere.
-    row = of(rows, "status_query")[0]
-    stripped = dict(row, metadata=dict(row["metadata"]))
-    stripped["metadata"]["gold"] = {}
-    assert STRATEGIES["all_justified"](stripped) == STRATEGIES["all_justified"](row)
+    # report a floor of 1.0 everywhere. Over every entry of `_ASKED` rather than
+    # over one: three read `metadata.state`, which the registry defines as what
+    # the question already gives away, and `perturbation` reads the theory the
+    # question renders. An entry that reached into gold instead would pass a
+    # test pinned to one task, and #107 was a floor fitted out of gold.
+    for row in of(rows, task):
+        stripped = dict(row, metadata={**row["metadata"], "gold": {}})
+        assert _asked(stripped) == _asked(row)
+        assert (STRATEGIES["all_justified"](stripped)
+                == STRATEGIES["all_justified"](row))
 
 
 def test_the_floors_command_reports_per_task(tmp_path, capsys):

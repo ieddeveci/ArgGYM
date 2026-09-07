@@ -12,8 +12,8 @@ scorer, `FLOORS_VERSION` covers what is searched here.
 The strategies are deliberately dumb, and the line they stay behind is stated
 rather than left to whatever the search happens to try: a strategy fixes, once
 per task, the answer it gives to each coordinate the answer format exposes, and
-reads the question only to learn which coordinates are asked. It never inspects
-the theory to decide what to answer (`docs/dataset-contract.md` section 10). A
+reads the item only to learn which coordinates are asked. It never inspects the
+theory to decide what to answer (`docs/dataset-contract.md` section 10). A
 search that crossed that line would report a solver's score as the floor, and
 past it there is no stopping point short of a full solver.
 
@@ -29,13 +29,18 @@ import re
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from arggym.core import registry
-from arggym.core.rows import row_task, score
+from arggym.core.rows import MissingField, row_task, score
+from arggym.core.serialize import ops_from_json
 
 #: Bumped when the search changes: a strategy added or dropped, a candidate
-#: added, the key-group rule moved. A floor moves with the scorer and with the
-#: search, and `scoring_version` sees only the first, so two scoring artifacts
-#: carrying different floors for the same rows are otherwise identical.
-FLOORS_VERSION = 1
+#: added, the key-group rule moved, the ask list a strategy answers over moved.
+#: The last of those moves a floor with no strategy touched -- narrowing
+#: `perturbation`'s ask list to the claims of the original theory took it from
+#: 0.1645 to 0.1734 under the same `all_overruled`. A floor moves with the
+#: scorer and with the search, and `scoring_version` sees only the first, so two
+#: scoring artifacts carrying different floors for the same rows are otherwise
+#: identical.
+FLOORS_VERSION = 2
 
 #: Statuses a label-map task can answer with.
 _STATUSES = ("justified", "overruled", "undecided")
@@ -59,10 +64,10 @@ _CANDIDATES = _STATUSES + ("no stable extension",)
 #: the 56 of one level (11 each) buy up to 0.040.
 MIN_COORDS_PER_ENTRY = 20
 
-#: Entries a fitted map may have at all, whatever the row count. The vocabularies
-#: a task fixes are small -- five semantics on `semantics_query`, two literals on
-#: `formalization` -- while a map keyed by anything an item samples has as many
-#: entries as that item has coordinates, dozens. A count is a harder invariant to
+#: Entries a fitted map may have at all, whatever the row count. The one
+#: vocabulary a task fixes is small -- five semantics on `semantics_query` --
+#: while a map keyed by anything an item samples has as many entries as that
+#: item has coordinates, dozens. A count is a harder invariant to
 #: slip past than a ratio: 24 rows sharing one ask list clear the budget and
 #: report the majority gold per coordinate as a floor, and this refuses them.
 MAX_MAP_ENTRIES = 8
@@ -92,29 +97,85 @@ class FittedFloorIsGold(RuntimeError):
     """
 
 
-def _asked(row: Dict[str, Any]) -> List[str]:
-    """The keys a label-map question asks about, read from the question.
+def _field(row: Dict[str, Any], *path: str) -> Any:
+    """One field under `metadata`, refusing rather than defaulting.
 
-    From the question rather than from `metadata.gold`, because a strategy that
-    read the gold would not be uninformed. Three tasks phrase the ask three
-    ways, and a strategy that matched only one of them would report a floor of
-    zero for the other two -- an unmeasured floor being worse than none.
+    A task in `_ASKED` whose field is missing must stop the measurement. An
+    empty ask list leaves every strategy answering nothing, which reports a
+    floor of 0.000 and exits successfully -- the unmeasured floor this module
+    exists to prevent, and exactly how `formalization` came to report 0.0000.
     """
-    q = row["question"]
-    m = re.search(r"State the status of each of the following claims: (.+?)\.\n", q)
-    if m:  # status_query
-        return [c.strip() for c in m.group(1).split(",")]
-    m = re.search(r"NAMED BESIDE IT:\n((?:   .+\n)+)", q)
-    if m:  # semantics_query: "<claim> under <semantics>"
-        return [line.strip() for line in m.group(1).splitlines() if line.strip()]
-    # perturbation asks which claims changed, and does not list them. The
-    # uninformed answer names every literal the theory mentions -- which is
-    # premises and axioms *and* rule consequents, since a rule's conclusion is
-    # a claim that can change status. Reading only the premises understates
-    # this floor.
-    lits = re.findall(r"\[(?:premise|axiom):\s*(-?\w+)\]", q)
-    lits += re.findall(r"(?:=>|->)\s*(-?\w+)\]", q)
-    return sorted(set(lits))
+    node: Any = row.get("metadata")
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            raise MissingField(
+                f"{row_task(row)}: this row has no "
+                f"metadata.{'.'.join(path)}, which is where the floor search "
+                f"reads the coordinates the question asks about. A row that "
+                f"lost a field must refuse rather than measure an empty ask "
+                f"list, which reports a floor of zero and reads exactly like a "
+                f"task where guessing does not pay.")
+        node = node[key]
+    return node
+
+
+def _claims_of_the_theory(row: Dict[str, Any]) -> List[str]:
+    """Every claim `perturbation`'s original theory mentions.
+
+    Its question asks which claims of the original theory changed status and
+    lists none of them, and it carries no state field naming them, so the ask
+    list is read off `metadata.base_ops` structurally: premise and axiom
+    contents, plus rule consequents, since a rule's conclusion is a claim that
+    can change status. Preference directives name no claim.
+
+    `metadata.base_ops` is the theory the question renders, not `metadata.gold`,
+    and enumerating the coordinates a question asks about is not reading the
+    theory to decide the answer to one (`docs/dataset-contract.md` section 10).
+    Through `ops_from_json` so a kind this build does not know refuses here too,
+    rather than dropping a claim out of the ask list.
+    """
+    ops = ops_from_json(_field(row, "base_ops"))
+    out = [op.content if op.kind in ("premise", "axiom") else op.consequent
+           for op in ops
+           if op.kind in ("premise", "axiom", "defeasible", "strict")]
+    return sorted(set(out))
+
+
+#: Where each task's asked coordinates come from. A task absent from it exposes
+#: no coordinates to fix an answer for -- the six engine-checked tasks answer
+#: with directives, `claim_chain` with a line, `defeat_diagnosis` with records --
+#: and gets an empty list, which leaves the whole-item strategies to it.
+_ASKED: Dict[str, Callable[[Dict[str, Any]], List[str]]] = {
+    "status_query": lambda row: list(_field(row, "state", "queried")),
+    "formalization": lambda row: list(_field(row, "state", "queried")),
+    # `semantics_query` keys its gold by (claim, semantics) and both question
+    # and answer write the pair this way (`tasks/semantics_query.py:_PAIR`).
+    "semantics_query": lambda row: [f"{c} under {s}"
+                                    for c, s in _field(row, "state", "queries")],
+    "perturbation": _claims_of_the_theory,
+}
+
+
+def _asked(row: Dict[str, Any]) -> List[str]:
+    """The keys a label-map question asks about, read from the row's own record.
+
+    Not from `metadata.gold`: a strategy that read the gold would not be
+    uninformed. Three of the four come from `metadata.state`, which the registry
+    defines as the scoring inputs the question already gives away
+    (`core/registry.py`), so reading one back is reading the question in a form
+    that cannot be reworded. `perturbation` has no such field and its question
+    names no claims, so it reads the theory -- `_claims_of_the_theory` above,
+    and `docs/dataset-contract.md` section 10 for why a total enumeration of the
+    coordinates stays inside the line where choosing among them would not.
+
+    Reworded is the point. This scraped the question with one regex per
+    phrasing, so a prompt edit silently zeroed a floor -- and one already had:
+    `formalization`'s question lists no coordinates, the fallback regex found
+    the two literals of the answer-format example instead, and the task reported
+    0.0000 `empty` (#103, #105).
+    """
+    read = _ASKED.get(row_task(row))
+    return read(row) if read else []
 
 
 def _key_parts(coord: str) -> Tuple[str, ...]:
@@ -169,13 +230,13 @@ def _key_groups(rows: Sequence[Dict[str, Any]]
     on a task with no key group at all, which is the ambiguity `floor_strategy`
     exists to remove.
 
-    On the shipped grid this leaves ten tasks on whole-item constants and one
-    group worth something, `semantics_query`'s semantics. `formalization` also
-    passes, on the two literals `_asked` reads out of the answer-format example
-    rather than out of a question that lists none; they are the same two on
-    every item, so the rule is right about the vocabulary and wrong about what
-    it is reading. Nothing moves either way -- that task scores an operation
-    list, and a label line is worth zero whichever status it carries.
+    On the shipped grid this leaves eleven tasks with no key group and one group
+    worth something, `semantics_query`'s semantics. `formalization` used
+    to pass too, on the two literals the old `_asked` scraped out of the
+    answer-format example rather than out of a question that lists none -- the
+    same two on every item, so the rule was right about the vocabulary and wrong
+    about what it was reading (#105). Its ask list is now the literals the item
+    queried, which grow with the rows, so it earns no group.
     """
     keys = [[_key_parts(c) for c in _asked(row)] for row in rows]
     keys = [k for k in keys if k]
@@ -214,6 +275,36 @@ def _by_group(row: Dict[str, Any], idx: Sequence[int]) -> Dict[Tuple[str, ...], 
 def _constant_labels(status: str) -> Callable[[Dict[str, Any]], str]:
     def make(row: Dict[str, Any]) -> str:
         return "\n".join(f"{c}: {status}" for c in _asked(row))
+    return make
+
+
+def _premise_per_ask(row: Dict[str, Any]) -> str:
+    """One bare premise per asked coordinate, for a task answered with a theory.
+
+    Every label-map strategy above writes `<claim>: <status>` lines, which no
+    scorer of an operation list can read, so `formalization` reported 0.0000
+    `empty` -- the search carried nothing that fits its answer format, not a
+    task where guessing does not pay (#103). This is `all_justified` spelled in
+    the format that task answers in: 274 of its 313 queried literals are
+    JUSTIFIED, and a bare premise is the shortest directive that makes one so.
+    """
+    return "\n".join(f"[premise: {c}]" for c in _asked(row))
+
+
+def _status_line(status: str) -> Callable[[Dict[str, Any]], str]:
+    """The status line `defeat_diagnosis` opens with, and nothing else.
+
+    Its score carries a 0.15 status term under either branch:
+    `0.85*f1 + 0.15*status_ok`, or `0.60*f1 + 0.15*status_ok + 0.25*surv` where
+    the gold names a `survives_because` (`tasks/defeat_diagnosis.py`), which 32
+    of the 40 shipped rows do. The header collects that term on every item it
+    names right and lists no failure point to be wrong about, so the floor is
+    0.15 times the share of items it names right and nothing else. One constant
+    for the whole item, with no ask list at all: the strictest form section 10
+    allows.
+    """
+    def make(row: Dict[str, Any]) -> str:
+        return f"status: {status}"
     return make
 
 
@@ -300,11 +391,18 @@ def _fit_per_key_group(rows: Sequence[Dict[str, Any]]) -> Fit:
     return Fit(make, {" ".join(g): s for g, s in fitted.items()})
 
 
+#: Every strategy is offered to every task, the way `_CANDIDATES` is. Gating
+#: them by answer shape would move no floor -- a strategy a task's scorer cannot
+#: read scores zero and drops out of the max by itself -- so the search stays
+#: one list. The last four fit no label map, and are here because two tasks had
+#: no strategy that fits theirs.
 STRATEGIES: Dict[str, Callable[[Dict[str, Any]], str]] = {
     "empty": lambda row: "",
     "copy_theory": _copy_theory,
     "none": lambda row: "none",
     **{f"all_{s}": _constant_labels(s) for s in _STATUSES},
+    "premise_per_ask": _premise_per_ask,
+    **{f"status_{s}": _status_line(s) for s in _STATUSES},
 }
 
 #: Strategies whose map is fitted on rows rather than named in advance. Each

@@ -85,16 +85,19 @@ task, and on four of them it is worth a lot. Measured at level 3:
 |---|---|---|
 | `semantics_query` | 0.806 | "undecided" under grounded, "justified" under credulous preferred |
 | `status_query` | 0.375 | answer "justified" to every query |
+| `formalization` | 0.219 | `[premise: x]` for every literal the question queries |
 | `claim_chain` | 0.190 | hand the theory back |
-| `perturbation` | 0.147 | one status for every literal in the theory |
+| `perturbation` | 0.153 | "overruled" for every claim of the original theory |
+| `defeat_diagnosis` | 0.131 | the line `status: overruled`, and no failure points |
 | the six engine-checked tasks | 0.000 | no fixed answer reaches a goal |
-| `formalization`, `defeat_diagnosis` | 0.000 | the search carries nothing that fits their answer format |
 
-The last row is a gap in the instrument, not a property of those two tasks: both
-are scored by their module rather than by the engine, and an answer shaped like
-their format does score. The floor is the best of what was searched, so it is a
-lower bound on what an uninformed answer gets, and the strategy is printed
-beside it so the two zeroes above never read as one.
+The floor is the best of what the search tried, so it is a lower bound on what
+an uninformed answer gets, and every one is printed with the strategy that
+reached it. That is what makes a zero readable: `formalization` reported
+`0.000 empty` while an answer shaped like a theory was worth 0.22, and only the
+strategy name said the search had found nothing fitting the answer format rather
+than nothing that pays (#103). On the six above, everything the search tries
+scores zero, and the tie goes to `empty` because it is listed first.
 
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report
 floors beside the scores. They are a property of the scorer and of the search
@@ -123,10 +126,11 @@ all, so a benchmark that asks about stable has to build one and cannot then hide
 it. Read the stable column as measuring whether a model finds that structure,
 not as evidence it computed an extension.
 
-No floor bounds that program, and none should: a floor is what an answer that
-never reads the theory gets (`docs/dataset-contract.md` section 10), and this
-one reads it. What the floor does now carry is the spread between the columns,
-which a single constant pooled away: one status per semantics is worth 0.671
+No floor bounds that program, and none should: a floor may read the theory to
+enumerate the coordinates a question asks about, never to decide what to say
+about one (`docs/dataset-contract.md` section 10), and this program decides from
+it. What the floor does now carry is the spread between the columns, which a
+single constant pooled away: one status per semantics is worth 0.671
 over the shipped grid against 0.459 for the best single constant (#95).
 
 **`success` and `mean_score` are not the same question.** For the construction
