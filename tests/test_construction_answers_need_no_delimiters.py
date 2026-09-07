@@ -6,8 +6,12 @@ the stored reference carries none either, and an answer scores the same bare. Se
 adds the second half: `score_item` returns a `ScoreResult` whose `success` is present on
 every branch, including the early zeros that never reach the goal check.
 
-One item per variant, not a grid: every property here is a function of a flag or of the
-scorer, and `tests/e2e/` already sweeps the grid.
+Every level of one cheap column, not level 3 alone (#110). What a question states and
+whether its own reference still scores 1.0 bare are properties of an item, and a spec may
+name any level the curriculum spans. `tests/e2e/` takes the ordering and seed axes, and
+reaches no level off the exported grid -- under `make test` it runs levels 3, 6 and 9
+at seed 0, because everything outside `FAST_GRID` is marked slow and `addopts`
+deselects it (`tests/e2e/conftest.py:22,36-38`). So the level axis comes here.
 """
 from __future__ import annotations
 
@@ -24,60 +28,74 @@ from arggym.tasks import preference_construction as pc
 LAST_LINK = "last_link_elitist"
 DELIMITERS = ("<answer>", "</answer>")
 
-# Level 3 is the cheapest cell that exists for all six, and each is a distinct code path:
-# preference_construction and counter_argument write their own prompt, the three
-# attack_defense modes share `core.prompting.render`.
+# Each variant is a distinct code path: preference_construction and counter_argument
+# write their own prompt, the three attack_defense modes share `core.prompting.render`.
 VARIANTS = {
-    "preference_construction": (lambda: pc.make_item(3, 0, LAST_LINK),
+    "preference_construction": (lambda lv: pc.make_item(lv, 0, LAST_LINK),
                                 lambda it: it.as_score_input()),
-    "counter_argument": (lambda: ca.make_item(3, 0, LAST_LINK, allow_strict=False),
+    "counter_argument": (lambda lv: ca.make_item(lv, 0, LAST_LINK, allow_strict=False),
                          ca.as_score_input),
-    "counter_argument_strict": (lambda: ca.make_item(3, 0, LAST_LINK, allow_strict=True),
+    "counter_argument_strict": (lambda lv: ca.make_item(lv, 0, LAST_LINK, allow_strict=True),
                                 ca.as_score_input),
-    "attack": (lambda: ad.make_item(3, 0, LAST_LINK, mode="attack"),
+    "attack": (lambda lv: ad.make_item(lv, 0, LAST_LINK, mode="attack"),
                lambda it: it.as_score_input()),
-    "defence": (lambda: ad.make_item(3, 0, LAST_LINK, mode="defence"),
+    "defence": (lambda lv: ad.make_item(lv, 0, LAST_LINK, mode="defence"),
                 lambda it: it.as_score_input()),
-    "attack_defense": (lambda: ad.make_item(3, 0, LAST_LINK, mode="attack_defense"),
+    "attack_defense": (lambda lv: ad.make_item(lv, 0, LAST_LINK, mode="attack_defense"),
                        lambda it: it.as_score_input()),
 }
 
+#: The curriculum range, not the five exported levels. `last_link_elitist` at seed 0 is
+#: the cheap column; `weakest_link_democratic` is where the generation cost lives (#111).
+LEVELS = tuple(range(1, 16))
+CELLS = [(task, level) for task in sorted(VARIANTS) for level in LEVELS]
 
-@pytest.fixture(scope="module")
-def items():
-    out = {}
-    for task, (make, as_input) in VARIANTS.items():
-        it = make()
-        assert it is not None, f"{task}: no item at level 3 seed 0"
-        out[task] = (it, as_input(it))
-    return out
+#: Five tests walk the same 90 cells, so one build serves all five. Under xdist they
+#: scatter across workers and each rebuilds what it is handed; the cache is what keeps a
+#: serial run of this file cheap.
+_CACHE: dict = {}
 
 
-@pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_stored_reference_is_raw(task, items):
-    it, _ = items[task]
+def item_at(task: str, level: int):
+    """The item and the mapping `score_item` takes, both cached."""
+    if (task, level) not in _CACHE:
+        make, as_input = VARIANTS[task]
+        it = make(level)
+        assert it is not None, f"{task}: no item at level {level} seed 0"
+        _CACHE[task, level] = (it, as_input(it))
+    return _CACHE[task, level]
+
+
+@pytest.fixture
+def cell(task, level):
+    return item_at(task, level)
+
+
+@pytest.mark.parametrize("task,level", CELLS)
+def test_the_stored_reference_is_raw(task, cell):
+    it, _ = cell
     for d in DELIMITERS:
         assert d not in it.reference, f"{task}: reference still wraps its directives"
 
 
-@pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_reference_scores_one_bare(task, items):
-    it, score_input = items[task]
+@pytest.mark.parametrize("task,level", CELLS)
+def test_the_reference_scores_one_bare(task, cell):
+    it, score_input = cell
     r = score_item(it.reference, score_input)
     assert isinstance(r, ScoreResult)
     assert r.score == pytest.approx(1.0), (task, r.reason)
     assert r.success is True
 
 
-@pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_a_completion_is_not_an_answer(task, items):
+@pytest.mark.parametrize("task,level", CELLS)
+def test_a_completion_is_not_an_answer(task, cell):
     """What a model returns is not what the scorer takes.
 
     Turning the first into the second is the harness's job, and doing it here as
     well would mean honouring one convention above every other -- which is what
     stops a caller bringing their own.
     """
-    it, score_input = items[task]
+    it, score_input = cell
     completion = f"Here is my reasoning.\n{DEFAULT_TEMPLATE.wrap(it.reference)}"
     assert score_item(completion, score_input).score == 0.0
     r = score_item(extract_answer(completion), score_input)
@@ -85,11 +103,11 @@ def test_a_completion_is_not_an_answer(task, items):
     assert r.success is True
 
 
-@pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, items):
+@pytest.mark.parametrize("task,level", CELLS)
+def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, cell):
     """The question states the task. Where the answer goes is the harness's sentence,
     which is what lets one harness use XML tags and another a JSON schema."""
-    it, _ = items[task]
+    it, _ = cell
     assert DEFAULT_TEMPLATE.instruction not in it.prompt
     assert DEFAULT_TEMPLATE.open not in it.prompt
 
@@ -105,10 +123,10 @@ STRICT_FORM = "   [strict <name>: <antecedent> -> <consequent>]"
 PREMISE_FORM = "   [premise: -<literal>]"
 
 
-@pytest.mark.parametrize("task", sorted(VARIANTS))
-def test_the_prompt_still_states_what_a_legal_answer_is(task, items):
+@pytest.mark.parametrize("task,level", CELLS)
+def test_the_prompt_still_states_what_a_legal_answer_is(task, cell):
     """The delimiter phrase went; every clause that says what an answer *is* stayed."""
-    it, _ = items[task]
+    it, _ = cell
     assert "Answer format: one directive per line." in it.prompt
     assert ("The answer must be minimal: one using more than twice the fewest directives "
             "that work scores zero.") in it.prompt
