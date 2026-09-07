@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import PROFILES, junctions_for
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
@@ -177,7 +178,7 @@ def _tower(ops: List[Operation], names, ridx: List[int], target_lit: str, height
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[SQItem]:
+          profile: str = "FULL") -> Union[SQItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "sq", profile))
     prof = PROFILES[profile]
     n_query = max(3, round(3 + (level - 1) * (40 - 3) / 14))
@@ -343,11 +344,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
 
     sm = full_status_map(base, ordering)
     if not sm:
-        return None
+        return Rejected("status_map_empty")
 
     by_status: Dict[str, List[str]] = collections.defaultdict(list)
     for lit, stat in sm.items():
@@ -359,7 +360,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         by_status[k].sort()
         rng.shuffle(by_status[k])
     if any(len(by_status.get(s, [])) == 0 for s in STATUSES):
-        return None
+        return Rejected("status_missing_from_theory")
 
     per = max(1, n_query // 3)
     queried: List[str] = []
@@ -379,16 +380,16 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     # A short item was shipped rather than rejected, so `n_queried == target_n_query` held
     # by luck of the rng stream and nothing put a build back for being under length. That
     # is what left two level-3 cells at 8 of 8 short: `make_item` already walks 24 build
-    # seeds and only retries when `build` returns None.
+    # seeds and only retries when `build` rejects the candidate.
     if len(queried) < n_query:
-        return None
+        return Rejected("too_few_queried_literals")
 
     gold = {l: sm[l] for l in queried}
     counts = collections.Counter(gold.values())
     if len(counts) < 3:
-        return None
+        return Rejected("fewer_than_three_gold_statuses")
     if max(counts.values()) / len(gold) > MAX_STATUS_SHARE:
-        return None
+        return Rejected("one_status_over_its_share")
 
     lines = [f"{l}: {gold[l].lower()}" for l in queried]
     prompt = _render_prompt(render_ops(base), queried, ordering)
@@ -501,10 +502,11 @@ def score(answer_text: str, item: SQItem) -> ScoreResult:
     return score_value(value, item)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     profile: str = "FULL", tries: int = 24) -> BuildReport:
+    return retry(lambda k: build(level, seed * 97 + k, ordering, profile), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               profile: str = "FULL", tries: int = 24) -> Optional[SQItem]:
-    for k in range(tries):
-        it = build(level, seed * 97 + k, ordering, profile)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, profile, tries).item

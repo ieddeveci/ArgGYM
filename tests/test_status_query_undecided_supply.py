@@ -13,8 +13,8 @@ called for, and when supply fell to two the item was rejected outright, since 10
 0.4545.
 
 Nothing rejected a short build either, so the query count held by luck of the rng stream:
-`make_item` retries only when `build` returns None, and `build` returned whatever length it
-happened to reach.
+`make_item` retries only when `build` rejects the candidate, and `build` returned whatever
+length it happened to reach.
 """
 from __future__ import annotations
 

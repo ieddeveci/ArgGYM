@@ -7,10 +7,13 @@ count the enumerations rather than the seconds, so they stay meaningful on a loa
 """
 from __future__ import annotations
 
+import collections
+
 import pytest
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import ASPICFramework
+from arggym.core.build import Rejected
 from arggym.tasks import semantics_query as sq
 
 COUNTED = ("preferred_extensions", "stable_extensions", "eager_extension", "status_map")
@@ -42,13 +45,17 @@ def counts(monkeypatch):
 
 def first_built_item(level: int, counts: dict, ordering: str = sq.LAST_LINK):
     """Build until a seed yields an item, and report the counts of that build alone."""
+    reasons = []
     for seed in range(40):
         for name in counts:
             counts[name] = 0
         item = sq.build(level, seed, ordering)
-        if item is not None:
+        # Not `is not None`: a Rejected satisfies that, so every test downstream of
+        # this helper would pass on a generator that builds nothing.
+        if not isinstance(item, Rejected):
             return item, dict(counts)
-    pytest.fail(f"no level {level} item in 40 seeds")
+        reasons.append(item.reason)
+    pytest.fail(f"no level {level} item in 40 seeds: {collections.Counter(reasons)}")
 
 
 # The enumeration each semantics needs, so a test can ask for the schedule's own count

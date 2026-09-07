@@ -4,11 +4,12 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import (
     JUNCTION_CAPS,
     PROFILES,
@@ -104,7 +105,7 @@ class DDItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[DDItem]:
+          profile: str = "FULL") -> Union[DDItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "dd"))
     n_routes = 1 if level <= EASY_LEVELS else 3
     depth = max(2, min(2 + level // 3, 7))
@@ -289,11 +290,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
 
     st = status(base, claim, ordering)
     if st not in ("OVERRULED", "UNDECIDED"):
-        return None
+        return Rejected("claim_not_defeated")
 
     for d in diagnoses:
         sb = d.get("survives_because")
@@ -305,7 +306,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             d["survives_because"] = None
             continue
         if status(pruned, claim, ordering) == st:
-            return None
+            return Rejected("survival_reason_not_load_bearing")
 
     lines = [f"status: {st.lower()}"]
     for d in diagnoses:
@@ -492,13 +493,14 @@ def score(answer_text: str, item: DDItem) -> ScoreResult:
     return score_value(value, item)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     profile: str = "FULL", tries: int = 14) -> BuildReport:
+    return retry(lambda k: build(level, seed * 83 + k, ordering, profile), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 14) -> Optional[DDItem]:
-    for k in range(tries):
-        it = build(level, seed * 83 + k, ordering, profile)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, profile, tries).item
 
 
 PANEL_THRESHOLD = round(0.85 / 3 + 0.15 + 0.05, 3)

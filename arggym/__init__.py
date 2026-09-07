@@ -52,6 +52,7 @@ from arggym.core.answers import (
     UnparseableAnswer,
     extract_answer,
 )
+from arggym.core.build import Rejected
 from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
 from arggym.core.floors import FLOORS_VERSION, corrected, floor_strategy, floors
 from arggym.core.freeze import taskset_hash
@@ -69,7 +70,7 @@ __all__ = [
     # tasks
     "task_names", "get_task", "TaskSpec",
     # items
-    "create", "from_spec", "TaskDataset", "ConcatDataset", "BuildFailed",
+    "create", "from_spec", "TaskDataset", "ConcatDataset", "BuildFailed", "Rejected",
     # answers
     "extract_answer", "ScoreResult", "UnparseableAnswer",
     "AnswerTemplate", "XML_TAGS", "DEFAULT_TEMPLATE",

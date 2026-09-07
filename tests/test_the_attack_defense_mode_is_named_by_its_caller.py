@@ -6,9 +6,9 @@ which picked attack, defence or mixed off the seed's parity. No caller reached i
 curriculum it read was consulted by nothing else in the module (#31).
 
 With that gone the argument is required, so omitting it fails at the call, and a mode
-that is not one of the three raises rather than returning None. Both matter: `freeze`
-catches `BuildFailed` alone, so a None would have been recorded as a cell where every
-candidate was rejected and the typo would have survived the export.
+that is not one of the three raises rather than reporting a rejection. Both matter: the
+export records a rejection and scans on, so a typo would have been counted as a cell
+where every candidate was refused and would have survived the export.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def test_a_missing_mode_does_not_reach_the_builder():
 
 
 def test_an_unknown_mode_is_refused_rather_than_read_as_an_empty_cell():
-    """A near miss of a real mode. Returning None here would export as a rejected cell."""
+    """A near miss of a real mode. A rejection here would export as a refused cell."""
     with pytest.raises(ValueError) as e:
         ad.make_item(9, 0, LAST_LINK, mode="defense")
     assert all(m in str(e.value) for m in (ATTACK, DEFENCE, MIXED))

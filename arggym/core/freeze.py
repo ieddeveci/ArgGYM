@@ -10,6 +10,12 @@ skipped. That pair is a better determinism check than comparing hashes. Two
 exports with the same skips and different hashes mean a renderer or a scorer
 moved; different skips mean a generator moved. A hash alone cannot tell you
 which.
+
+Under the skip list sits the retry loop, and it is where the interesting number
+lives. On the standard grid no seed is skipped at all, while `semantics_query` at
+level 12 reaches its two items by discarding candidates six times in seven. So
+the cell also records how many candidates `build` was asked for and why it
+refused them (#72), counted over every seed rather than only the failed ones.
 """
 from __future__ import annotations
 
@@ -20,7 +26,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from arggym.core.dataset import BuildFailed, TaskDataset
+from arggym.core.build import reasons_text, top_reason
+from arggym.core.dataset import TaskDataset
 from arggym.core.prompting import MINIMALITY
 from arggym.core.rows import score as score_row
 from arggym.core.spec import TasksetSpec, check_versions
@@ -49,11 +56,25 @@ class CellReport:
     seeds_used: List[int] = field(default_factory=list)
     seeds_skipped: List[Dict[str, Any]] = field(default_factory=list)
     scan_end: int = 0
+    #: Candidates `build` was asked for across every seed scanned, the accepted
+    #: ones included, and why it discarded the ones it did.
+    build_calls: int = 0
+    build_rejections: Dict[str, int] = field(default_factory=dict)
 
     @property
     def acceptance(self) -> float:
         tried = len(self.seeds_used) + len(self.seeds_skipped)
         return len(self.seeds_used) / tried if tried else 0.0
+
+    @property
+    def build_acceptance(self) -> float:
+        """Items per candidate built, which is the rate a thin cell shows up in.
+
+        Seed acceptance hides the retry loop: every cell of the grid fills, and
+        `semantics_query` at level 12 under `last_link_democratic` still reaches
+        it by discarding 26 candidates out of 30.
+        """
+        return len(self.seeds_used) / self.build_calls if self.build_calls else 0.0
 
     def key(self) -> str:
         return f"{self.task}|L{self.level}|{self.ordering}"
@@ -64,7 +85,10 @@ class CellReport:
             counts[s["reason"]] = counts.get(s["reason"], 0) + 1
         return {"n": len(self.seeds_used), "seeds_used": self.seeds_used,
                 "seeds_skipped": self.seeds_skipped, "reason_counts": counts,
-                "scan_end": self.scan_end, "acceptance_rate": round(self.acceptance, 4)}
+                "scan_end": self.scan_end, "acceptance_rate": round(self.acceptance, 4),
+                "build_calls": self.build_calls,
+                "build_rejections": dict(sorted(self.build_rejections.items())),
+                "build_acceptance_rate": round(self.build_acceptance, 4)}
 
 
 class CellUnfilled(SystemExit):
@@ -104,13 +128,20 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
             break
         seed = spec.seeds.start + k
         report.scan_end = seed
-        try:
-            entry = ds[k]
-        except BuildFailed:
-            # The generator discards the reason today: `build` returns a bare
-            # None and `make_item` loops over it. Recording the reason is #72,
-            # and this dict is where it goes once `build` reports one.
-            report.seeds_skipped.append({"seed": seed, "reason": "build_returned_none"})
+        # `build_at` rather than `ds[k]`: the reasons behind a seed that
+        # succeeded on its seventh candidate are the ones with a signal in them,
+        # and an exception can only carry the reasons from a seed that failed
+        # outright.
+        entry, built = ds.build_at(k)
+        report.build_calls += built.calls
+        for reason, n in built.reasons.items():
+            report.build_rejections[reason] = report.build_rejections.get(reason, 0) + n
+        if entry is None:
+            # `reason` names what this seed hit most often, which is what a skip
+            # list is read for; the full count is in `build_rejections`.
+            report.seeds_skipped.append({"seed": seed, "tries": built.calls,
+                                         "reason": top_reason(built.reasons),
+                                         "reasons": dict(sorted(built.reasons.items()))})
             continue
         entry["metadata"]["reference_score"] = reference_score(entry)
         entry["metadata"]["source_index"] = len(rows)
@@ -121,8 +152,10 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
         raise CellUnfilled(
             f"{report.key()} yielded {len(rows)} of {spec.seeds.take} items within "
             f"{spec.seeds.scan_limit} seeds (acceptance {report.acceptance:.2f}). "
-            f"Raise seeds.scan_limit, lower seeds.take, or find out why the cell "
-            f"rejects -- a cell this thin is a finding, not a setting.")
+            f"It discarded {report.build_calls - len(rows)} candidates: "
+            f"{reasons_text(report.build_rejections)}. Raise seeds.scan_limit, lower "
+            f"seeds.take, or fix what the reasons name -- a cell this thin is a "
+            f"finding, not a setting.")
     if report.acceptance < spec.min_acceptance:
         raise CellUnfilled(
             f"{report.key()} filled, but took {report.scan_end - spec.seeds.start + 1} "
@@ -199,8 +232,15 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
                 f"is wrong; a taskset whose own answers fail is not publishable.")
         cells[report.key()] = report.to_dict()
         if verbose:
-            thin = "" if report.acceptance == 1.0 else f"  ({report.acceptance:.0%} accepted)"
-            print(f"  {report.key():54s} {len(got):3d} items{thin}")
+            note = "" if report.acceptance == 1.0 else f"  ({report.acceptance:.0%} of seeds accepted)"
+            # Printed whenever the cell built more candidates than it kept, which
+            # seed acceptance never shows: every grid cell fills, and some fill by
+            # discarding six candidates in seven.
+            if report.build_calls > len(got):
+                note += (f"  [{report.build_calls} candidates, "
+                         f"{report.build_acceptance:.0%} kept: "
+                         f"{reasons_text(report.build_rejections)}]")
+            print(f"  {report.key():54s} {len(got):3d} items{note}")
 
     manifest = {
         "spec": spec.to_dict(),
@@ -213,6 +253,10 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
                           if r["metadata"]["reference_score"] >= 0.999),
         "cells": cells,
         "n_skipped": sum(len(c["seeds_skipped"]) for c in cells.values()),
+        # Candidates `build` discarded, over every seed including the ones that
+        # produced an item. `n_skipped` counts only seeds that ran out of tries,
+        # and on the standard grid that number is zero while this one is not.
+        "n_rejected": sum(sum(c["build_rejections"].values()) for c in cells.values()),
         # Travels with the rows because rows get separated from manifests the
         # moment anyone loads the JSONL.
         "minimum_caveat": ("min_directives is minimal among the candidate directives "
@@ -226,7 +270,8 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
         for r in rows:
             f.write(json.dumps(r, default=str) + "\n")
     if verbose:
-        print(f"wrote {len(rows)} items, {manifest['n_skipped']} seeds skipped -> {path}")
+        print(f"wrote {len(rows)} items, {manifest['n_skipped']} seeds skipped, "
+              f"{manifest['n_rejected']} candidates rejected -> {path}")
         print(f"taskset_hash {manifest['taskset_hash']}")
     return manifest
 

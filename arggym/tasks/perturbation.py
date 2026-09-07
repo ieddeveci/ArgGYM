@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -123,7 +124,7 @@ class PerturbItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[PerturbItem]:
+          profile: str = "FULL") -> Union[PerturbItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "pert"))
     n_comp = max(2, min(2 + (level * 7 + 5) // 15, 9))
     depth = max(2, min(2 + (level * 5) // 15, 7))
@@ -293,15 +294,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 continue
             atoms.add(a.lstrip("-"))
     if atoms & rules:
-        return None
+        return Rejected("atom_rule_name_collision")
 
     before = status_map(base, ordering)
     if not before:
-        return None
+        return Rejected("base_status_map_empty")
 
     after = status_map(base + pert, ordering)
     if not after:
-        return None
+        return Rejected("perturbed_status_map_empty")
 
     changed = {k: after[k] for k in before
                if k in after and after[k] != before[k]}
@@ -317,18 +318,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                         if f"-{x}" in before and f"-{x}" not in changed)
 
     if not changed:
-        return None
+        return Rejected("no_status_changed")
     if not survivors:
-        return None
+        return Rejected("no_surviving_claims")
 
     counts: Dict[str, int] = {}
     for v in changed.values():
         counts[v] = counts.get(v, 0) + 1
     need = _required_statuses(n_pert)
     if len(counts) < need:
-        return None
+        return Rejected("too_few_distinct_statuses")
     if max(counts.values()) / len(changed) > _max_share(need):
-        return None
+        return Rejected("one_status_over_its_share")
 
     prompt = _render_prompt(render_ops(base), render_ops(pert), ordering)
     n_status = len(set(changed.values()))
@@ -430,7 +431,7 @@ def score_value(value: Value, item: PerturbItem) -> ScoreResult:
     pred = collect(said)
     if not pred:
         # Success is exact match over the label map, so an empty prediction matches an
-        # empty gold. No shipped item has one: `build` returns None when nothing changed,
+        # empty gold. No shipped item has one: `build` rejects a draw where nothing changed,
         # and the status-diversity guards below it would reject such a draw anyway. The
         # prompt used to invite `none` regardless, which offered an answer that scores
         # zero on every item in the benchmark. It no longer does, and this arm stays
@@ -473,10 +474,11 @@ def score(answer_text: str, item: PerturbItem) -> ScoreResult:
     return score_value(value, item)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     profile: str = "FULL", tries: int = 40) -> BuildReport:
+    return retry(lambda k: build(level, seed * 41 + k, ordering, profile), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 40) -> Optional[PerturbItem]:
-    for k in range(tries):
-        it = build(level, seed * 41 + k, ordering, profile)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, profile, tries).item

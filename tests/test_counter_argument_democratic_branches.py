@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 
 from arggym.aspic.api import ASPICVerifier
+from arggym.core.build import Rejected
 from arggym.core.scoring import parse_answer
 from arggym.core.spec import ALL_ORDERINGS
 from arggym.tasks import counter_argument as ca
@@ -68,7 +69,9 @@ def test_a_rejected_build_now_generates():
     fire.
     """
     item = ca.build(6, 4, "weakest_link_democratic")
-    assert item is not None, "a build the branch premise ranking should have rescued"
+    # Not `is not None`: a Rejected satisfies that, and this assertion is the test.
+    assert not isinstance(item, Rejected), (
+        f"a build the branch premise ranking should have rescued: {item.reason}")
     assert solves(item)
 
 

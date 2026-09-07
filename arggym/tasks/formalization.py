@@ -4,11 +4,12 @@ import hashlib
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import JUNCTION_CAPS, PROFILES, junction_budget
 from arggym.core.nlforms import (
     AXIOM,
@@ -166,7 +167,7 @@ class _Cycler:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[FItem]:
+          profile: str = "FULL") -> Union[FItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "fm"))
     cyc = _Cycler(rng)
     lo = 3 + int((level - 1) * (40 - 3) / 14)
@@ -359,7 +360,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     gold = status_map(base, queried, ordering)
     if not gold or len(gold) != len(queried):
-        return None
+        return Rejected("status_map_incomplete")
 
     flips = 0
 
@@ -497,11 +498,12 @@ def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
     return ScoreResult(total, exact_behaviour, "ok", diag)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     profile: str = "FULL", tries: int = 16) -> BuildReport:
+    return retry(lambda k: build(level, seed * 89 + k, ordering, profile=profile), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               profile: str = "FULL",
               tries: int = 16) -> Optional[FItem]:
-    for k in range(tries):
-        it = build(level, seed * 89 + k, ordering, profile=profile)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, profile, tries).item

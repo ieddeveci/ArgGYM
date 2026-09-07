@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import (
     junctions_for,
     negated_branch,
@@ -126,7 +127,7 @@ class CAItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          allow_strict: bool = False) -> Optional[CAItem]:
+          allow_strict: bool = False) -> Union[CAItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
     n_chain = max(1, min(1 + (level * 5) // 15, 6))
     depth = max(2, min(2 + (level * 3) // 15, 5))
@@ -258,11 +259,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
     if any(o.kind in ("premise", "axiom") and o.content == target for o in base):
-        return None
+        return Rejected("target_is_a_premise")
     if status(base, target, ordering) != "JUSTIFIED":
-        return None
+        return Rejected("target_not_justified")
     if status(base, "-" + target, ordering) == "JUSTIFIED":
-        return None
+        return Rejected("negation_already_justified")
 
     decoy_rule = None
     decoy_root = None
@@ -282,7 +283,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             ops.append(Operation(kind="prefer_rule", stronger=killer[0], weaker=decoy_rule))
         base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
         if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
-            return None
+            return Rejected("decoy_justifies_the_negation")
 
     ops, _rmap = randomize_rule_names(ops, stable_seed(seed, level, ordering, "rn"))
     for c in chains:
@@ -293,7 +294,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
 
     pairs: List[Tuple[Operation, str]] = []
 
@@ -305,7 +306,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         killer = next((c["rules"][_tgt_idx(c)] for c in target_chains
                        if not c["rules"][_tgt_idx(c)][2]), None)
         if killer is None:
-            return None
+            return Rejected("no_defeasible_killer_rule")
         add(Operation(kind="defeasible", name="z0", antecedents=(seed_lit,),
                       consequent="-" + killer[0]),
             f"[defeasible z0: {seed_lit} => -{killer[0]}]")
@@ -386,12 +387,12 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     best, _proven, _calls = minimal_subset_exact(ref_ops, holds, max_calls=40000)
     if best is None:
-        return None
+        return Rejected("no_minimal_subset")
     keep = {id(o) for o in best}
     pairs = [(o, l) for o, l in zip(ref_ops, lines) if id(o) in keep]
     ref_ops, lines = dedupe_parallel(pairs)
     if not ref_ops or not holds(ref_ops):
-        return None
+        return Rejected("reference_does_not_hold")
     irredundant, _irr_calls = assert_irredundant(ref_ops, holds)
 
     bank: List[Tuple[List[Operation], List[str]]] = []
@@ -511,10 +512,11 @@ def as_score_input(it: "CAItem") -> Dict:
             "allow_strict": it.metadata.get("allow_strict", False)}
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     tries: int = 14, allow_strict: bool = False) -> BuildReport:
+    return retry(lambda k: build(level, seed * 53 + k, ordering, allow_strict), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               tries: int = 14, allow_strict: bool = False) -> Optional[CAItem]:
-    for k in range(tries):
-        it = build(level, seed * 53 + k, ordering, allow_strict)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, tries, allow_strict).item

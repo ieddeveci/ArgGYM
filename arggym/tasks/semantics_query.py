@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import UNSATISFIABLE, Operation
 from arggym.core.answers import ScoreResult, UnparseableAnswer
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import answer_format
@@ -400,7 +401,7 @@ def _negated_premise(it, ridx):
     return ops, out
 
 
-def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]:
+def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
     n_cluster = 2
@@ -457,7 +458,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         ops.extend(block)
 
     if len(ops) > MAX_DIRECTIVES:
-        return None
+        return Rejected("theory_over_max_directives")
 
     # The eager padding is part of the theory the prompt shows, so it is built here,
     # before the rename, and renamed with everything else. Otherwise its rules keep
@@ -473,8 +474,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         try:
             _na = len(ASPICVerifier.from_operations(
                 _ordered, ordering=ordering).fw.af.arguments)
-        except Exception:
-            return None
+        except Exception as exc:
+            return Rejected(f"eager_argument_count_failed:{type(exc).__name__}")
         _fill = 0
         while _na + 2 <= MAX_EAGER_ARGUMENTS and _fill < 16:
             _a, _c = next(it), next(it)
@@ -492,7 +493,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     ops, _pad = ops[:_n], ops[_n:]
     atoms, rnames = split_atoms_and_rules(ops + _pad)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
 
     rng.shuffle(ops)
     facts = [o for o in ops if o.kind in ("premise", "axiom")]
@@ -504,15 +505,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
     if EAGER in sems:
         try:
             _v = ASPICVerifier.from_operations(list(base), ordering=ordering)
-        except Exception:
-            return None
+        except Exception as exc:
+            return Rejected(f"eager_verifier_error:{type(exc).__name__}")
         if len(_v.fw.af.arguments) > MAX_EAGER_ARGUMENTS:
-            return None
+            return Rejected("too_many_eager_arguments")
         _cache_v = _v
 
     cache = semantics_cache(base, sems, ordering, verifier=_cache_v)
     if cache is None:
-        return None
+        return Rejected("semantics_cache_failed")
     gold: Dict[Tuple[str, str], str] = {}
     for c in candidates:
         for s in sems:
@@ -525,17 +526,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
                 continue
             st = status_under(cache, c, s)
             if st is None:
-                return None
+                return Rejected("status_unavailable")
             gold[(c, s)] = st
     if not gold:
-        return None
+        return Rejected("no_gold_queries")
 
     by_claim: Dict[str, List[str]] = {}
     for (c, s) in gold:
         by_claim.setdefault(c, []).append(s)
     diverging = [c for c in by_claim if len({gold[(c, s)] for s in by_claim[c]}) > 1]
     if level > EASY_LEVELS and not diverging:
-        return None
+        return Rejected("no_diverging_claim")
 
     _div = set(diverging)
     by_status = collections.defaultdict(list)
@@ -624,13 +625,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Optional[SemItem]
         counts[gold[q]] += 1
         _n_stable += q[1] == STABLE
     if len(kept) < MIN_QUERIES:
-        return None
+        return Rejected("too_few_queries_kept")
     queries = kept
     gold = {q: gold[q] for q in queries}
     if len(set(gold.values())) < 2:
-        return None
+        return Rejected("fewer_than_two_gold_statuses")
     if len(gold) >= 6 and max(counts.values()) / len(gold) > MAX_STATUS_SHARE:
-        return None
+        return Rejected("one_status_over_its_share")
     rng.shuffle(queries)
     lines = [f"{c} under {s}: {gold[(c, s)].lower().replace('_', ' ')}" for c, s in queries]
 
@@ -744,10 +745,11 @@ def score(answer_text: str, item: SemItem) -> ScoreResult:
     return score_value(value, item)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     tries: int = 24) -> BuildReport:
+    return retry(lambda k: build(level, seed * 83 + k, ordering), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK,
               tries: int = 24) -> Optional[SemItem]:
-    for k in range(tries):
-        it = build(level, seed * 83 + k, ordering)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, tries).item

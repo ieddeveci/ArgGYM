@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Union
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation
+from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.curriculum import (
     PROFILES,
     junctions_for,
@@ -115,7 +116,7 @@ class PCItem:
 
 
 def build(level: int, seed: int, ordering: str = LAST_LINK,
-          profile: str = "FULL") -> Optional[PCItem]:
+          profile: str = "FULL") -> Union[PCItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "pc"))
     n_claims = max(1, min(1 + (level * 8) // 15, 8))
     n_conf = max(n_claims + 1, min(n_claims + 1 + (level * 5) // 15, 10))
@@ -218,11 +219,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
-        return None
+        return Rejected("atom_rule_name_collision")
 
     before = statuses(base, claim_lits, ordering)
     if not before:
-        return None
+        return Rejected("base_statuses_empty")
 
     cand: List[Operation] = []
     for c in conflicts:
@@ -244,23 +245,23 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                 cand.append(Operation(kind="prefer_premise", stronger=c["con_root"],
                                       weaker=c["pro_root"]))
     if not cand:
-        return None
+        return Rejected("no_candidate_preferences")
     after = statuses(base + cand, claim_lits, ordering)
     if not after:
-        return None
+        return Rejected("after_statuses_empty")
     goals = [{"claim": l, "current": before[l], "want": after[l]} for l in claim_lits]
     if all(g["current"] == g["want"] for g in goals):
-        return None
+        return Rejected("no_goal_changes")
 
     def holds(sub: Sequence[Operation]) -> bool:
         got = statuses(base + list(sub), claim_lits, ordering)
         return all(got.get(g["claim"]) == g["want"] for g in goals)
 
     if not holds(cand):
-        return None
+        return Rejected("candidates_do_not_reach_goals")
     best, proven, n_calls = minimal_subset_exact(cand, holds, max_calls=40000)
     if best is None:
-        return None
+        return Rejected("no_minimal_subset")
 
     if len(best) > 1:
         singles: List[Operation] = []
@@ -336,10 +337,11 @@ def _render_prompt(theory: str, goals: Sequence[Dict], ordering: str) -> str:
     return "\n".join(lines)
 
 
+def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,
+                     profile: str = "FULL", tries: int = 14) -> BuildReport:
+    return retry(lambda k: build(level, seed * 61 + k, ordering, profile), tries)
+
+
 def make_item(level: int, seed: int, ordering: str = LAST_LINK, profile: str = "FULL",
               tries: int = 14) -> Optional[PCItem]:
-    for k in range(tries):
-        it = build(level, seed * 61 + k, ordering, profile)
-        if it is not None:
-            return it
-    return None
+    return make_item_report(level, seed, ordering, profile, tries).item
