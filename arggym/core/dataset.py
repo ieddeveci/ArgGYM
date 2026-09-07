@@ -84,7 +84,9 @@ class TaskDataset:
         seeds that succeeded as much as on the ones that did not. Seed-level
         failures are rare -- a freeze over 96 grid cells skipped none -- while a
         cell spending 30 candidates on 4 items is common and invisible, and that
-        gap is what #72 is about. So this never raises; `__getitem__` does.
+        gap is what #72 is about. So a seed that produced nothing comes back as
+        `(None, report)`; `__getitem__` is the one that turns that into an
+        exception. Anything the generator itself raises still propagates.
         """
         seed = self.seed + idx
         # `profile` is deliberately not passed: counter_argument and

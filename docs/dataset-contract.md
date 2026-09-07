@@ -413,12 +413,12 @@ and `prompt_version` and `scoring_version` may be pinned the same way as
 "semantics_query|L9|last_link_elitist": {
   "n": 2,
   "seeds_used": [0, 1],
-  "seeds_skipped": [],           // {"seed": 0, "tries": 24, "reason": ...} when one fails
+  "seeds_skipped": [],           // {"seed", "tries", "reason", "reasons"} per failure
   "reason_counts": {},           // over seeds_skipped
   "scan_end": 1,
   "acceptance_rate": 1.0,
   "build_calls": 7,              // candidates build was asked for, across every seed
-  "build_rejections": {"theory_over_max_directives": 3, "one_status_over_its_share": 2},
+  "build_rejections": {"one_status_over_its_share": 2, "theory_over_max_directives": 3},
   "build_acceptance_rate": 0.2857
 }
 ```
@@ -439,15 +439,18 @@ changed. The hash alone cannot tell you which.
 **The build counts, not just the seed counts.** `seeds_skipped` records a seed
 that exhausted its retry budget, and the grid barely uses it: across the 96
 cells of levels 3 and 9, not one seed failed and every `acceptance_rate` came
-out 1.00. The cell above still throws away five candidates out of seven. So `build` answers `Rejected(reason)` rather than
-`None` (#72), and the cell records how many candidates it asked for and what
-each refusal was, counted over every seed rather than only the failed ones. A
-reason is a short stable key naming the check that failed, so it stays a
-histogram bucket; `arggym/core/build.py` holds the vocabulary.
+out 1.00. The cell above still throws away five candidates out of seven. So
+`build` answers `Rejected(reason)` rather than `None` (#72), and the cell records
+how many candidates it asked for and what each refusal was, counted over every
+seed rather than only the failed ones. A reason is a short stable key naming the
+check that failed, so it stays a histogram bucket; `arggym/core/build.py` holds
+the vocabulary.
 
-Read `build_acceptance_rate` when asking whether a cell is healthy. Two exports
-whose reasons move while the hash holds mean a generator changed what it
-discards without changing what it ships. `min_acceptance` still gates the seed
+Read `build_acceptance_rate` when asking whether a cell is healthy, and only
+against another export of the same `seeds.take`: the scan stops as soon as the
+cell is full, so the same cell reports 0.14 at `take: 2` and 0.13 at `take: 4`.
+Two exports whose reasons move while the hash holds mean a generator changed what
+it discards without changing what it ships. `min_acceptance` still gates the seed
 rate alone, which is a decision left open on #72.
 
 ### `profile` is recorded, and refused

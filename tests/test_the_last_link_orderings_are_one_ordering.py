@@ -5,7 +5,8 @@ democratic is `all(any(...))` -- and the two agree on a singleton. Last-link
 compares an argument's last defeasible rules, and ArgGYM's theories give an
 argument exactly one of those nearly everywhere, so half the ordering axis is a
 duplicate of the other half. `status_query` is the exception: at levels 6 and 12
-it builds an argument with two last defeasible rules, and the relation splits.
+a preference ranks the two last defeasible rules of one of its arguments, and the
+relation splits.
 
 `docs/dataset-card.md` used to claim the collapse held "on eight of the twelve
 tasks", which was wrong on the count and on the dimension -- the split is by
@@ -26,9 +27,9 @@ from arggym.aspic.api import ASPICVerifier
 from arggym.core import registry
 
 LAST_LINK = ("last_link_elitist", "last_link_democratic")
-#: The two levels where `status_query` splits, of the grid's five. The second
-#: last defeasible rule comes from a junction its curriculum turns on here and
-#: not at 3, 9 or 15.
+#: The two levels where `status_query` splits, of the grid's five. An argument
+#: with two last defeasible rules appears from level 6 up, at 9 and 15 as well;
+#: what these two add is a preference that makes the pair decide a defeat.
 SPLIT_LEVELS = (6, 12)
 LIVE = "status_query"
 INERT = tuple(t for t in registry.task_names() if t != LIVE)

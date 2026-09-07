@@ -82,7 +82,9 @@ def reasons_text(counts: Dict[str, int]) -> str:
 
 
 def top_reason(counts: Dict[str, int]) -> str:
-    """The reason a seed hit most often, ties broken by name so it is stable."""
-    if not counts:
-        return "no_reason_recorded"
+    """The reason a seed hit most often, ties broken by name so it is stable.
+
+    Called only where a seed produced no item, so every try recorded a reason and
+    `counts` is never empty.
+    """
     return min(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
