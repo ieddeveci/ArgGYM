@@ -152,7 +152,14 @@ def build_attack_item(level: int, seed: int, ordering: str,
             decoy_srcs.append(d)
     chains = []
     ridx = 0
-    j_budget = junctions_for(level, max(1, n * depth))
+    # Two numbers: the loop divides `j_alloc`, while the recorded ceiling also covers what
+    # the picks build on their own. `junctions_for` is a density figure over an approximated
+    # rule count and knows nothing about C8, which builds a junction whatever `n_junctions`
+    # it is passed; from level 10 the pool carries C8, so until `depth` stepped at level 12
+    # the ceiling sat one below the theory (#97). Widening `j_alloc` itself would have moved
+    # `per_chain`, and the theory with it, wherever the picks draw C8 twice.
+    j_alloc = junctions_for(level, max(1, n * depth))
+    j_budget = j_alloc + sum(CONFIGS[c].structural_junctions for c in picks)
     for ci, cname in enumerate(picks):
         cs = CONFIGS[cname]
         root = next(it)
@@ -161,8 +168,8 @@ def build_attack_item(level: int, seed: int, ordering: str,
         for _ in range(depth + 2):
             ridx += 1
             rn.append(f"d{ridx}")
-        per_chain = max(0, j_budget // max(1, len(picks)))
-        if j_budget and per_chain == 0 and ci < j_budget:
+        per_chain = max(0, j_alloc // max(1, len(picks)))
+        if j_alloc and per_chain == 0 and ci < j_alloc:
             per_chain = 1
         if cname == "C7":
             k = max(1, min(depth - 1, 2))
@@ -171,7 +178,6 @@ def build_attack_item(level: int, seed: int, ordering: str,
         else:
             ch = cs.builder(root, mids, target, rn, depth,
                             n_junctions=per_chain, ternary=wants_ternary(level, ci))
-        pass
         chains.append(ch)
         ops.extend(ch.to_ops())
     if not any(c.rules[-1].get("strict") for c in chains):
