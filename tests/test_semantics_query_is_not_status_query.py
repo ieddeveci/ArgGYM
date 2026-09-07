@@ -16,18 +16,29 @@ from arggym.tasks import semantics_query as sq
 GRID = LEVELS
 CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 
+# The schedule is a dict lookup, so asking it about every level costs nothing and a
+# level the grid skips today is a level a spec may name tomorrow.
+SCHEDULE = tuple(range(1, 16))
+
 IMPLEMENTED = (sq.GROUNDED, sq.SCEPT_PREF, sq.CRED_PREF, sq.STABLE, sq.EAGER)
 
 
 def test_every_implemented_semantics_reaches_some_level():
-    scheduled = {s for lv in range(1, 16) for s in sq.semantics_for(lv)}
+    scheduled = {s for lv in SCHEDULE for s in sq.semantics_for(lv)}
     unreachable = sorted(set(IMPLEMENTED) - scheduled)
     assert not unreachable, (f"{unreachable} are implemented in status_under and asked at "
                              f"no level, so the code paths ship dead")
 
 
-@pytest.mark.parametrize("level", GRID)
-def test_every_exported_level_asks_past_grounded(level):
+# Strict, so the day #108 is settled these xpass and the marker has to go.
+BELOW_THREE = pytest.mark.xfail(strict=True, reason=(
+    "#108: SEMANTICS_BY_LEVEL schedules grounded alone below level 3, so the task is "
+    "status_query reworded there; whether it should exist there is a curriculum decision"))
+
+
+@pytest.mark.parametrize("level", [pytest.param(lv, marks=[BELOW_THREE] if lv < 3 else [])
+                                   for lv in SCHEDULE])
+def test_every_level_asks_past_grounded(level):
     assert set(sq.semantics_for(level)) - {sq.GROUNDED}, (
         f"level {level} resolves to {sq.semantics_for(level)}, which is status_query reworded")
 

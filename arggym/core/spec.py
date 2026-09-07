@@ -77,6 +77,11 @@ class TasksetSpec:
             raise ValueError(f"unknown ordering(s) {', '.join(bad)}")
         if not self.levels:
             raise ValueError("a spec must name at least one level")
+        # A float level is accepted everywhere and means nothing anywhere:
+        # claim_chain raises TypeError on the slice, status_query builds an item.
+        bad_levels = [lv for lv in self.levels if not isinstance(lv, int)]
+        if bad_levels:
+            raise ValueError(f"levels must be integers; got {bad_levels}")
         if not 0.0 < self.min_acceptance <= 1.0:
             raise ValueError("min_acceptance must be in (0, 1]")
         # The profile axis is real -- nine tasks branch on it -- but two tasks

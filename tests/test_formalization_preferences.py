@@ -2,6 +2,10 @@
 
 `[prefer_rule: a > b]` and `[prefer_rule: b > a]` are different directives, so the shape metric has
 to separate them - it used to compare preferences by kind alone and scored a flipped answer 1.0.
+
+The cell is an exhibit, not a sample: level 15 under weakest-link is the only exported level whose
+reference carries both a rule preference and a premise preference, and the parametrized flip below
+needs one of each.
 """
 from __future__ import annotations
 

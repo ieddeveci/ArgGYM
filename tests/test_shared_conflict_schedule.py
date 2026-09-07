@@ -22,6 +22,10 @@ from arggym.tasks import preference_construction as pc
 # both what these tests assert and how long they take.
 LAST_LINK = "last_link_elitist"
 
+# The schedule is read off a built item, so this file cannot be swept for free. What can
+# be asked of every level is asked of every level; the rest names the grid on purpose.
+SCHEDULE = tuple(range(1, 16))
+
 
 def shared_at(level: int) -> bool:
     """Read the schedule off a generated item rather than re-implementing it."""
@@ -41,16 +45,24 @@ def test_schedule_is_not_constant_on_the_grid():
     assert False in seen.values(), f"shared conflict occurs at every grid level: {seen}"
 
 
-def test_goal_count_does_not_fall_across_the_grid():
-    """The shared branch adds a claim, so it must not land where the base ramp steps up."""
+def test_goal_count_does_not_fall_and_steps_on_the_grid():
+    """The shared branch adds a claim, so it must not land where the base ramp steps up.
+
+    Monotonicity is asked of every level, because the branch fires at 9, 10, 11 and 15
+    and only the last of those is exported. Distinct counts are asked of the grid alone:
+    the ramp is flat between exported levels by construction, so 10 and 11 share a count
+    and that is the curriculum working.
+    """
     goals = {}
-    for level in LEVELS:
+    for level in SCHEDULE:
         item = pc.make_item(level, 0, LAST_LINK)
         assert item is not None, f"L{level} generated nothing"
         goals[level] = len(item.goals)
-    counts = [goals[l] for l in LEVELS]
+    counts = [goals[l] for l in SCHEDULE]
     assert counts == sorted(counts), f"goal count is not monotonic across levels: {goals}"
-    assert len(set(counts)) == len(counts), f"two levels have the same goal count: {goals}"
+    on_grid = [goals[l] for l in LEVELS]
+    assert len(set(on_grid)) == len(on_grid), \
+        f"two exported levels have the same goal count: {goals}"
 
 
 def test_a_shared_item_settles_two_goals_with_one_directive():

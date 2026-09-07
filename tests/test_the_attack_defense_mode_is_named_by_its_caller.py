@@ -9,6 +9,9 @@ With that gone the argument is required, so omitting it fails at the call, and a
 that is not one of the three raises rather than reporting a rejection. Both matter: the
 export records a rejection and scans on, so a typo would have been counted as a cell
 where every candidate was refused and would have survived the export.
+
+The level in the calls below is a placeholder and exhibits nothing: both raise in
+`make_item_report` before a builder is reached, so no item is ever built.
 """
 from __future__ import annotations
 

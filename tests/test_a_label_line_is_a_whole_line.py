@@ -12,6 +12,10 @@ compliance charged to the reasoning score -- the confound #10 measures at 0.180.
 `defeat_diagnosis` is different and its fix stayed: a `survives_because` written
 under a record that named no defeater was credited to the record above it, which
 is a wrong answer rather than a formatting choice.
+
+The cells are exhibits rather than coverage: every answer below is written here by
+hand, so the item is a carrier for it and a sweep would score the same strings
+against the same scorer.
 """
 from __future__ import annotations
 

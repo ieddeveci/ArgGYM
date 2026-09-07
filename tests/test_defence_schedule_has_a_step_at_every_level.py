@@ -15,6 +15,11 @@ from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import attack_defense as ad
 
 GRID = LEVELS
+# `_defence_shape` is arithmetic on the level, so the properties that hold between
+# neighbouring levels can be checked at every level for nothing. Distinctness cannot:
+# the shape is flat inside each band of levels the grid steps over, so it is a
+# property of the exported levels and stays on GRID.
+SCHEDULE = tuple(range(1, 16))
 
 KNOBS = ("n_attackers", "support_depth", "attacker_depth",
          "n_strict_attackers", "n_decoys", "n_decoy_strict")
@@ -33,13 +38,13 @@ def test_no_two_exported_levels_share_a_shape():
 
 def test_no_step_moves_every_knob():
     """A step that changes everything cannot be attributed to any of it."""
-    for a, b in zip(GRID, GRID[1:]):
+    for a, b in zip(SCHEDULE, SCHEDULE[1:]):
         moved = [i for i, (x, y) in enumerate(zip(_shape(a), _shape(b))) if x != y]
         assert len(moved) < len(KNOBS), f"L{a} to L{b} moves all {len(KNOBS)} knobs"
 
 
 def test_the_shape_never_goes_backwards():
-    for a, b in zip(GRID, GRID[1:]):
+    for a, b in zip(SCHEDULE, SCHEDULE[1:]):
         assert all(y >= x for x, y in zip(_shape(a), _shape(b))), (a, b)
 
 

@@ -62,6 +62,13 @@ def test_a_non_full_profile_says_why_it_is_refused():
         TasksetSpec(tasks=("status_query",), profile="P_S")
 
 
+def test_a_level_that_is_not_an_integer_is_refused():
+    # levels=(3.5,) reached the generators: claim_chain raised TypeError on a
+    # slice and status_query built an item, so one spec both crashed and shipped.
+    with pytest.raises(ValueError, match="levels must be integers"):
+        TasksetSpec(tasks=("status_query",), levels=(3.5,))
+
+
 def test_a_spec_round_trips_through_a_file(tmp_path):
     s = TasksetSpec(tasks=("status_query", "claim_chain"), levels=(3, 6),
                     seeds=SeedPolicy(take=4, scan_limit=20))
