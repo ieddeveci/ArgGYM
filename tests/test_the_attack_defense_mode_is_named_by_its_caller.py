@@ -10,8 +10,9 @@ that is not one of the three raises rather than reporting a rejection. Both matt
 export records a rejection and scans on, so a typo would have been counted as a cell
 where every candidate was refused and would have survived the export.
 
-The level in the calls below is a placeholder and exhibits nothing: both raise in
-`make_item_report` before a builder is reached, so no item is ever built.
+The level in the calls below is a placeholder and exhibits nothing: the first call
+never enters `make_item_report`, the second stops at its mode guard, and neither
+reaches a builder.
 """
 from __future__ import annotations
 

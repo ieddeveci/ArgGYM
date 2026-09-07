@@ -67,6 +67,9 @@ def test_a_level_that_is_not_an_integer_is_refused():
     # slice and status_query built an item, so one spec both crashed and shipped.
     with pytest.raises(ValueError, match="levels must be integers"):
         TasksetSpec(tasks=("status_query",), levels=(3.5,))
+    # bool is an int subclass, so isinstance would have read `[true]` as level 1.
+    with pytest.raises(ValueError, match="levels must be integers"):
+        TasksetSpec(tasks=("status_query",), levels=(True,))
 
 
 def test_a_spec_round_trips_through_a_file(tmp_path):

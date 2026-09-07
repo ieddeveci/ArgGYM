@@ -23,7 +23,7 @@ ORDERING = "last_link_elitist"
 
 @pytest.fixture(scope="module")
 def cc_item():
-    """Level 6, the first level whose line branches. Any cell exhibits the two routes."""
+    """Level 6, the first exported level whose line branches. Any cell exhibits the two routes."""
     item = cc.make_item(6, 0, ORDERING)
     assert item is not None
     return item

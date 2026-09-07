@@ -15,8 +15,8 @@ from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import attack_defense as ad
 
 GRID = LEVELS
-# `_defence_shape` is arithmetic on the level, so the properties that hold between
-# neighbouring levels can be checked at every level for nothing. Distinctness cannot:
+# `_defence_shape` is a pure function of the level and builds nothing, so the properties
+# that hold between neighbours can be checked at every level. Distinctness cannot:
 # the shape is flat inside each band of levels the grid steps over, so it is a
 # property of the exported levels and stays on GRID.
 SCHEDULE = tuple(range(1, 16))

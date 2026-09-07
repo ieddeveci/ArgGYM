@@ -49,9 +49,9 @@ def test_goal_count_does_not_fall_and_steps_on_the_grid():
     """The shared branch adds a claim, so it must not land where the base ramp steps up.
 
     Monotonicity is asked of every level, because the branch fires at 9, 10, 11 and 15
-    and only the last of those is exported. Distinct counts are asked of the grid alone:
-    the ramp is flat between exported levels by construction, so 10 and 11 share a count
-    and that is the curriculum working.
+    and 10 and 11 are the two the grid never evaluates. Distinct counts are asked of the
+    grid alone: the ramp is flat between exported levels by construction, so 10 and 11
+    share a count and that is the curriculum working.
     """
     goals = {}
     for level in SCHEDULE:

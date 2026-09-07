@@ -79,7 +79,8 @@ class TasksetSpec:
             raise ValueError("a spec must name at least one level")
         # A float level is accepted everywhere and means nothing anywhere:
         # claim_chain raises TypeError on the slice, status_query builds an item.
-        bad_levels = [lv for lv in self.levels if not isinstance(lv, int)]
+        # `type(...) is int` rather than isinstance, or `levels: [true]` is level 1.
+        bad_levels = [lv for lv in self.levels if type(lv) is not int]
         if bad_levels:
             raise ValueError(f"levels must be integers; got {bad_levels}")
         if not 0.0 < self.min_acceptance <= 1.0:
