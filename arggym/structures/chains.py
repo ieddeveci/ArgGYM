@@ -171,6 +171,13 @@ def build_c8(root, mids, target, rn, depth=3,
     blit = f"{mids[0]}_b" if mids else f"{target}_b"
     brule = f"{rn[0]}b"
     at = min(d // 2, d - 2)
+    # Overwrites rather than appends, so a budgeted junction already at `at` would lose its
+    # branch literal and leave an orphan premise. There is no depth-free threshold that makes
+    # this safe: over depth 2-9 x n_junctions 0-2, the pairs (2,2), (3,2) and (7,2) collide.
+    # What holds is narrower -- `build_attack_item` forms none of those pairs. It divides
+    # `j_alloc` into a `per_chain` of 0, 1 or 2, and the depths it pairs those with over
+    # levels 1-30 and all four profiles never put a pick on `at`. A caller choosing its own
+    # depth and `n_junctions` has to check the pair.
     ch.rules[at]["ants"] = [ch.rules[at]["ants"][0], blit]
     ch.extra_ops.extend([
         Operation(kind="premise", content=broot),
@@ -193,6 +200,11 @@ class ConfigSpec:
     n_rules: int
     profile: Dict[str, Tuple[FrozenSet[str], FrozenSet[str]]]
     note: str
+    #: Junctions the config builds whatever `n_junctions` it is asked for. C8 is the one:
+    #: two branches feeding one step is what C8 *is*, so its junction arrives before any
+    #: budget is divided. A caller reading a junction budget as a ceiling has to add these,
+    #: or the ceiling sits below what the picks already brought (#97).
+    structural_junctions: int = 0
 
     @staticmethod
     def _axis(ordering: str) -> str:
@@ -263,7 +275,8 @@ CONFIGS: Dict[str, ConfigSpec] = {
                       WEAKEST_LINK: (frozenset({UNDERMINE, UNDERCUT_MID}),
                                      frozenset({REBUT, FLIP_PREF}))},
                      "junction: two branches feed one step, so the chain has TWO roots to undermine "
-                     "and an extra rule to undercut; rebut blocked by the strict final rule"),
+                     "and an extra rule to undercut; rebut blocked by the strict final rule",
+                     structural_junctions=1),
 
     "C6": ConfigSpec("C6", build_c6, 2, 3,
                      {LAST_LINK:    (frozenset({UNDERMINE, UNDERCUT_MID}),
