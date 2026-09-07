@@ -2,12 +2,21 @@
 
 `docs/dataset-contract.md` section 4. A solver using a JSON schema, a tool call or
 constrained decoding submits the operations and never imitates our serialization; a
-solver returning text calls `parse` first. Both reach `score_value`, and the score is
-the same object either way -- which is the property that makes the seam worth having
-rather than two scorers that agree today.
+solver returning text calls `parse` first.
 
-Every level of one cheap column, not level 3 alone (#110): the seam is a property of
-an item, and a spec may name any level the curriculum spans.
+That the two paths agree is not what the first test below checks. `score_item` *is*
+`score_value(parse(text, item), item)` (`arggym/core/scoring.py:233-247`), so comparing
+them compares an expression with itself and holds whatever `score_value` does -- #122.
+What establishes the seam is
+`test_the_operations_a_solver_submits_are_not_required_to_come_from_our_parser`, whose
+value never passes through our parser.
+
+Every level of one cheap column, not level 3 alone (#110): what an item's reference
+parses and scores to is a property of that item, and a spec may name any level the
+curriculum spans. Four tests here read a fixed answer rather than the item's own -- an
+empty string, an unreadable line, a preference naming rules no theory has -- so they
+assert the same behaviour at every level and the case count is not a count of distinct
+checks. They ride on builds the swept tests have already paid for.
 """
 from __future__ import annotations
 

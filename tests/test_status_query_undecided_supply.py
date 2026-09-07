@@ -104,7 +104,7 @@ def test_every_group_shape_still_reaches_every_level(level):
         assert "junction" in seen, f"L{level} builds no junction group"
 
 
-@pytest.mark.parametrize("level", [lv for lv in GRID if lv >= 6])
+@pytest.mark.parametrize("level", [lv for lv in GRID if lv >= JUNCTION_START])
 def test_the_junction_leaves_some_groups_to_their_own_shape(level):
     for o in ALL_ORDERINGS:
         for s in SEEDS:

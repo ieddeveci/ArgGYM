@@ -26,9 +26,10 @@ ORDERING = "last_link_elitist"
 LEVELS = tuple(range(1, 16))
 CELLS = [(task, level) for task in sorted(TASKS) for level in LEVELS]
 
-#: Three tests walk all 180 cells and two more read one task's column, so one build
-#: serves five. Under xdist they scatter across workers and each rebuilds what it is
-#: handed; the cache is what keeps a serial run of this file cheap.
+#: Three tests walk all 180 cells, and two more read the `defeat_diagnosis` and
+#: `status_query` columns a second time, so one build serves three readers and four
+#: in those two columns. Under xdist they scatter across workers and each rebuilds
+#: what it is handed; the cache is what keeps a serial run of this file cheap.
 _CACHE: dict = {}
 
 

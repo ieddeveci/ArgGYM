@@ -14,9 +14,11 @@ one spare directive is a success below 1.0.
 One cheap column per task, every level of it. What a question states and what its own
 reference scores are properties of an item, and they were asserted at level 3 alone
 (#110); `TasksetSpec` accepts any level the curriculum spans, so the column has to. The
-ordering and seed axes stay with `tests/e2e`, which walks the two last-link/weakest-link
-elitist orderings and both seeds -- and only the five exported levels
-(`tests/e2e/conftest.py:22,36-38`), which is why the level axis comes here.
+ordering and seed axes stay with `tests/e2e`, which walks the two elitist orderings
+and both seeds over the five exported levels -- and under `make test` only levels 3,
+6 and 9 at seed 0, since everything outside `FAST_GRID` is marked slow and
+`addopts` deselects it (`tests/e2e/conftest.py:22,36-38`). So no default run reaches
+a level off the grid, which is why the level axis comes here.
 """
 from __future__ import annotations
 
@@ -66,9 +68,10 @@ CONTENT_CLAUSES = {
 
 CELLS = [(task, level) for task in sorted(MODULES) for level in LEVELS]
 
-#: Six tests walk all 90 cells and seven more walk one or three columns of them, so one
-#: build serves thirteen. Under xdist they scatter across workers and each rebuilds what
-#: it is handed; the cache is what keeps a serial run of this file cheap.
+#: Six tests walk all 90 cells and seven more walk one or three columns of them, so a
+#: cell is read six to eight times depending on its task. Under xdist they scatter
+#: across workers and each rebuilds what it is handed; the cache is what keeps a
+#: serial run of this file cheap.
 _CACHE: dict = {}
 
 
@@ -133,9 +136,10 @@ def test_the_prompt_states_its_answer_content_rules(task, item):
 def test_the_stable_sentence_is_stated_exactly_where_stable_is_asked(level):
     """The conditional clause is content, so it belongs on the levels that schedule stable.
 
-    Asserted in both directions over the range: a clause stated where nothing asks for it
-    is noise a model has to read past, and this file is now the place that would notice
-    `SEMANTICS_BY_LEVEL` and the prompt disagreeing.
+    Both directions, because a clause stated where nothing asks for it is noise a model
+    has to read past. `test_semantics_query_is_not_status_query.py` already asserts this
+    pair on the exported grid, so what this adds is the ten off-grid levels, on a build
+    the tests above have already paid for.
     """
     sentence = ("Under stable semantics, if the theory has no stable extension, answer "
                 "`no stable extension`.")

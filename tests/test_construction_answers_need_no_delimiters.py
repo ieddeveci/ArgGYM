@@ -8,9 +8,10 @@ every branch, including the early zeros that never reach the goal check.
 
 Every level of one cheap column, not level 3 alone (#110). What a question states and
 whether its own reference still scores 1.0 bare are properties of an item, and a spec may
-name any level the curriculum spans. `tests/e2e/` takes the ordering and seed axes and
-covers the five exported levels only (`tests/e2e/conftest.py:22,36-38`), so the level
-axis comes here.
+name any level the curriculum spans. `tests/e2e/` takes the ordering and seed axes, and
+reaches no level off the exported grid -- under `make test` it runs levels 3, 6 and 9
+at seed 0, because everything outside `FAST_GRID` is marked slow and `addopts`
+deselects it (`tests/e2e/conftest.py:22,36-38`). So the level axis comes here.
 """
 from __future__ import annotations
 

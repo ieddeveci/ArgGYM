@@ -2,9 +2,17 @@
 
 `docs/dataset-contract.md` section 4. A solver using a JSON schema, a tool call or
 constrained decoding submits the mapping and never imitates our line format; a solver
-returning text calls `parse` first. Both reach `score_value`, and the score is the same
-object either way -- which is the property that makes the seam worth having rather than
-two scorers that agree today.
+returning text calls `parse` first.
+
+That the two paths agree is not what the first test below checks. `score` *is*
+`score_value(parse(text, item), item)` (`arggym/tasks/status_query.py:490-503`), so
+comparing them compares an expression with itself and holds whatever `score_value` does
+-- #122. What establishes the seam is the three tests that build the mapping out of
+`item.gold` and score it against the text path.
+
+Four tests here are level-invariant by construction, reading a fixed prose string, an
+empty answer or an unrecognizable mapping, so the case count is not a count of distinct
+checks. They ride on builds the swept tests have already paid for.
 
 One wrinkle only text has: an answer can label the same claim twice with different
 statuses. The scorer counts such a claim as one prediction that is never correct and
