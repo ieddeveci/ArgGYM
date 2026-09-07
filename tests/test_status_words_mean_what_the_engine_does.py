@@ -9,6 +9,9 @@ written definition called undecided (#29).
 
 Gold is derived from the engine on every task, so the engine is the definition and the
 document was wrong.
+
+The items below are exhibits of prompt text rather than coverage: what is read off them
+is the definition sentence the task states, which the level does not change.
 """
 from __future__ import annotations
 

@@ -405,7 +405,7 @@ min_acceptance: 0.5  # refuse a cell needing more than 2 seeds per item
 profile: FULL
 ```
 
-An unknown key is refused rather than ignored (`arggym/core/spec.py:110-115`),
+An unknown key is refused rather than ignored (`arggym/core/spec.py:121-126`),
 and `prompt_version` and `scoring_version` may be pinned the same way as
 `arggym` and `pyarg` when a spec wants to assert them.
 

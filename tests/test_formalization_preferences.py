@@ -2,6 +2,11 @@
 
 `[prefer_rule: a > b]` and `[prefer_rule: b > a]` are different directives, so the shape metric has
 to separate them - it used to compare preferences by kind alone and scored a flipped answer 1.0.
+
+The cell is an exhibit, not a sample: the flip below needs a rule preference and a premise
+preference in one reference, and level 15 is the only exported level where every ordering and seed
+carries both. Level 12 carries both at six of its eight cells, so a cell there would pass or raise
+depending on which one it was.
 """
 from __future__ import annotations
 
@@ -9,6 +14,8 @@ import pytest
 
 from arggym.aspic.engine import Operation
 from arggym.tasks import formalization
+
+PREFS = {"prefer_rule", "prefer_premise"}
 
 
 def render(ops):
@@ -19,8 +26,9 @@ def render(ops):
 def item():
     it = formalization.make_item(15, 0, formalization.WEAKEST_LINK)
     assert it is not None, "no item generated"
-    assert any(o.kind in ("prefer_rule", "prefer_premise") for o in it.reference_ops), \
-        "item carries no preference to flip"
+    kinds = {o.kind for o in it.reference_ops} & PREFS
+    assert kinds == PREFS, \
+        f"the flip is parametrized over both kinds and this item carries {kinds} (#118)"
     return it
 
 

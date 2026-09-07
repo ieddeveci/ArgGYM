@@ -24,6 +24,9 @@ from arggym.core.freeze import taskset_hash
 #: mishandles one; two tasks cover two shapes. Building all twelve takes about
 #: a second and a half.
 TASKS = tuple(sorted(arggym.task_names()))
+#: One exhibit row per task, at the cheapest cell the grid names. This suite tests the
+#: harness -- what it sends, what it does with what comes back -- and a harder item would
+#: change the price of the fixture and nothing it asserts.
 LEVEL, ORDERING, SEED = 3, "last_link_elitist", 0
 
 

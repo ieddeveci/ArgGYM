@@ -12,6 +12,13 @@ compliance charged to the reasoning score -- the confound #10 measures at 0.180.
 `defeat_diagnosis` is different and its fix stayed: a `survives_because` written
 under a record that named no defeater was credited to the record above it, which
 is a wrong answer rather than a formatting choice.
+
+The cells are exhibits rather than coverage: every answer below is a mechanical
+transform of the item's own gold -- a pair joined onto one line, a sentence spliced
+in, a reason written under the wrong record -- so a sweep would vary the theory and
+leave the formatting rule under test where it was. Two tests read the cell as well:
+one needs a negated claim in the gold, and the malformed-record test skips a cell
+that asks for no survival reason.
 """
 from __future__ import annotations
 

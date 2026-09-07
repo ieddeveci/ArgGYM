@@ -9,6 +9,10 @@ whole guard rather than the innermost comparison, because `level >= 4 and level 
 varies in isolation and fires at no level the branch can be reached at. Two holes remain,
 both requiring the level to leave the expression: aliasing it through an intermediate
 variable, and offsetting it by a named constant.
+
+GRID is the exported grid and has to stay it. Every condition #30 and #69 shipped varies
+over levels 1-15 and collapses only on the grid -- `level % 3 != 0` is the case -- so
+sweeping the check over every level would retire the bug class it was written for.
 """
 from __future__ import annotations
 
