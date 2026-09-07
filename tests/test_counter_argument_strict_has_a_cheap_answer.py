@@ -2,21 +2,24 @@
 
 `counter_argument_strict` asks whether the model finds the cheapest answer when a strict
 rule is permitted. The one-directive strict counter-argument only wins when no chain
-reaching the target ends in a strict rule -- otherwise it contradicts that chain instead
+reaches the target through a strict rule -- otherwise it contradicts that chain instead
 of defeating it, and the framework is inconsistent.
 
 Below level 6 there are two or three chains and `n_strict` floored at one, so a
 strict-final chain always reached the target and the shortcut never existed. The cheapest
 level-3 item cost three directives where level 6 cost one, which is the inversion #32
-reports; levels 4 and 5 had it too, off the exported grid.
+reports; levels 4 and 5 had it too, off the exported grid. The draw at levels 3 to 5
+zeroes `n_strict` for the strict arm alone on about half those items, which is where the
+one-directive answer comes from now and the only place it comes from.
 
-From level 6 the shortcut arrives by a different route, `mid_target`, which is gated on
-`seed % 2 == 1`. So the level-6 assertions below hold only while `SEEDS` contains an odd
-number, and that is asserted rather than assumed.
+Level 6 used to have it too, by a second route: `mid_target` put the target before the
+chain's strict rule, so no chain reached the target strictly whatever `n_strict` said.
+That route was the defect in #93 and it is gone, so the levels are split below -- the
+draw levels must offer the one-directive answer, level 6 must not.
 
-The one-directive answer is not the only strict answer any more. Where a chain does reach
-the target strictly, the generator breaks it first and the strict answer costs 1 + k for
-the k chains that block (#37), which is why the cheapest-answer question these tests ask
+The one-directive answer is not the only strict answer. Where a chain does reach the
+target strictly, the generator breaks it first and the strict answer costs 1 + k for the
+k chains that block (#37), which is why the cheapest-answer question these tests ask
 stays "is there a one-directive answer here" while the ablation's own question, "does the
 strict arm answer more cheaply than the plain one", is asked next door in
 tests/test_the_strict_ablation_asks_its_own_question.py.
@@ -30,7 +33,10 @@ from arggym.tasks import counter_argument as ca
 
 GRID = LEVELS
 CHEAP_LEVELS = (3, 6)
+#: Where the entry-level draw may zero `n_strict` for the strict arm alone (#32).
 DREW_LEVELS = (3, 4, 5)
+#: The entry level above the draw, and the level `mid_target` enters at.
+ABOVE_THE_DRAW = (6,)
 
 
 def _minimums(level, allow_strict):
@@ -43,27 +49,35 @@ def _minimums(level, allow_strict):
     return out
 
 
-def test_the_level_six_route_is_reachable_from_the_exported_seeds():
-    """`mid_target` needs an odd seed, so the level-6 assertions below rest on `SEEDS`."""
-    assert any(s % 2 == 1 for s in SEEDS), (
-        f"no odd seed in {SEEDS}, so no level-6 item takes the mid-chain target and the "
-        f"tests below would fail for a reason that has nothing to do with #32")
-
-
-@pytest.mark.parametrize("level", sorted(set(CHEAP_LEVELS) | set(DREW_LEVELS)))
+@pytest.mark.parametrize("level", DREW_LEVELS)
 def test_some_item_at_this_level_admits_the_one_directive_answer(level):
     mins = _minimums(level, allow_strict=True)
     assert 1 in mins, (f"no level-{level} item has a cheap strict answer, so the ablation "
                        f"has nothing to measure there: {sorted(mins)}")
 
 
-@pytest.mark.parametrize("level", sorted(set(CHEAP_LEVELS) | set(DREW_LEVELS)))
+@pytest.mark.parametrize("level", DREW_LEVELS)
 def test_not_every_item_at_this_level_admits_it(level):
     """The question is whether a shortcut exists here, so it must not always exist."""
     mins = _minimums(level, allow_strict=True)
     assert any(m > 1 for m in mins), (
         f"every level-{level} item takes the same one-directive answer, so the variant is "
         f"answerable without reading the theory: {sorted(mins)}")
+
+
+@pytest.mark.parametrize("level", ABOVE_THE_DRAW)
+def test_no_item_above_the_draw_admits_the_one_directive_answer(level):
+    """The other half of the split: the draw is the only source of the cheap answer.
+
+    Level 6 is the entry level above the draw and the level `mid_target` enters at, so it
+    is where the second route showed up. The rest of the grid is checked in
+    tests/test_neither_arm_answers_from_the_question_line_and_one_grep.py, which scores the
+    fixed line rather than reading its cost.
+    """
+    mins = _minimums(level, allow_strict=True)
+    assert min(mins) > 1, (
+        f"a level-{level} item answers with the fixed line "
+        f"[strict cs: <premise> -> -<target>] and nothing else: {sorted(mins)}")
 
 
 def test_the_entry_level_is_not_dearer_than_the_one_above_it():

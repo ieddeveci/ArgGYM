@@ -172,6 +172,26 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     strict_flags = [i < n_strict for i in range(n_chain)]
     rng.shuffle(strict_flags)
     junction = next(it) if (mid_target and depth >= 3 and n_chain >= 2) else None
+    # The junction may not be a chain's first rule. Both arms break a chain by undercutting
+    # `rules[0]`, so a strict rule there leaves the target derived from an ordinary premise
+    # with nothing defeasible under it: no rebuttal, no undercut and no undermining
+    # candidate holds, `build` answers Rejected("no_minimal_subset"), and the mid-chain
+    # target leaves levels 6 to 9 -- the whole depth-3 band, of which the grid exports 6
+    # and 9 -- the way #40 emptied 10-14.
+    #
+    # `depth` is `max(2, min(2 + level * 3 // 15, 5))` above, so it takes only the values 2
+    # to 5 and this expression is 1 at every one of them. It is a constant on the current
+    # curriculum, and written as the rule rather than as `1` so that a longer depth curve
+    # keeps the junction mid-chain instead of pinned one rule in forever. The level-switch
+    # family in tests/test_level_switches_vary_on_the_grid.py does not report the constancy
+    # because it reads guards that turn on a modulo of the level, and this turns on
+    # `depth`; it is recorded here rather than caught there.
+    jpos = max(1, depth // 2 - 1)
+    # The rule that reaches the target, and so the one the strict flag names. Left on the
+    # last rule, a mid-target chain reached the target defeasibly however many strict rules
+    # it carried past it, nothing contradicted the strict counter-argument, and
+    # `[strict cs: <premise> -> -<target>]` was the whole answer on every odd seed (#93).
+    tgt_j = jpos if junction is not None else depth - 1
     j_budget = junctions_for(level, max(1, n_chain * depth))
     for ci in range(n_chain):
         root = next(it)
@@ -191,11 +211,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             last = j == depth - 1
             if last:
                 nxt = apex
-            elif junction is not None and j == depth // 2 - 1:
+            elif junction is not None and j == jpos:
                 nxt = junction
             else:
                 nxt = next(it)
-            strict = ax_strict or (last and strict_flags[ci])
+            strict = ax_strict or (j == tgt_j and strict_flags[ci])
             _per = max(0, j_budget // max(1, n_chain))
             if j_budget and _per == 0 and ci < j_budget:
                 _per = 1
@@ -203,7 +223,14 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             if _per and depth >= 2:
                 _stepj = max(1, (depth - 1) // (_per + 1))
                 _jpts = {min(depth - 2, _stepj * (z + 1)) for z in range(_per)}
-            if (not strict and not last and j in _jpts):
+            # `not strict` used to guard this too, back when the flag could only land on
+            # the chain's last rule and `not last` already excluded it. With the flag on
+            # the target-reaching rule the guard started firing, and at depths 3 to 5 the
+            # splice point and the junction are the same index, so every strict chain lost
+            # its junction: 5 of them at level 12 became 2. The spliced rule follows the
+            # flag instead. `rules[0]` stays defeasible either way, so the break move both
+            # arms make is untouched.
+            if (not last and j in _jpts):
                 _extra = []
                 for _e in range(2 if wants_ternary(level, ci) else 1):
                     broot = next(it)
@@ -219,13 +246,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                     _extra.append(blit)
                 ridx += 1
                 nm = f"d{ridx}"
-                ops.append(Operation(kind="defeasible", name=nm,
+                ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
                                      antecedents=tuple([cur] + _extra), consequent=nxt))
             else:
                 ops.append(Operation(kind="strict" if strict else "defeasible", name=nm,
                                      antecedents=(cur,), consequent=nxt))
             rules.append((nm, nxt, strict))
-            if junction is not None and j == depth // 2 - 1:
+            if junction is not None and j == jpos:
                 tgt_idx = len(rules) - 1
             cur = nxt
         chains.append({"root": root, "rules": rules, "strict_final": strict_flags[ci],
@@ -242,7 +269,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         else:
             target = cand
             target_chains = supporters
-            target_rule_idx = depth // 2 - 1
+            target_rule_idx = jpos
     else:
         target = apex
         target_chains = chains
@@ -400,9 +427,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         # The strict counter-argument alone wins only where every chain reaching the
         # target ends in a defeasible rule: it rebuts those for free, while a chain that
         # reaches the target strictly derives the contrary of a strict conclusion and the
-        # framework is inconsistent. Whether such a chain exists was decided by `seed % 2`
-        # through `mid_target`, so on even seeds the strict arm fell back on the plain
-        # arm's answer and the two shipped the same reference (#37).
+        # framework is inconsistent. Whether such a chain exists is `n_strict`'s business
+        # alone: the flag names each chain's target-reaching rule, so a mid-target chain
+        # blocks the shortcut exactly as a last-rule one does. It was `seed % 2` through
+        # `mid_target` instead, which is why the even seeds shipped the plain arm's answer
+        # (#37) and the odd ones a fixed one-liner (#93).
         #
         # So break those chains first, one undercut of the chain's first rule each -- the
         # same move the plain path already makes for a strict-final chain. The answer then
@@ -478,6 +507,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         metadata={
             "allow_strict": allow_strict, "n_axiom_strict_chains": n_axiom_strict,
             "n_chains": n_chain, "chain_depth": depth,
+            # Chains whose *target-reaching* rule is strict, which is the junction rule on
+            # a mid-target item and the last one otherwise. The name says "final" because
+            # the flag sat on `last`; `tgt_j` is what replaced that and made the name
+            # wrong. Renaming it is left out for scope rather than for the hash, which this
+            # change moves anyway (#93).
             "n_strict_final": sum(1 for c in chains if c["strict_final"]),
             "mid_chain_target": target_rule_idx is not None,
             "decoy_present": bool(decoy_rule), "contested_seed": contested,
