@@ -2,12 +2,12 @@
 
     uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 
-Two rules, both from `docs/dataset-contract.md` section 10.
+Two rules and a definition, all from `docs/dataset-contract.md` section 10.
 
 Chance floors are printed beside the scores, because a score means nothing
-without the number a constant answer gets: at level 3 `semantics_query` sits at
-0.490 and `status_query` at 0.375, so a model scoring 0.45 on the first is doing
-worse than answering the same thing every time.
+without the number an uninformed answer gets: at level 3 `semantics_query` sits
+at 0.806 and `status_query` at 0.375, so a model scoring 0.45 on the first is
+doing worse than answering the same thing every time.
 
 There is no overall mean. Twelve metrics of four kinds, with floors spanning half
 the range, do not average into a quantity; the number that comes out moves mostly
@@ -147,7 +147,7 @@ def task_table(runs: List[Dict[str, Any]], field: str, show_floor: bool = True) 
     run-wide rather than per task.
 
     `show_floor` is off for `success_rate`: a floor is the mean *score* of the
-    best constant strategy (`arggym/core/floors.py`), so printing it beside a
+    best uninformed strategy (`arggym/core/floors.py`), so printing it beside a
     success rate invites exactly the comparison it exists to prevent.
     """
     tasks = sorted({t for m in runs for t in m["by_task"]})
@@ -233,8 +233,8 @@ def render(runs: List[Dict[str, Any]]) -> str:
         "of.", "",
         task_table(runs, "mean"), "",
         "## Chance-corrected, by task", "",
-        "`(score - floor) / (1 - floor)`. Negative means worse than a constant "
-        "answer.", "",
+        "`(score - floor) / (1 - floor)`. Negative means worse than the best "
+        "uninformed answer.", "",
         task_table(runs, "corrected"), "",
         "## Success rate, by task", "",
         "The task's own definition of a fully correct answer, which is not "
@@ -260,7 +260,7 @@ def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
     # comment describe a check that could not fire.
     fields = ["run", "task", "level", "ordering", "n", "n_scored", "n_untruncated",
               "n_api_error", "n_scorer_refused", "mean", "mean_untruncated",
-              "success_rate", "floor", "corrected", "floor_error",
+              "success_rate", "floor", "floor_strategy", "corrected", "floor_error",
               "truncated_rate", "no_answer_region_rate",
               "answer_in_cot_rate", "zero_with_region"]
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

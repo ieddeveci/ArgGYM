@@ -40,13 +40,14 @@ def freeze(
 def floors(
     taskset: Path = typer.Argument(..., help="A frozen taskset JSONL."),
 ) -> None:
-    """What a constant answer scores on each task.
+    """What an uninformed answer scores on each task.
 
     A score means nothing without the number an uninformed answer gets, and a
     floor is a property of the scorer, so it moves whenever scoring policy does.
     """
     import json
 
+    from arggym.core.floors import floor_strategy
     from arggym.core.floors import floors as measure
 
     rows = []
@@ -56,9 +57,12 @@ def floors(
             rows.append(first)
         rows.extend(json.loads(line) for line in f)
 
-    typer.echo(f"{'task':26s} {'n':>4s} {'floor':>7s}  best constant answer")
+    # The strategy, not just the number: a floor of 0.000 from `empty` says the
+    # search found nothing that fits the answer format, and a floor a fitted map
+    # reached is only readable beside the map.
+    typer.echo(f"{'task':26s} {'n':>4s} {'floor':>7s}  best uninformed answer")
     for task, v in measure(rows).items():
-        typer.echo(f"{task:26s} {v['n']:4d} {v['floor']:7.3f}  {v['strategy']}")
+        typer.echo(f"{task:26s} {v['n']:4d} {v['floor']:7.3f}  {floor_strategy(v)}")
     typer.echo("\nReport these beside the scores. A result below its floor is "
                "worse than answering the same thing every time.")
 

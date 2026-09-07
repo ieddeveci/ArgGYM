@@ -53,7 +53,7 @@ from arggym.core.answers import (
     extract_answer,
 )
 from arggym.core.dataset import BuildFailed, ConcatDataset, TaskDataset, create, from_spec
-from arggym.core.floors import corrected, floors
+from arggym.core.floors import FLOORS_VERSION, corrected, floor_strategy, floors
 from arggym.core.freeze import taskset_hash
 from arggym.core.registry import TaskSpec, task_names
 from arggym.core.registry import get as get_task
@@ -74,7 +74,8 @@ __all__ = [
     "extract_answer", "ScoreResult", "UnparseableAnswer",
     "AnswerTemplate", "XML_TAGS", "DEFAULT_TEMPLATE",
     # reading a score
-    "floors", "corrected", "score_row", "score_row_value", "MissingField",
+    "floors", "floor_strategy", "corrected", "FLOORS_VERSION", "score_row",
+    "score_row_value", "MissingField",
     # tasksets
     "TasksetSpec", "SeedPolicy", "load_spec", "taskset_hash",
     # serialization

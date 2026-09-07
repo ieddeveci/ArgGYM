@@ -78,32 +78,42 @@ weighted blend for `formalization`. An unweighted mean over them moves mostly
 with which tasks are in the basket, which is a property of the basket rather
 than of the model.
 
-**Against the chance floor.** A constant answer is worth measuring on every
+**Against the chance floor.** An uninformed answer is worth measuring on every
 task, and on four of them it is worth a lot. Measured at level 3:
 
-| task | floor | the constant that earns it |
+| task | floor | the answer that earns it |
 |---|---|---|
-| `semantics_query` | 0.490 | answer "justified" to every query |
-| `status_query` | 0.375 | the same |
+| `semantics_query` | 0.806 | "undecided" under grounded, "justified" under credulous preferred |
+| `status_query` | 0.375 | answer "justified" to every query |
 | `claim_chain` | 0.190 | hand the theory back |
-| `perturbation` | 0.178 | one status for every literal in the theory |
-| the other eight | 0.000 | engine-checked, so no constant reaches a goal |
+| `perturbation` | 0.147 | one status for every literal in the theory |
+| the six engine-checked tasks | 0.000 | no fixed answer reaches a goal |
+| `formalization`, `defeat_diagnosis` | 0.000 | the search carries nothing that fits their answer format |
+
+The last row is a gap in the instrument, not a property of those two tasks: both
+are scored by their module rather than by the engine, and an answer shaped like
+their format does score. The floor is the best of what was searched, so it is a
+lower bound on what an uninformed answer gets, and the strategy is printed
+beside it so the two zeroes above never read as one.
 
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report
-floors beside the scores. They are a property of the scorer, so `arggym floors
-<taskset>` re-measures them from the rows and they move whenever
-`scoring_version` does. If a single headline number is wanted, chance-correct
-per task first: `(score - floor) / (1 - floor)`, which is `arggym.corrected`.
+floors beside the scores. They are a property of the scorer and of the search
+that measures them, so `arggym floors <taskset>` re-measures them from the rows,
+and they move when `scoring_version` moves or when `FLOORS_VERSION` does -- the
+change that gave `semantics_query` the map above moved its floor from 0.459 to
+0.671 with no scorer change at all. A scoring artifact records both. If a single
+headline number is wanted, chance-correct per task first:
+`(score - floor) / (1 - floor)`, which is `arggym.corrected`.
 
-**The constant floor understates `semantics_query`.** That table measures one
-constant string. A short program that reads the theory as text and computes no
-extension does much better, because the shapes the generator uses are
-recognisable. On the stable column, 81.4% of answers (503 of 618, over 400
-items) fall to such a program: 51.8% to a rule that finds the literals carrying
-an odd ring of undercuts and reads which side of the contested pair they stand
-on, and the rest to a constant. The same program gets 53.2% before the odd-cycle
-cluster existed, when stable duplicated sceptical preferred and any rule that
-worked on one worked on both.
+**A program that computes no extension beats the floor on `semantics_query`.**
+That table measures a fixed map, one status per semantics. A short program that
+reads the theory as text and computes no extension does better, because the
+shapes the generator uses are recognisable. On the stable column, 81.4% of
+answers (503 of 618, over 400 items) fall to such a program: 51.8% to a rule
+that finds the literals carrying an odd ring of undercuts and reads which side
+of the contested pair they stand on, and the rest to a constant. The same
+program gets 53.2% before the odd-cycle cluster existed, when stable duplicated
+sceptical preferred and any rule that worked on one worked on both.
 
 The cluster hangs its ring one rule away from the literal the question asks
 about, so the program needs a lookup to connect them. That is a lookup, not an
@@ -113,9 +123,11 @@ all, so a benchmark that asks about stable has to build one and cannot then hide
 it. Read the stable column as measuring whether a model finds that structure,
 not as evidence it computed an extension.
 
-This is why a floor from a constant is the wrong instrument for a task asking
-about five semantics at once: each column has its own floor and the pooled
-number hides the spread. #95 tracks that.
+No floor bounds that program, and none should: a floor is what an answer that
+never reads the theory gets (`docs/dataset-contract.md` section 10), and this
+one reads it. What the floor does now carry is the spread between the columns,
+which a single constant pooled away: one status per semantics is worth 0.671
+over the shipped grid against 0.459 for the best single constant (#95).
 
 **`success` and `mean_score` are not the same question.** For the construction
 tasks `success` means every goal met with the theory consistent; economy is a

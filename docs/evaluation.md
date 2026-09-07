@@ -157,7 +157,7 @@ to a quantity: the number that comes out moves mostly with which tasks are in
 the basket.
 
 Floors are printed beside every mean for the same reason. At level 3
-`semantics_query` sits at 0.490 and `status_query` at 0.375, so a model scoring
+`semantics_query` sits at 0.806 and `status_query` at 0.375, so a model scoring
 0.45 on the first is doing worse than answering the same thing every time. Where
 one figure per task is wanted, the chance-corrected column is
 `(score - floor) / (1 - floor)`, which is at least the same quantity across
@@ -175,8 +175,8 @@ named in `_meta.floors_unmeasured` rather than left as a blank cell that reads
 like a task with no floor.
 
 There is no floor column beside the success-rate table. A floor is the mean
-*score* of the best constant answer, not its success rate, and printing it there
-would invite exactly the comparison it exists to prevent.
+*score* of the best uninformed answer, not its success rate, and printing it
+there would invite exactly the comparison it exists to prevent.
 
 ## Resuming, filtering, and what is refused
 

@@ -119,7 +119,7 @@ a model's text to `reference_answer` is wrong on those six.
 ## Reading a score
 
 Per task, never as an unweighted mean, and against the chance floor. `arggym floors <taskset>`
-measures what a constant answer gets, and `arggym.corrected` rescales a score so chance is zero.
+measures what the best uninformed answer gets, and `arggym.corrected` rescales a score so chance is zero.
 `docs/dataset-card.md` says why, and what a high score does *not* license.
 
 ## Documentation
@@ -179,7 +179,7 @@ rewriting these files.
 | `prompting.py` | The notation contract, written once: the legal forms, the naming rule, the antecedent rule and the minimality factor, stating what `scoring.py` enforces. Four blocks cover the seven variants that need one, because what an item permits is not a single axis, and each block's docstring names the scoring policy behind its clauses. A block is identical on every item of a variant, so its content leaks nothing about the theory. |
 | `nlforms.py` | The natural-language surface forms `formalization` writes its prose from, taken from the ASPIC+ and argumentation-schemes literature: eighteen construct banks holding 128 forms between them, plus the connectives that join them. Vocabulary is shared across banks where it can be, so that one word rarely decides which construct a sentence encodes. |
 | `spec.py`, `freeze.py` | A taskset is a spec file. `freeze` fills each cell to the size asked for, refuses a cell it cannot fill, and records every skipped seed with its reason. |
-| `floors.py` | What a constant answer scores, per task. A floor is a property of the scorer, so it is measured from rows rather than written down. |
+| `floors.py` | What an uninformed answer scores, per task -- one constant per item, or one per key group where the answer key has a component the task fixes. A floor is a property of the scorer, so it is measured from rows rather than written down. |
 | `serialize.py` | Operations to JSON and back, with `theory_schema` versioned apart from the package. |
 
 ---

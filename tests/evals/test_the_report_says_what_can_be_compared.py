@@ -1,7 +1,7 @@
 """Reporting rules from `docs/dataset-contract.md` section 10.
 
 Chance floors beside the scores, because at level 3 `semantics_query` sits at
-0.490 and a model scoring 0.45 there is doing worse than answering the same thing
+0.806 and a model scoring 0.45 there is doing worse than answering the same thing
 every time. And no unweighted mean across tasks: twelve metrics of four kinds,
 with floors spanning half the range, average into a number that moves mostly
 with which tasks are in the basket. The previous harness published one anyway
