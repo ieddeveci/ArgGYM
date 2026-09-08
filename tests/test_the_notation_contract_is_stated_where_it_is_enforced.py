@@ -26,15 +26,23 @@ What this does NOT catch:
   `all_directives_illegal`, `engine_rejected` and `goal_not_met`.
 - It reaches the six engine-scored tasks and no others. The six `MODULE`-scored tasks
   score their own answers, and each of them zeroes the whole answer on a single stray
-  token -- `unparseable_tokens` on four of them and `unparseable_lines` on
-  `formalization` and `perturbation`. `formalization` now says so, because its answer is
-  the same DSL and `prompting.UNREADABLE` is already the right sentence for it; the other
-  five answer in five other shapes and need five sentences of their own, which is #125.
-  `claim_chain` is the one to read carefully there: its parser falls back to whole lines
-  when the answer quotes nothing, so a fully prose answer parses and scores 0.0 with
-  reason `ok` rather than raising. The rule it needs stated is still real -- prose mixed
-  in *among* quoted directives does raise -- but its sentence cannot promise a stray word
-  will be reported as unreadable.
+  word: appending `therefore` to a shipped reference scores 0.0 on all 40 rows of each,
+  and on all 480 rows of the taskset. All six now state it, `formalization` through
+  `prompting.UNREADABLE` because its answer is the same DSL, and the other five through
+  `prompting.STRAY_TEXT`, whose noun is their own answer-format clause instead (#125).
+  Those five are guarded in `tests/test_query_tasks_score_a_bare_answer.py` and in
+  `TERMINAL_CLAUSE` (`tests/test_delimiters_are_delivery_not_content.py`), not here: the
+  table below is engine-shaped, since `_reachable` derives from engine policy keys and
+  `test_a_rule_a_question_cannot_reach_is_left_out_of_it` asserts absence.
+  `claim_chain` is the one to read carefully, on a *prose-only* answer rather than on a
+  stray word: with no brackets anywhere its parser falls back to whole lines, so such an
+  answer reports `ok` rather than raising, and scores 0.0 on all 40 rows anyway because
+  gold comes from `render_op`, which brackets every line. So the sentence states an
+  outcome and promises no reason string. Its behavioural guard covers the refusal the
+  other case takes, not that bracketing.
+- `defeat_diagnosis` zeroes a whole answer a second way, on a `kind:` word outside its
+  three, and states that in `defeat_diagnosis.KIND_RULE`. No reason in the table below
+  covers it either: `invalid_kind` comes from the module parser, not `core/scoring.py`.
 """
 from __future__ import annotations
 
@@ -203,6 +211,26 @@ def test_a_rule_a_question_cannot_reach_is_left_out_of_it(task, questions):
         assert _flat(phrase) not in q, (
             f"{task} states {reason}, which its own answers cannot produce")
     assert checked, f"{task}: every clause is reachable, so this proves nothing"
+
+
+def test_notation_md_states_the_module_rules_no_row_of_the_table_reaches():
+    """The three lines #125 added, and the only assertion behind any of them.
+
+    `CLAUSES` is keyed by a reason `core/scoring.py` appends, and none of these three has
+    one. The stray-word rule is enforced by five separate module parsers, `invalid_kind`
+    by `defeat_diagnosis.parse`, and `perturbation` was named nowhere in the document at
+    all. The test below flattens the whole file and checks the rows of that table, so it
+    is satisfied by these sentences without being able to see them go: deleting any of
+    the three left the suite green.
+    """
+    doc = _flat((ROOT / "NOTATION.md").read_text())
+    assert _flat("Anything else outside the lines a shape below asks for -- a word of "
+                 "prose, a label, a heading -- scores the whole answer zero.") in doc, (
+        "section 6 no longer states what text outside the answer lines costs")
+    assert _flat("`kind` takes one of those three words in any capitalisation") in doc, (
+        "the diagnosis entry no longer states the kind rule")
+    assert _flat("**Status queries** (status query, perturbation)") in doc, (
+        "the status-query entry no longer names perturbation")
 
 
 def test_notation_md_states_every_rule_the_scorer_enforces():

@@ -35,9 +35,10 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: Bumped when the row a harness reads changes shape or wording: the rendered
 #: question for any reason, and the metadata schema too. Either half moves it on
 #: its own. Version 5 removed `answer_template`, which moved `taskset_hash`
-#: without moving a single question; version 6 states two rules the scorer was
-#: already enforcing, which moves 280 of the 480 questions and no metadata at all.
-PROMPT_VERSION = 6
+#: without moving a single question; versions 6 and 7 each state rules the scorer
+#: was already enforcing, and so move questions and no metadata at all -- the 280
+#: engine-scored and `formalization` questions at 6, the remaining 200 at 7.
+PROMPT_VERSION = 7
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:

@@ -13,7 +13,7 @@ from arggym.core.answers import ScoreResult, UnparseableAnswer
 from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
-from arggym.core.prompting import answer_format
+from arggym.core.prompting import STRAY_TEXT, answer_format
 from arggym.core.spec import ALL_ORDERINGS
 
 TASK = "semantics_query"
@@ -661,7 +661,7 @@ def _render_prompt(theory: str, queries: Sequence[Tuple[str, str]], ordering: st
                "`no stable extension`.\n" if any(s == STABLE for _, s in queries) else "")
             + "\n"
             + answer_format("Answer format: one line per query, written as "
-                            "`claim under semantics: status`."))
+                            "`claim under semantics: status`.\n" + STRAY_TEXT))
 
 
 # One whole line, as the format clause above asks for (`core/pairs.py`).

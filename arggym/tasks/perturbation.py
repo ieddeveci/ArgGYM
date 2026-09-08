@@ -17,7 +17,7 @@ from arggym.core.curriculum import (
 )
 from arggym.core.invariants import language_enrichment, randomize_rule_names
 from arggym.core.pairs import collect, pair_f1
-from arggym.core.prompting import answer_format
+from arggym.core.prompting import STRAY_TEXT, answer_format
 
 TASK = "perturbation"
 HELD_FRAC = 0.35
@@ -370,7 +370,7 @@ def _render_prompt(theory: str, pert: str, ordering: str) -> str:
             "every argument for it is defeated, and undecided otherwise.\n"
             f"{TIE_NOTE}\n\n"
             + answer_format("Answer format: one line per changed claim, written as "
-                            "`claim: status`."))
+                            "`claim: status`.\n" + STRAY_TEXT))
 
 
 # One whole line, as the format clause above asks for (`core/pairs.py`).
