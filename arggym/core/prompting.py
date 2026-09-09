@@ -44,9 +44,9 @@ UNREADABLE = "A directive that cannot be read at all scores the whole answer zer
 # their answer-format clause, and so with no `UNREADABLE`: every `MODULE`-scored task but
 # `formalization`, whose notation block took that sentence in #126. All five refuse a
 # stray word and report the refusal. Appending `therefore` on a line of its own to a
-# shipped reference gives `unparseable_tokens:1` on four of them and
-# `unparseable_lines:1` on `perturbation`, whose counter is over tokens too (#127), and
-# takes all 40 rows of each from 1.0 to 0.0 (#125).
+# shipped reference gives `unparseable_tokens:1` on all five -- `perturbation` used to say
+# `lines` while counting tokens (#127) -- and takes all 40 rows of each from 1.0 to 0.0
+# (#125).
 #
 # `claim_chain` differs only on an answer with no brackets at all, which is the
 # prose-only case rather than the case this sentence is about: `parse` falls back to whole

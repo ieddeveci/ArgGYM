@@ -121,7 +121,7 @@ def test_the_prompt_says_nothing_about_where_to_put_the_answer(task, cell):
 # defeasible rules and ordinary premises against ordinary premises and refuses everything
 # else (`arggym/aspic/engine.py`), which is what `<rule>` and `<literal>` failed to say.
 # Get the syntax wrong -- a whole rule written where its name belongs -- and it is
-# `unparseable_lines`, which zeroes the answer, which is what those two did say. So the
+# `unparseable_tokens`, which zeroes the answer, which is what those two did say. So the
 # placeholder names the kind and the thing typed.
 PREFERENCE_FORMS = ("   [prefer_rule: <defeasible rule name> > <defeasible rule name>]",
                     "   [prefer_premise: <ordinary premise literal> > <ordinary premise "
@@ -215,8 +215,8 @@ def _item(**kw):
 
 @pytest.mark.parametrize("answer, reason", [
     ("", "no_directives"),
-    ("I do not think anything can be done here.", "unparseable_lines:9"),
-    (f"{GOLD}\nbanana", "unparseable_lines:1"),
+    ("I do not think anything can be done here.", "unparseable_tokens:9"),
+    (f"{GOLD}\nbanana", "unparseable_tokens:1"),
     ("[axiom: z]", "all_directives_illegal"),
     ("[prefer_rule: d99 > d98]", "all_directives_illegal"),   # legal to write, engine rejects
     ("\n".join([GOLD] * 3), "bloated:3_used_vs_1_minimum"),

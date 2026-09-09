@@ -410,7 +410,7 @@ def parse(text: str, item: Optional[FItem] = None) -> List[Operation]:
     """
     p = parse_answer(text)
     if p.n_unparseable:
-        raise UnparseableAnswer(f"unparseable_lines:{p.n_unparseable}",
+        raise UnparseableAnswer(f"unparseable_tokens:{p.n_unparseable}",
                                 {"n_parsed": len(p.ops),
                                  "n_unparseable": p.n_unparseable})
     return p.ops
