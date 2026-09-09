@@ -117,6 +117,18 @@ def reference_score(entry: Dict[str, Any]) -> float:
     return score_row(entry["reference_answer"], entry).score
 
 
+def minimum_unproven(entry: Dict[str, Any]) -> bool:
+    """Whether the row's stated minimum is a bound the search gave up on.
+
+    The six construction generators write `minimality_proven` into the item's
+    statistics, which the row carries under `metadata.gold.metadata`. Only an
+    explicit `False` counts: a task with no minimum search writes nothing there,
+    and nothing is not a failed proof.
+    """
+    stats = (entry.get("metadata", {}).get("gold", {}) or {}).get("metadata") or {}
+    return stats.get("minimality_proven") is False
+
+
 def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
               ) -> Tuple[List[Dict[str, Any]], CellReport]:
     """Scan seeds until the cell has `take` items, or fail naming the cell."""
@@ -153,11 +165,12 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
             # the freeze; a stated minimum 5.5x the real one is the same class of
             # claim, and the flag that says so was read by nothing. The seed is
             # skipped and named, the way a seed that built nothing is.
-            report.build_rejections["minimality_unproven"] = \
-                report.build_rejections.get("minimality_unproven", 0) + 1
+            reasons = {**built.reasons, "minimality_unproven": 1}
+            report.build_rejections["minimality_unproven"] = (
+                report.build_rejections.get("minimality_unproven", 0) + 1)
             report.seeds_skipped.append({"seed": seed, "tries": built.calls,
                                          "reason": "minimality_unproven",
-                                         "reasons": {"minimality_unproven": 1}})
+                                         "reasons": dict(sorted(reasons.items()))})
             continue
         entry["metadata"]["reference_score"] = reference_score(entry)
         entry["metadata"]["source_index"] = len(rows)
@@ -190,18 +203,6 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
             f"not a setting: lower min_build_acceptance deliberately or fix what the "
             f"reasons name.")
     return rows, report
-
-
-def minimum_unproven(entry: Dict[str, Any]) -> bool:
-    """Whether the row's stated minimum is a bound the search gave up on.
-
-    The six construction generators write `minimality_proven` into the item's
-    statistics, which the row carries under `metadata.gold.metadata`. Only an
-    explicit `False` counts: a task with no minimum search writes nothing there,
-    and nothing is not a failed proof.
-    """
-    stats = (entry.get("metadata", {}).get("gold", {}) or {}).get("metadata") or {}
-    return stats.get("minimality_proven") is False
 
 
 def taskset_hash(rows: List[Dict[str, Any]]) -> str:
