@@ -146,6 +146,14 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     n_strict = 0 if level < 3 else min(n_chain, 1 + (level - 3) // 4)
     if allow_strict and 3 <= level < 6 and stable_seed(seed, level, ordering, "cas") % 2 == 0:
         n_strict = 0
+    # From level 9 the decoy path answers the plain arm with one undercut per strict
+    # chain and none for the defeasible chain that carries the killer rule, so with one
+    # defeasible chain the plain arm costs 1 + k -- exactly the strict arm's 1 + k, and
+    # the two arms shipped one answer at level 11 seed 0 on all four orderings (#109).
+    # Two defeasible chains keep a preference in the plain arm's answer. Levels 9, 10
+    # and 12 to 15 already leave two or more, so this binds at 11 alone.
+    if level >= 9:
+        n_strict = min(n_strict, n_chain - 2)
     n_axiom_strict = 0
     use_decoy = level >= 9 and n_strict < n_chain
     # Not `or allow_strict`. The strict variant is an ablation: it must hold the theory
