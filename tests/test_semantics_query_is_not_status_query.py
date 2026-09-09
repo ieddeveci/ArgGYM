@@ -14,11 +14,13 @@ from arggym.core.spec import ALL_ORDERINGS, LEVELS, SEEDS
 from arggym.tasks import semantics_query as sq
 
 GRID = LEVELS
-CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
-
 # The schedule is a dict lookup, so asking it about every level costs nothing and a
 # level the grid skips today is a level a spec may name tomorrow.
 SCHEDULE = tuple(range(1, 16))
+# Every level, not the exported five: the invariant held on the grid and failed on the
+# two levels below it, where the schedule asked grounded alone (#108). An item builds in
+# well under a second at every level, so the sweep is cheap.
+CELLS = [(lv, o, s) for lv in SCHEDULE for o in ALL_ORDERINGS for s in SEEDS]
 
 IMPLEMENTED = (sq.GROUNDED, sq.SCEPT_PREF, sq.CRED_PREF, sq.STABLE, sq.EAGER)
 
@@ -30,14 +32,7 @@ def test_every_implemented_semantics_reaches_some_level():
                              f"no level, so the code paths ship dead")
 
 
-# Strict, so the day #108 is settled these xpass and the marker has to go.
-BELOW_THREE = pytest.mark.xfail(strict=True, reason=(
-    "#108: SEMANTICS_BY_LEVEL schedules grounded alone below level 3, so the task is "
-    "status_query reworded there; whether it should exist there is a curriculum decision"))
-
-
-@pytest.mark.parametrize("level", [pytest.param(lv, marks=[BELOW_THREE] if lv < 3 else [])
-                                   for lv in SCHEDULE])
+@pytest.mark.parametrize("level", SCHEDULE)
 def test_every_level_asks_past_grounded(level):
     assert set(sq.semantics_for(level)) - {sq.GROUNDED}, (
         f"level {level} resolves to {sq.semantics_for(level)}, which is status_query reworded")
