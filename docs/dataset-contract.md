@@ -402,6 +402,7 @@ seeds:
   take: 2            # items required per cell
   scan_limit: 40     # refuse the cell past this
 min_acceptance: 0.5  # refuse a cell needing more than 2 seeds per item
+min_build_acceptance: 0.1  # refuse a cell keeping under 1 candidate in 10
 profile: FULL
 ```
 
@@ -450,8 +451,19 @@ Read `build_acceptance_rate` when asking whether a cell is healthy, and only
 against another export of the same `seeds.take`: the scan stops as soon as the
 cell is full, so the same cell reports 0.14 at `take: 2` and 0.13 at `take: 4`.
 Two exports whose reasons move while the hash holds mean a generator changed what
-it discards without changing what it ships. `min_acceptance` still gates the seed
-rate alone, which is a decision left open on #72.
+it discards without changing what it ships. `min_acceptance` gates the seed rate,
+which is 1.00 on every cell of the standard grid, so it cannot fire there;
+`min_build_acceptance` gates the candidate rate the retry loop reports, and the
+standard spec sets it just under the thinnest cell measured (#114). A spec that
+names neither keeps the seed guard alone.
+
+One more reason a seed is skipped comes after `build` rather than from it:
+`minimality_unproven`. The six construction generators write `minimality_proven`
+into the row's statistics, and a row whose minimum search ran out of budget
+carries an upper bound under the name of a minimum -- on the one such row of the
+standard grid it said 55 where 10 suffice, so its bloat gate admitted five times
+what it should (#124). The freeze skips that seed and names it, the way it names
+a seed that built nothing.
 
 ### `profile` is recorded, and refused
 
