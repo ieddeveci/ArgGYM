@@ -20,7 +20,7 @@ What this does NOT catch:
 - The completeness assertion is a source scan for `reasons.append(f"...")` literals. A
   reason built in a loop, or assembled from a variable, slips past it -- and so does one
   returned through `failed(...)`, which is where three of the rows below come from
-  (`bloated`, `unparseable_lines`, `inconsistent_theory`). Those three are hand-
+  (`bloated`, `unparseable_tokens`, `inconsistent_theory`). Those three are hand-
   maintained, and a fourth added tomorrow fails nothing. Four more zeroing outcomes are
   outside the table altogether because no clause could state them: `no_directives`,
   `all_directives_illegal`, `engine_rejected` and `goal_not_met`.
@@ -110,7 +110,7 @@ CLAUSES: Dict[str, Clause] = {
     "bloated": Clause(
         "more than twice the fewest directives that work scores zero",
         "more than twice the fewest directives that work scores zero", appended=False),
-    "unparseable_lines": Clause(
+    "unparseable_tokens": Clause(
         "directive that cannot be read at all scores the whole answer zero",
         "directive that cannot be read at all scores the whole answer zero",
         appended=False),
@@ -148,7 +148,7 @@ def _reachable(policy: Dict) -> Set[str]:
         # naming, antecedent or premise check ever runs on one. Preferences alone cannot
         # break a consistent theory.
         return {"illegal_strict_rule", "illegal_non_preference", "bloated",
-                "unparseable_lines", "rejected_preference"}
+                "unparseable_tokens", "rejected_preference"}
     out = set(CLAUSES) - {"illegal_non_preference", "inconsistent_theory"}
     if policy.get("allow_strict"):
         # Two contraries are both JUSTIFIED only if both are firm, and firmness needs a

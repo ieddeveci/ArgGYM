@@ -105,7 +105,7 @@ def test_text_that_cannot_be_read_raises_rather_than_scoring(level):
     _, score_input = item_at("preference_construction", level)
     with pytest.raises(UnparseableAnswer) as e:
         parse("I do not think anything can be done here.", score_input)
-    assert e.value.reason.startswith("unparseable_lines:")
+    assert e.value.reason.startswith("unparseable_tokens:")
     assert e.value.diagnostics["n_unparseable"] > 0
 
 
@@ -115,7 +115,7 @@ def test_score_item_turns_that_back_into_a_row(level):
     _, score_input = item_at("preference_construction", level)
     r = score_item("I do not think anything can be done here.", score_input)
     assert r.score == 0.0 and r.success is False
-    assert r.reason.startswith("unparseable_lines:")
+    assert r.reason.startswith("unparseable_tokens:")
     assert r.diagnostics["unparseable_examples"]
 
 

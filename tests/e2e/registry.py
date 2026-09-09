@@ -27,9 +27,8 @@ LABEL_MAP, CONSTRUCTION, DIAGNOSIS, CHAIN, FORMALIZATION = (
     "label_map", "construction", "diagnosis", "chain", "formalization")
 FAMILIES = (LABEL_MAP, CONSTRUCTION, DIAGNOSIS, CHAIN, FORMALIZATION)
 
-# The reason each scorer gives an answer that carries one stray token. The shared
-# construction scorer, formalization and perturbation count lines; the others count tokens.
-UNPARSEABLE_LINES = "unparseable_lines"
+# The reason each scorer gives an answer that carries one stray token. Every scorer
+# counts tokens and says so; three of them said `lines` while counting tokens (#127).
 UNPARSEABLE_TOKENS = "unparseable_tokens"
 
 
@@ -41,7 +40,7 @@ class Adapter:
     score: Callable[[str, Any], ScoreResult]
     theory_ops: Callable[[Any], List[Operation]]  # the theory the prompt shows
     prompt: Callable[[Any], str]
-    junk_reason: str                               # UNPARSEABLE_LINES or UNPARSEABLE_TOKENS
+    junk_reason: str                               # UNPARSEABLE_TOKENS
 
 
 def _attack_defense(mode: str) -> Adapter:
@@ -52,7 +51,7 @@ def _attack_defense(mode: str) -> Adapter:
         score=lambda text, it: score_item(text, it.as_score_input()),
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
-        junk_reason=UNPARSEABLE_LINES)
+        junk_reason=UNPARSEABLE_TOKENS)
 
 
 def _counter_argument(allow_strict: bool) -> Adapter:
@@ -64,7 +63,7 @@ def _counter_argument(allow_strict: bool) -> Adapter:
         score=lambda text, it: score_item(text, counter_argument.as_score_input(it)),
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
-        junk_reason=UNPARSEABLE_LINES)
+        junk_reason=UNPARSEABLE_TOKENS)
 
 
 MODES: Dict[str, Adapter] = {
@@ -92,7 +91,7 @@ MODES: Dict[str, Adapter] = {
         score=formalization.score,
         theory_ops=lambda it: it.reference_ops,
         prompt=lambda it: it.prompt,
-        junk_reason=UNPARSEABLE_LINES),
+        junk_reason=UNPARSEABLE_TOKENS),
     "defeat_diagnosis": Adapter(
         family=DIAGNOSIS,
         make=defeat_diagnosis.make_item,
@@ -116,7 +115,7 @@ MODES: Dict[str, Adapter] = {
         score=lambda text, it: score_item(text, it.as_score_input()),
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
-        junk_reason=UNPARSEABLE_LINES),
+        junk_reason=UNPARSEABLE_TOKENS),
     "counter_argument_strict": _counter_argument(allow_strict=True),
     "counter_argument": _counter_argument(allow_strict=False),
     # PerturbItem.reference is a method, not a field.
@@ -127,7 +126,7 @@ MODES: Dict[str, Adapter] = {
         score=perturbation.score,
         theory_ops=lambda it: it.base_ops,
         prompt=lambda it: it.prompt,
-        junk_reason=UNPARSEABLE_LINES),
+        junk_reason=UNPARSEABLE_TOKENS),
     "attack": _attack_defense("attack"),
     "defence": _attack_defense("defence"),
     "attack_defense": _attack_defense("attack_defense"),

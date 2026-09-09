@@ -50,7 +50,7 @@ def test_missing_a_goal_still_says_goal_not_met():
 
 @pytest.mark.parametrize("answer,reason", [
     ("", "no_directives"),
-    ("I think the answer is probably nothing", "unparseable_lines"),
+    ("I think the answer is probably nothing", "unparseable_tokens"),
     ("[axiom: zz]", "all_directives_illegal"),
 ])
 def test_every_early_zero_names_what_went_wrong_and_is_not_a_success(answer, reason):

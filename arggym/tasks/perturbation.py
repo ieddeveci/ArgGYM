@@ -410,7 +410,7 @@ def parse(answer_text: str, item: PerturbItem) -> Value:
     junk = [t for t in residue.split()
             if t.strip(",;.-*\u2022()[]") and not re.fullmatch(r"\d+[.)]?", t)]
     if junk:
-        raise UnparseableAnswer(f"unparseable_lines:{len(junk)}",
+        raise UnparseableAnswer(f"unparseable_tokens:{len(junk)}",
                                 {"n_lines": len(matches), "n_unparseable": len(junk)})
     if not said:
         raise UnparseableAnswer("no_pairs")

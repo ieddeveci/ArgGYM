@@ -70,7 +70,7 @@ def test_a_malformed_rule_costs_the_answer_its_score():
     sneaked = it.reference + "\n[stricttest: a => b]"
     bad = score_item(sneaked, ca.as_score_input(it))
     assert bad.score == 0.0
-    assert bad.reason.startswith("unparseable_lines")
+    assert bad.reason.startswith("unparseable_tokens")
 
 
 @pytest.mark.parametrize("line,kind,name", WELL_FORMED)
