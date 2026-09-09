@@ -387,12 +387,7 @@ def dropping_a_rule(item):
             yield rule, result
 
 
-@pytest.mark.parametrize("level", [
-    pytest.param(2, marks=pytest.mark.xfail(strict=True, reason=(
-        "#121: at level 2 the item queries one claim and writes two routes to it, so "
-        "every rule is on a redundant route and no removal moves a status"))),
-    *[lv for lv in LEVELS if lv != 2],
-])
+@pytest.mark.parametrize("level", LEVELS)
 def test_formalization_fails_when_a_queried_status_moves(level):
     """Which rule the queried statuses rest on is found rather than assumed.
 
