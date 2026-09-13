@@ -6,7 +6,7 @@ parser fix, a template change or a scorer bug costs a rerun of a few seconds
 rather than the hours of inference that produced the completions.
 
     uv run python -m evals.run taskset=data/taskset.jsonl model=gpt-5-openai
-    uv run python -m evals.run model=qwen-vllm filter.levels=[3,9] filter.limit=20
+    uv run python -m evals.run model=qwen3.8-27b-vllm filter.levels=[3,9] filter.limit=20
 """
 from __future__ import annotations
 

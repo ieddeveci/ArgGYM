@@ -52,8 +52,9 @@ OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 `thinking_config`. It is passed through untouched, because validating it would
 mean this harness knowing every provider, which is the thing we are avoiding.
 
-Configs ship for OpenRouter, OpenAI, Gemini, a local vLLM and Qwen3.8 on vLLM.
-Adding another is copying one.
+Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini on AI
+Studio, and Qwen3.6-27B and Qwen3.8-27B on a local vLLM, plus a stub for running
+the pipeline without spending a token. Adding another is copying one.
 
 ### What the compatibility layers cost
 
