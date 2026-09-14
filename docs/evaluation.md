@@ -199,6 +199,13 @@ we have not met would be filed under whichever of our buckets was least wrong.
 The cost is that two providers' error tables have to be read by label rather
 than compared cell for cell.
 
+`n_requests_timed_out` is `null` whenever *any* generation in the directory was
+written without the counter, not only when an error was. A resumed directory can
+hold a stale successful generation beside newer ones, and reading that as having
+hit the wall zero times would be a measurement it never made. So a dash in that
+column means "something here was not counted", which is a generation as often as
+it is an unlabelled error.
+
 Every one of these numbers is `null`, and prints as `-` rather than `0`, on a
 run that predates the field. An absent measurement and a measurement of zero are
 different findings, and a `0` in the timeout column of a run nobody measured is

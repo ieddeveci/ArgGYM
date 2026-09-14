@@ -222,7 +222,51 @@ def test_the_timeout_a_run_used_reaches_the_file_its_latency_is_judged_by(
     assert c["near_timeout_s"] == 987.2
     assert c["n_near_timeout"] == 0
     assert c["n_latency_measured"] == len(rows)
+    # Only that it is there. These fields are published rounded to a tenth of a
+    # second -- a scale set by generations that take thousands of them -- and
+    # this stub answers in milliseconds, so its honest maximum really is `0.0`.
+    # That a request which merely succeeded gets clocked at all is pinned by
+    # `test_a_request_that_simply_succeeded_is_timed_too`, which makes the
+    # handler slow enough for the published precision to show it.
     assert c["latency_s_max"] is not None
+
+
+def test_a_request_that_simply_succeeded_is_timed_too(
+        tmp_path, rows, taskset_file, provider):
+    """The ordinary path, which every other test here reaches past.
+
+    Every latency assertion in this file was satisfiable by a number written on
+    the way out of a *failure*: a timeout writes the wall, a retry writes the
+    attempt that expired. Nothing pinned the clock on a request that just
+    worked, so a healthy 12-row run could report `attempt_latency_s: 0.0`
+    twelve times and p95 of zero seconds -- "every item infinitely far from the
+    wall", the same failure this file names for a solver with no clock in it,
+    reached through the client instead.
+
+    So the handler is deliberately slow by a known amount and the recorded
+    latency has to be at least that. A clock that is not started measures zero;
+    a clock that is started cannot measure less than the sleep.
+    """
+    slow_by = 0.2
+
+    def slow_but_fine(body):
+        time.sleep(slow_by)
+        return completion("<answer>x</answer>")
+
+    p = provider(slow_but_fine)
+    run_dir = a_run(tmp_path, p.url, rows[:2], taskset_file, timeout_s=30,
+                    concurrency=1)
+    gens = list(artifacts.read_jsonl(os.path.join(run_dir, artifacts.GENERATIONS)))
+    assert all(g["error"] is None for g in gens), gens
+    for g in gens:
+        assert g["attempt_latency_s"] >= slow_by, g
+        assert g["latency_s"] >= g["attempt_latency_s"], g
+
+    c = score_run(run_dir)["coverage"]
+    assert c["n_latency_measured"] == 2
+    assert c["latency_s_p50"] >= slow_by
+    assert c["latency_s_p95"] >= slow_by
+    assert c["latency_s_max"] >= slow_by
 
 
 def test_a_generation_near_the_wall_is_counted_and_a_fast_one_is_not():
@@ -595,6 +639,59 @@ def test_one_unclassified_error_makes_the_timeout_count_unknown():
                  timeout_s=100.0)
     assert c["n_api_timeout"] is None
     assert c["api_errors_by_kind"] == {"timeout": 1, "unclassified": 1}
+
+
+def test_an_unmeasured_generation_makes_the_wall_hit_count_unknown_too():
+    """A successful generation nobody counted is still a generation nobody
+    counted.
+
+    The guard is over every record, not only the errored ones. Scoping it to
+    errors would read a stale successful generation -- one written before the
+    counter existed, sitting in a directory beside newer ones after a resume --
+    as having hit the wall zero times, which is a measurement it never made.
+    The dash this produces can therefore mean two things, and
+    `docs/evaluation.md` says so.
+    """
+    c = coverage([a_sample(requests_timed_out=None),
+                  a_sample(requests_timed_out=0)], timeout_s=100.0)
+    assert c["n_requests_timed_out"] is None
+    # And nothing else is withheld: the latencies were measured and are given.
+    assert c["n_api_error"] == 0
+
+
+def test_the_terminal_says_not_recorded_rather_than_zero(
+        tmp_path, rows, taskset_file, provider, capsys):
+    """The line whose own comment says nobody opens `metrics.json` to check a
+    thing they have no reason to suspect yet.
+
+    `_count` and `_duration` exist for exactly one purpose -- keeping "nobody
+    measured this" apart from "this was zero" -- and on the terminal that
+    distinction is the whole message. A run with no timeout recorded and no
+    wall-hit counter is every run currently on disk.
+    """
+    from evals.score import main
+
+    p = provider(answering(rows))
+    run_dir = a_run(tmp_path, p.url, rows[:2], taskset_file)
+    path = os.path.join(run_dir, artifacts.GENERATIONS)
+    old = []
+    for g in artifacts.read_jsonl(path):
+        g.pop("requests_timed_out")
+        g["request"].pop("timeout_s")
+        old.append(g)
+    artifacts.write_jsonl(path, old)
+    run_path = os.path.join(run_dir, artifacts.RUN)
+    meta = json.load(open(run_path))
+    meta["endpoint"].pop("timeout_s")
+    artifacts.write_json(run_path, meta)
+
+    assert main([run_dir]) == 0
+    out = capsys.readouterr().out
+    assert "requests that hit the timeout: not recorded" in out, out
+    assert "timeout unknown" in out, out
+    # The two numbers that would be wrong rather than absent.
+    assert "requests that hit the timeout: 0" not in out
+    assert "timeout 0s" not in out
 
 
 def test_an_older_generations_latency_falls_back_to_the_whole_row(

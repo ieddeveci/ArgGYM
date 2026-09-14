@@ -50,22 +50,27 @@ _RETRYABLE = (408, 409, 429, 500, 502, 503, 504, 529)
 #: otherwise be scored as a wrong answer on every task.
 _ANSWERED = frozenset({"stop", "length", "eos", ""})
 
+
 def kind_of(exc: Exception) -> str:
     """Which failure an exception from the SDK was, labelled here because here is
     the only place that still has the exception. Downstream there is a sentence
     of prose and nothing else.
 
-    Narrowest first, every time. Each of these classes is a subclass of one
-    below it, so a test in the wrong order silently absorbs the case it was
-    meant to separate: `APITimeoutError` subclasses `APIConnectionError`, and
-    `APIResponseValidationError` carries a `status_code` while being a
-    malformed *body* rather than an HTTP failure -- a 200 whose JSON did not
-    parse would otherwise be filed as `http_200`. The `status_code` probe this
-    replaced had that bug, and the same bug would have hidden every timeout if
-    the two connection classes had been tried the other way round.
+    Two separate reasons for the shape of this, and only one of them is about
+    order.
 
-    `isinstance` against `APIStatusError`, not `getattr(exc, "status_code")`,
-    for the same reason: the attribute says nothing about what raised.
+    `APITimeoutError` subclasses `APIConnectionError`, so the narrower test has
+    to run first or every timeout is filed as a dropped connection. That is a
+    real ordering constraint and the only one here: `APIStatusError` and
+    `APIResponseValidationError` are siblings under `APIError` in openai 3.8.0,
+    so swapping those two branches changes nothing.
+
+    What matters about `APIResponseValidationError` is that it carries a
+    `status_code` while being a malformed *body* rather than an HTTP failure.
+    Asking `getattr(exc, "status_code")`, as this did, filed a 200 whose JSON
+    did not parse as `http_200`. The fix is `isinstance` against
+    `APIStatusError` -- what raised, not what it happens to carry -- which is
+    why the attribute is never read except off a class that guarantees it.
     """
     try:
         from openai import (
@@ -285,6 +290,7 @@ class ChatClient:
                        latency_s=time.monotonic() - started,
                        attempt_latency_s=slowest, requests_timed_out=timed_out,
                        attempts=attempt, request=recorded)
+
 
 def _retryable(exc: Exception) -> bool:
     """Whether trying again could plausibly work.

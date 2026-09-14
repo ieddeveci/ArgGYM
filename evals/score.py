@@ -290,6 +290,17 @@ def _latency(records: Sequence[Dict[str, Any]],
     call it a measurement; a 401's is milliseconds, and enough of those drag the
     percentile down while nothing is being exercised at all.
 
+    A row that failed *retryably* and then answered is a different case again,
+    and it is in here by design. Since `attempt_latency_s` is the slowest
+    attempt, a 503 that took most of the budget before failing raises this run's
+    percentile even though the retry came back at once -- on a healthy 12-row
+    run one such attempt moved p95 from near zero to the length of the 503. That
+    is the right reading: the endpoint did hold a request open that long, and
+    the next item to do it may not get a retry cheap enough to hide it. It does
+    mean a percentile here answers "how long did the slowest request take" and
+    not "how long does an answer take", so a single figure moving is worth
+    looking at `api_errors_by_kind` beside.
+
     What that leaves out is exactly what `n_requests_timed_out` catches. A row
     that hit the wall and recovered *is* in the percentiles -- it answered, and
     `attempt_latency_s` is its slowest request, which is the one that expired --
@@ -377,6 +388,7 @@ def _percentile(values_s: Sequence[float], q: float) -> Optional[float]:
 
 def _rate(numerator: int, denominator: int) -> Optional[float]:
     return round(numerator / denominator, 4) if denominator else None
+
 
 def _floors_of(rows: Sequence[Dict[str, Any]], fit_rows: Sequence[Dict[str, Any]]
                ) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
