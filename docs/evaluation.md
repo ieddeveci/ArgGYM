@@ -131,23 +131,86 @@ means `false` or means "not applicable".
 | field | means |
 |---|---|
 | `api_error` | the request did not succeed. `score` is `null`, never `0.0`. |
+| `api_error_kind` | which failure it was. `null` beside a `null` `api_error` means nothing failed; `null` beside a real one means the cause was never recorded, which is true only of generations made before this field existed. `score.py` calls that case `unclassified` and refuses to guess the cause back out of the message. |
 | `truncated` | the generation hit its token cap. |
 | `no_answer_region` | no fenced answer was found anywhere, completion or reasoning. |
 | `answer_in_cot` | a fenced answer was found only in the reasoning, never submitted. |
 | `zero_with_region` | a well-formed answer that scored zero. |
 | `scorer_refused` | the scorer would not grade the row at all. |
+| `latency_s` | what the whole row cost in wall time, every retry and backoff included. `null` when nothing timed it -- a solver need not have a clock. |
+| `attempt_latency_s` | the slowest single request made for the row, which is what `timeout_s` bounds. `null` on the same terms. |
+| `requests_timed_out` | how many of the row's requests expired, including on a row that then answered. |
 
-The last two are the ones to look at. `zero_with_region` is either a real
-reasoning failure -- which is a result -- or a scorer bug, and counting them is
-how the second gets noticed. `scorer_refused` means a mismatched engine version
-or a missing field; the previous harness caught that case with a broad `except`,
-called it `0.0`, and published a cell of forty items scoring exactly 0.000.
+The last two of the first group are the ones to look at. `zero_with_region` is
+either a real reasoning failure -- which is a result -- or a scorer bug, and
+counting them is how the second gets noticed. `scorer_refused` means a
+mismatched engine version or a missing field; the previous harness caught that
+case with a broad `except`, called it `0.0`, and published a cell of forty items
+scoring exactly 0.000.
 
 **Read `truncated_rate` before any mean.** On the August sweep three of seven
 models lost between 74% and 89% of their items to the token cap at every level.
 Half of all 4,312 truncated generations ended in a repetition loop; one burned
 61,440 tokens repeating a single vacuous line 1,654 times and never wrote an
 answer. A mean over what survives that is a measurement of the token cap.
+
+### Whether the timeout was big enough
+
+`endpoint.timeout_s` is 5400 seconds. It was 1800, and on the August sweep 1800
+expired on 9.8%, 14.8% and 21.8% of `qwen3.6-27b`'s requests at levels 3, 6 and
+9 -- the rate rising with the level, because a harder item is a longer
+generation. Nothing measured whether the new number was enough, so the report
+now does.
+
+`metrics.json` carries two kinds of number about it, and they are not
+substitutes.
+
+The **latency percentiles** (`latency_s_p50`, `latency_s_p95`, `latency_s_max`,
+with `timeout_s` and `near_timeout_s` beside them) are over the rows that
+answered, and each row contributes its *slowest* request -- the one the timeout
+was up against, not the one that happened to succeed. `n_near_timeout` counts
+the rows whose slowest request came within 80% of the wall.
+
+**`n_requests_timed_out`** counts every request that expired, whatever became of
+its row. The two are not redundant. A row that hit the wall and recovered is in
+both: it answered, so it has percentiles, and its slowest request expired. A row
+that expired on all of its attempts is in neither percentile -- it is an error,
+and an error's latency is a measurement of the timeout rather than of the
+model -- so it is counted here and nowhere else. And this is per *request*: three
+expired attempts on one row are one lost row and three completions the server
+generated for nothing.
+
+A row carries `api_error_kind: "timeout"`, and so appears in `n_api_timeout`,
+only when *all* of its requests expired -- three of them, at the shipped
+`retries: 2`. So the ordinary sequence is: `n_requests_timed_out` rises first,
+while `n_api_error` is still zero and the run still looks healthy, and
+`n_api_timeout` only starts moving once rows begin running out of retries.
+Watching the second alone means watching the point at which data is already
+lost.
+
+`n_api_error` is split by cause in `api_errors_by_kind`. Seven labels are fixed:
+`timeout`, `connection`, `malformed_response`, `refusal` and `caller_error` from
+the client, plus `solver_raised` and `solver_value_not_json` for the two
+failures that happen outside any client. Two more are open-ended -- a status
+code names itself as `http_401`, and a provider's stop reason as
+`finish_reason_content_filter`. Leaving those open is deliberate: normalising
+them would mean this harness knowing every provider's vocabulary, and a provider
+we have not met would be filed under whichever of our buckets was least wrong.
+The cost is that two providers' error tables have to be read by label rather
+than compared cell for cell.
+
+Every one of these numbers is `null`, and prints as `-` rather than `0`, on a
+run that predates the field. An absent measurement and a measurement of zero are
+different findings, and a `0` in the timeout column of a run nobody measured is
+the more comfortable of the two.
+
+The yardstick is read from the generations, not from the manifest. `run.py`
+rewrites `run.json` on every invocation and `refuse_a_changed_run` does not
+treat a changed `timeout_s` as a changed run -- a different deadline is not a
+different question, so refusing to resume over one would cost a sweep its
+generations for nothing. Each generation therefore records the deadline it ran
+under, and a directory holding two of them reports no headroom at all rather
+than measuring old generations against a new wall.
 
 ### Why there is no single number
 

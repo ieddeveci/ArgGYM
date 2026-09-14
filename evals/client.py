@@ -17,7 +17,16 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from evals.types import Attempt
+from evals.types import (
+    CALLER,
+    CONNECTION,
+    FINISH_REASON_PREFIX,
+    HTTP_PREFIX,
+    MALFORMED,
+    REFUSAL,
+    TIMEOUT,
+    Attempt,
+)
 
 #: Sampling keys we will forward. An unknown key raises rather than being
 #: dropped, because a run that silently ignores one looks configured, records
@@ -41,39 +50,38 @@ _RETRYABLE = (408, 409, 429, 500, 502, 503, 504, 529)
 #: otherwise be scored as a wrong answer on every task.
 _ANSWERED = frozenset({"stop", "length", "eos", ""})
 
-#: The failure labels this module puts on `Attempt.error_kind`, plus `http_<n>`
-#: for anything that carried a status code and `finish_reason_<r>` for a
-#: provider that stopped without answering. Set here because here is the only
-#: place that still has the exception; downstream there is a sentence of prose
-#: and nothing else. `timeout` is the one that has to stand alone: it is the
-#: failure mode that moves with `max_tokens`, and inside a single `n_api_error`
-#: a rising timeout rate and a rising 429 rate are the same number.
-TIMEOUT = "timeout"
-CONNECTION = "connection"
-MALFORMED = "malformed_response"
-REFUSAL = "refusal"
-#: Neither a status nor a transport failure: a `TypeError` from a bad sampling
-#: value, an `ImportError` from a missing dependency. Ours, not the provider's.
-CALLER = "caller_error"
-
-
 def kind_of(exc: Exception) -> str:
-    """Which failure an exception from the SDK was.
+    """Which failure an exception from the SDK was, labelled here because here is
+    the only place that still has the exception. Downstream there is a sentence
+    of prose and nothing else.
 
-    A status code names itself, so `http_401` and `http_429` stay apart without
-    this module keeping a list of every status a provider might answer with.
-    The two that carry no status are the two worth naming: a timeout is the
-    failure a token cap causes, and a dropped connection is the one it does not.
+    Narrowest first, every time. Each of these classes is a subclass of one
+    below it, so a test in the wrong order silently absorbs the case it was
+    meant to separate: `APITimeoutError` subclasses `APIConnectionError`, and
+    `APIResponseValidationError` carries a `status_code` while being a
+    malformed *body* rather than an HTTP failure -- a 200 whose JSON did not
+    parse would otherwise be filed as `http_200`. The `status_code` probe this
+    replaced had that bug, and the same bug would have hidden every timeout if
+    the two connection classes had been tried the other way round.
+
+    `isinstance` against `APIStatusError`, not `getattr(exc, "status_code")`,
+    for the same reason: the attribute says nothing about what raised.
     """
-    status = getattr(exc, "status_code", None)
-    if status is not None:
-        return f"http_{status}"
     try:
-        from openai import APIConnectionError, APITimeoutError
+        from openai import (
+            APIConnectionError,
+            APIResponseValidationError,
+            APIStatusError,
+            APITimeoutError,
+        )
     except ImportError:  # pragma: no cover - the group is installed in dev
         return CALLER
-    # `APITimeoutError` subclasses `APIConnectionError`, so the narrower test
-    # runs first or every timeout is filed as a dropped connection.
+    if isinstance(exc, APIResponseValidationError):
+        return MALFORMED
+    if isinstance(exc, APIStatusError):
+        # The status names itself, so `http_401` and `http_429` stay apart
+        # without this module listing every status a provider might answer with.
+        return f"{HTTP_PREFIX}{exc.status_code}"
     if isinstance(exc, APITimeoutError):
         return TIMEOUT
     if isinstance(exc, APIConnectionError):
@@ -106,7 +114,9 @@ class Endpoint:
     #: built outside Hydra gets this default, so leaving it at 1800 shipped the
     #: failure to exactly the caller who never saw the config that explains it.
     #: Whether 5400 is enough is measured rather than assumed: `score.py` reports
-    #: the latency percentile and how many generations came near this value.
+    #: the latency percentile, how many rows came near this value, and how many
+    #: requests went past it -- the last being the one that moves first, since
+    #: `retries` hides an expired request behind a successful retry.
     timeout_s: float = 5400.0
     retries: int = 2
 
@@ -185,33 +195,49 @@ class ChatClient:
         A failure here is infrastructure. It comes back as `error` so the scorer
         can keep it out of the scores rather than counting it as a model that
         answered wrongly.
+
+        Three numbers come back about time, because one will not do. `latency_s`
+        is what the row cost. `attempt_latency_s` is the slowest single request,
+        which is what `timeout_s` bounds. `requests_timed_out` is how many
+        requests hit the wall -- and with `retries: 2` that is the only place a
+        row which timed out twice and then answered is recorded at all.
         """
         body = self.body(system, user)
         # The prompt is the bulk of the body and is already stored per row; what
         # is worth recording is everything else, which is what silently varies.
         recorded = {k: v for k, v in body.items() if k != "messages"}
         recorded["n_messages"] = len(body["messages"])
+        # Not in the body -- it is a client-side deadline -- but it is the number
+        # this request's latency has to be read against, and a resumed run can
+        # hold generations made under two different ones. Recorded per request so
+        # scoring reads the deadline each generation actually ran under rather
+        # than whichever value the last invocation left in the manifest.
+        recorded["timeout_s"] = self.endpoint.timeout_s
         started = time.monotonic()
-        attempt_started = started
+        slowest = 0.0
+        timed_out = 0
         last = "no attempt made"
         last_kind: Optional[str] = None
         attempt = 0
         for attempt in range(1, max(self.endpoint.retries, 0) + 2):
-            # Restarted per attempt. `timeout_s` bounds one request, so "is the
-            # timeout big enough" is a question about this clock and not about
-            # the whole item: a generation that timed out once and succeeded on
-            # the retry spends more than `timeout_s` while no single request
-            # came near it.
             attempt_started = time.monotonic()
             try:
                 resp = self._lazy().chat.completions.create(**body)
             except Exception as e:  # noqa: BLE001 - the taxonomy is below
                 last = f"{type(e).__name__}: {e}"
                 last_kind = kind_of(e)
+                # Counted per request, not per row. A row is labelled `timeout`
+                # only when every attempt expired, so without this a request
+                # that hit the wall and then succeeded leaves no trace: no
+                # error, no kind, and a latency taken from the attempt that
+                # worked. The whole completion was generated twice either way.
+                timed_out += last_kind == TIMEOUT
+                slowest = max(slowest, time.monotonic() - attempt_started)
                 if not _retryable(e) or attempt > self.endpoint.retries:
                     break
                 time.sleep(min(5 * attempt, 30))
                 continue
+            slowest = max(slowest, time.monotonic() - attempt_started)
             choice = resp.choices[0] if resp.choices else None
             if choice is None:
                 # A 200 whose body is not the shape we expect is still
@@ -229,36 +255,36 @@ class ChatClient:
                 # Not an answer, so not a score. A refusal recorded as an empty
                 # completion is a zero on every task, which reports the
                 # provider's policy as the model's reasoning.
-                now = time.monotonic()
                 return Attempt(
                     error=f"provider did not answer: finish_reason={reason!r}"
                           + (f" refusal={refusal!r}" if refusal else ""),
-                    # The provider's own reason, kept as the label. A
-                    # `content_filter` is a policy decision and an unknown
-                    # finish reason is a protocol surprise; folding both into
-                    # one bucket loses the only thing that tells them apart.
-                    error_kind=REFUSAL if refusal
-                    else f"finish_reason_{reason or 'empty'}",
+                    # The stop reason when the provider gave one that is not an
+                    # answer, because `content_filter` is a policy decision and
+                    # an unrecognised reason is a protocol surprise. `refusal`
+                    # only when the stop reason itself says nothing -- a
+                    # `content_filter` arriving with a refusal string is still a
+                    # content filter, and labelling that pair `refusal` throws
+                    # away the one field that says which.
+                    error_kind=(f"{FINISH_REASON_PREFIX}{reason}"
+                                if reason not in _ANSWERED else REFUSAL),
                     completion=choice.message.content or "", refusal=refusal,
                     finish_reason=reason,
                     usage=(resp.usage.model_dump() if resp.usage else {}),
-                    latency_s=now - started,
-                    attempt_latency_s=now - attempt_started, attempts=attempt,
-                    request=recorded)
-            now = time.monotonic()
+                    latency_s=time.monotonic() - started,
+                    attempt_latency_s=slowest, requests_timed_out=timed_out,
+                    attempts=attempt, request=recorded)
             return Attempt(
                 completion=choice.message.content or "",
                 reasoning=reasoning_of(choice.message),
                 truncated=reason == "length", finish_reason=reason,
                 usage=(resp.usage.model_dump() if resp.usage else {}),
-                latency_s=now - started,
-                attempt_latency_s=now - attempt_started, attempts=attempt,
-                request=recorded)
-        now = time.monotonic()
-        return Attempt(error=last, error_kind=last_kind, latency_s=now - started,
-                       attempt_latency_s=now - attempt_started,
+                latency_s=time.monotonic() - started,
+                attempt_latency_s=slowest, requests_timed_out=timed_out,
+                attempts=attempt, request=recorded)
+        return Attempt(error=last, error_kind=last_kind,
+                       latency_s=time.monotonic() - started,
+                       attempt_latency_s=slowest, requests_timed_out=timed_out,
                        attempts=attempt, request=recorded)
-
 
 def _retryable(exc: Exception) -> bool:
     """Whether trying again could plausibly work.

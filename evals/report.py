@@ -23,6 +23,8 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from evals.score import NEAR_TIMEOUT_FRACTION
+
 
 class NotScored(SystemExit):
     """A run directory was named that has no metrics."""
@@ -126,17 +128,21 @@ def coverage_table(runs: List[Dict[str, Any]]) -> str:
     on reasoning, and reading its mean as if it had is how the previous sweep's
     headline numbers went wrong.
     """
-    lines = ["| run | status | scored | API errors | of those, timeouts "
-             "| truncated | no answer region | answered only in reasoning |",
-             "|---|---|---:|---:|---:|---:|---:|---:|"]
+    lines = ["| run | status | scored | API errors | rows lost to timeout "
+             "| requests that hit the timeout | truncated | no answer region "
+             "| answered only in reasoning |",
+             "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
     for m in runs:
         c, meta = m["coverage"], m["_meta"]
         lines.append(
             f"| {m['_label']} | {meta.get('run_status')} | {c['n_scored']} | "
-            # A subset of the column before it, and the header says so. A
-            # timeout is the API error that moves with the token cap, and it
-            # was uncountable inside the single bucket beside it.
+            # Rows lost is a subset of the errors before it. Requests that hit
+            # the wall is not a subset of anything: with `retries: 2` a row is
+            # lost only when all three of its requests expire, so this column is
+            # the one that moves first and the one that is non-zero while every
+            # other number on this line still looks healthy.
             f"{c['n_api_error']} | {_int(c.get('n_api_timeout'))} | "
+            f"{_int(c.get('n_requests_timed_out'))} | "
             f"{_pct(c['truncated_rate'])} | "
             f"{_pct(c['no_answer_region_rate'])} | "
             f"{_pct(c.get('answer_in_cot_rate'))} |")
@@ -156,9 +162,14 @@ def latency_table(runs: List[Dict[str, Any]]) -> str:
     Over the generations that produced an answer. An errored one has a latency
     too and it measures the failure rather than the model, so it is counted in
     the coverage table instead (`evals/score.py:_latency`).
+
+    Which means these columns see a row that hit the wall and recovered -- it
+    answered, and its slowest request sits at the timeout -- and never see a row
+    that hit the wall and stayed there. The count in the coverage table sees
+    both, so it is the one to read when any of these approaches the timeout.
     """
-    lines = ["| run | median | p95 | slowest | timeout | at 80% of timeout "
-             "| answered |",
+    lines = [f"| run | median | p95 | slowest | timeout "
+             f"| at {NEAR_TIMEOUT_FRACTION:.0%} of timeout | answered |",
              "|---|---:|---:|---:|---:|---:|---:|"]
     for m in runs:
         c = m["coverage"]
@@ -290,10 +301,14 @@ def render(runs: List[Dict[str, Any]]) -> str:
                   "not, so they are counted apart.", "", errors, ""]
     parts += [
         "## Latency headroom", "",
-        "Per request, over the generations that answered. A run whose p95 is "
-        "close to its timeout is one harder level away from losing items, and a "
-        "request that hits the timeout is retried -- the server generates the "
-        "whole completion again.", "",
+        "The slowest request per row, over the generations that answered. A run "
+        "whose p95 is close to its timeout is one harder level away from losing "
+        "items, and a request that hits the timeout is retried -- the server "
+        "generates the whole completion again.", "",
+        "A row that hit the wall and recovered appears here at the wall. A row "
+        "that never recovered does not appear here at all -- it is an error, "
+        "and the coverage table's `requests that hit the timeout` is the only "
+        "number that counts both.", "",
         latency_table(runs), "",
         "## Mean score, by task", "",
         "Each cell is the mean and, in brackets, how many items it is a mean "
@@ -326,8 +341,8 @@ def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
     # dataframe. Filtering the row to `fields` first, as this did, made that
     # comment describe a check that could not fire.
     fields = ["run", "task", "level", "ordering", "n", "n_scored", "n_untruncated",
-              "n_api_error", "n_api_timeout", "n_scorer_refused", "mean",
-              "mean_untruncated",
+              "n_api_error", "n_api_timeout", "n_requests_timed_out",
+              "n_scorer_refused", "mean", "mean_untruncated",
               "success_rate", "floor", "floor_strategy", "corrected", "floor_error",
               "truncated_rate", "no_answer_region_rate",
               "answer_in_cot_rate", "zero_with_region"]
