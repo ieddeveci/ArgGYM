@@ -92,6 +92,19 @@ def semantics_for(level: int) -> Tuple[str, ...]:
     return out
 
 
+def cluster_bounds(level: int) -> Tuple[int, int]:
+    """Inclusive bounds on the clusters an item of this level is built from.
+
+    Read by `build` for the draw and by the test that checks the count a row
+    ships. It used to live inside `build` beside a dead `n_cluster = 2`, and the
+    metadata shipped the dead one, so every exported row claimed a count no level
+    can draw (#141). Naming the band gives the test something to check against
+    that cannot drift from what the generator does.
+    """
+    lo = 3 + (1 if level >= 6 else 0)
+    return lo, min(6, lo + 1 + (1 if level >= 11 else 0))
+
+
 def wants_unshielded_ring(level: int, ordering: str) -> bool:
     """Does this cell load the ring onto both branches, leaving no stable extension?
 
@@ -408,16 +421,13 @@ def _negated_premise(it, ridx):
 def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
-    n_cluster = 2
+    _lo, _hi = cluster_bounds(level)
+    _n_cluster = rng.randint(_lo, _hi)
 
-    it = iter(_names(stable_seed(seed, level, ordering, "nm"), 40 + n_cluster * 12))
+    it = iter(_names(stable_seed(seed, level, ordering, "nm"), 40 + _n_cluster * 12))
     ops: List[Operation] = []
     ridx = [0]
     candidates: List[str] = []
-
-    _lo = 3 + (1 if level >= 6 else 0)
-    _hi = min(6, _lo + 1 + (1 if level >= 11 else 0))
-    _n_cluster = rng.randint(_lo, _hi)
     # The odd-cycle cluster takes a fixed slot on every item that asks about stable,
     # rather than a seventh seat on the menu. It is the only thing in the generator that
     # separates stable from sceptical preferred, and a menu draw would leave most items
@@ -645,7 +655,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         ordering=ordering, level=level,
         reference="\n".join(lines),
         metadata={"n_items": len(base), "n_queries": len(queries),
-                  "n_clusters": n_cluster, "semantics": list(sems),
+                  "n_clusters": _n_cluster, "semantics": list(sems),
                   "n_diverging_claims": len(diverging),
                   "odd_cycle": bool(_required_claims),
                   "odd_cycle_claims": list(_required_claims),
