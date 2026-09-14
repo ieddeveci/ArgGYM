@@ -138,7 +138,15 @@ curves noted in finding 5 are visible here; `preference_construction` is the nea
 point is one (model, level) cell. qwen3.6-27b breaks the trend: 32–39K mean tokens at only 6–9%
 truncation, i.e. it writes long without looping.*
 
-Regenerate with `python docs/arggym2-eval-2026-08-11/make_figures.py` (needs the project venv).
+These five PNGs are the archive of this sweep and the prose above refers to them as they stand.
+
+They were drawn from the `outputs/runs/*__v2` directories of the `v2-20260805-093137` sweep, and
+those are gone -- `outputs/` has never been committed. Nothing that reads a run directory rebuilds
+them, which is why the script that drew them no longer tries.
+
+That script now lives at `evals/figures.py`, rewritten for the metrics schema the harness writes
+today (#142). Draw a later sweep with
+`uv run --extra report python -m evals.figures outputs/runs/* -o outputs/figures`.
 
 ---
 

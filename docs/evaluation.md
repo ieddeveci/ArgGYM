@@ -249,6 +249,27 @@ There is no floor column beside the success-rate table. A floor is the mean
 *score* of the best uninformed answer, not its success rate, and printing it
 there would invite exactly the comparison it exists to prevent.
 
+## Figures
+
+```
+uv run --extra report python -m evals.figures outputs/runs/* -o outputs/figures
+```
+
+The same runs `report.py` tabulates, drawn: contamination by level first, then
+the macro-average against difficulty, `status_query` against the construction
+tasks, a per-task profile of the least contaminated run, and output length
+against truncation. Scores come from `metrics.json` so a point and a table cell
+cannot disagree; coverage per level and completion length are counted from
+`samples.jsonl`, which is where the per-item record lives.
+
+`matplotlib` is an extra rather than a dependency -- scoring model outputs in CI
+should not pull a plotting library -- so the command carries `--extra report`. A
+dev checkout has it already.
+
+Two runs on different tasksets are refused rather than drawn together. The table
+prints that as a warning because its rows are named; a curve through both points
+has nowhere to say that the two models sat different exams.
+
 ## Resuming, filtering, and what is refused
 
 **A run directory is named by what identifies the run**, not by the clock:

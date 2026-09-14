@@ -42,6 +42,11 @@ dev = [
     # named here rather than pulled through the extra. CI's install job checks
     # separately that a bare install gets none of it.
     "flask>=3.0",
+    # Same reasoning for `evals/figures.py`. It is the only thing in the repo
+    # that turns a run into a chart and it went a schema change without anyone
+    # noticing (#142), which is what a test behind an opt-in extra buys: one
+    # that skips in the default suite catches nothing.
+    "matplotlib>=3.8",
 ]
 
 [project.scripts]

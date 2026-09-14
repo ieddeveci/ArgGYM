@@ -47,6 +47,12 @@ def load_metrics(paths: Sequence[str]) -> List[Dict[str, Any]]:
             continue
         with open(f) as fh:
             m = json.load(fh)
+        # Where this file was found, which `_meta.run_dir` does not say: that
+        # field is an absolute path written at scoring time, so it names the
+        # producing machine once a run directory is copied off it. A caller that
+        # needs a sibling artifact -- `evals/figures.py` reads `samples.jsonl`
+        # -- has to be told the path it passed in.
+        m["_path"] = p
         out.append(m)
     if missing:
         raise NotScored(
@@ -105,8 +111,13 @@ def labels(runs: Sequence[Dict[str, Any]]) -> List[str]:
             # Nothing in the endpoint differs, so the directory is the only
             # thing left that does. Two identical configurations run twice is a
             # legitimate thing to compare, and it still needs two headers.
+            #
+            # The directory this file was *read* from, not the one recorded in
+            # it. `_meta.run_dir` is written at scoring time and travels inside
+            # the copy, so two copies of one run carried one header between them
+            # -- the collision this branch exists to break.
             out[i] += f" [{shown}]" if shown else \
-                f" [{os.path.basename(runs[i]['_meta'].get('run_dir', str(i)))}]"
+                f" [{os.path.basename(runs[i].get('_path') or str(i))}]"
     return out
 
 

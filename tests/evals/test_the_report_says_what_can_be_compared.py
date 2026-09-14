@@ -172,6 +172,20 @@ def test_two_token_caps_of_one_model_get_different_columns(tmp_path):
     assert not any("temperature" in x for x in got)
 
 
+def test_two_copies_of_one_run_get_different_columns(tmp_path):
+    """The tie-break cannot be a field that travels inside the copy.
+
+    `_meta.run_dir` is written at scoring time, so two copies of one run carry
+    the same one and both columns came out `gpt-5 [gpt-5]` -- the collision this
+    branch exists to break. Copying a finished run is how these files travel;
+    `docs/evaluation.md` says to do it.
+    """
+    m = a_metrics("gpt-5")
+    got = [x["_label"] for x in written(tmp_path, m, dict(m))]
+    assert len(set(got)) == 2, got
+    assert {"gpt-5 [run0]", "gpt-5 [run1]"} == set(got), got
+
+
 def test_one_run_keeps_a_plain_column_name(tmp_path):
     """Disambiguation is for collisions, not a tax on the common case."""
     m = a_metrics("gpt-5")
