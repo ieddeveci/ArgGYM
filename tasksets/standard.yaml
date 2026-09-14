@@ -64,8 +64,12 @@ min_acceptance: 0.5
 # The guard above counts seeds, and every seed of this grid builds; what varies
 # is how many candidates the retry loop discards on the way, from none on nine
 # tasks to six in seven on semantics_query at level 12 (#114). This one counts
-# candidates. Set just under the thinnest cell measured on this grid, 0.14, so
-# it records today's floor and fires on a generator that falls below it.
+# candidates. Set just under the thinnest cell measured on this grid, the 0.14 of
+# semantics_query at L12 under last-link democratic, so it records today's floor
+# and fires on a generator that falls below it. That 0.14 is a reading at the
+# `take: 2` above, not a property of the cell -- the scan stops as soon as the
+# cell is full, so the same cell reports 0.13 at `take: 4`. Change `take` and this
+# floor has to be measured again.
 min_build_acceptance: 0.1
 
 # The only exportable profile. The axis is real -- nine tasks branch on it -- but

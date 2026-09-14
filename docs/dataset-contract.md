@@ -453,9 +453,12 @@ cell is full, so the same cell reports 0.14 at `take: 2` and 0.13 at `take: 4`.
 Two exports whose reasons move while the hash holds mean a generator changed what
 it discards without changing what it ships. `min_acceptance` gates the seed rate,
 which is 1.00 on every cell of the standard grid, so it cannot fire there;
-`min_build_acceptance` gates the candidate rate the retry loop reports, and the
-standard spec sets it just under the thinnest cell measured (#114). A spec that
-names neither keeps the seed guard alone.
+`min_build_acceptance` gates the candidate rate the retry loop reports. The
+standard spec sets 0.1, just under the 0.14 of the thinnest cell measured at that
+file's `take: 2` -- semantics_query at level 12 under last-link democratic, which
+keeps 2 candidates of 14 (#114). That 0.14 moves with `seeds.take` for the reason
+above, so a spec that changes `take` has to measure its own floor rather than
+inherit this one. A spec that names neither guard keeps the seed guard alone.
 
 One more reason a seed is skipped comes after `build` rather than from it:
 `minimality_unproven`. The six construction generators write `minimality_proven`
