@@ -37,7 +37,8 @@ def _is_weakest(ordering: str) -> bool:
 
 def _is_last(ordering: str) -> bool:
     return str(ordering).startswith("last_link")
-EASY_LEVELS = 2  # every exported level must contain a claim the semantics disagree about
+
+
 MAX_DIRECTIVES = 26
 
 MAX_EAGER_ARGUMENTS = 32
@@ -539,7 +540,13 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
     for (c, s) in gold:
         by_claim.setdefault(c, []).append(s)
     diverging = [c for c in by_claim if len({gold[(c, s)] for s in by_claim[c]}) > 1]
-    if level > EASY_LEVELS and not diverging:
+    # Every level, not every exported level. `EASY_LEVELS = 2` exempted levels 1 and 2
+    # back when they asked grounded alone and could not have a diverging claim; now that
+    # they ask the pair, an item without one is `status_query` reworded wherever it lands.
+    # Dropping the exemption rejects nothing the generator builds today -- 800 candidates
+    # at each of levels 1 and 2 all carry at least two diverging claims -- so it only bites
+    # if the floating cluster at slot 0 later stops separating the two semantics (#108).
+    if not diverging:
         return Rejected("no_diverging_claim")
 
     _div = set(diverging)
