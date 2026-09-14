@@ -4,11 +4,12 @@
 constrained decoding submits the mapping and never imitates our line format; a solver
 returning text calls `parse` first.
 
-That the two paths agree is not what the first test below checks. `score` *is*
-`score_value(parse(text, item), item)` (`arggym/tasks/status_query.py:490-503`), so
-comparing them compares an expression with itself and holds whatever `score_value` does
--- #122. What establishes the seam is the three tests that build the mapping out of
-`item.gold` and score it against the text path.
+What establishes the seam is the three tests that build the mapping out of `item.gold`
+and score it against the text path. A test comparing `score(text)` against
+`score_value(parse(text))` used to open this file; `score` *is* that expression
+(`arggym/tasks/status_query.py`), so it compared an expression with itself and held
+whatever `score_value` did (#122). It is gone rather than repaired, because the three
+below are the repair.
 
 Four tests here are level-invariant by construction, reading a fixed prose string, an
 empty answer or an unrecognizable mapping, so the case count is not a count of distinct
@@ -60,8 +61,8 @@ def other_status(status: str) -> str:
     return next(s for s in STATUSES if s != status)
 
 
-#: Ten tests walk the same 45 cells and an eleventh walks the `perturbation` column, so
-#: one build serves all eleven. Under xdist they scatter across workers and each rebuilds
+#: Nine tests walk the same 45 cells and a tenth walks the `perturbation` column, so
+#: one build serves all ten. Under xdist they scatter across workers and each rebuilds
 #: what it is handed; the cache is what keeps a serial run of this file cheap.
 _CACHE: dict = {}
 
@@ -77,15 +78,6 @@ def item_at(task: str, level: int):
 @pytest.fixture
 def item(task, level):
     return item_at(task, level)
-
-
-@pytest.mark.parametrize("task,level", CELLS)
-def test_the_value_path_and_the_text_path_give_the_same_result(task, item):
-    module = MODULES[task]
-    text = text_of(task, item.gold)
-    from_text = module.score(text, item)
-    from_value = module.score_value(module.parse(text, item), item)
-    assert from_value.as_dict() == from_text.as_dict()
 
 
 @pytest.mark.parametrize("task,level", CELLS)

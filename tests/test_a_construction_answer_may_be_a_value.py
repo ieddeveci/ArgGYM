@@ -4,12 +4,14 @@
 constrained decoding submits the operations and never imitates our serialization; a
 solver returning text calls `parse` first.
 
-That the two paths agree is not what the first test below checks. `score_item` *is*
-`score_value(parse(text, item), item)` (`arggym/core/scoring.py:233-247`), so comparing
-them compares an expression with itself and holds whatever `score_value` does -- #122.
-What establishes the seam is
-`test_the_operations_a_solver_submits_are_not_required_to_come_from_our_parser`, whose
-value never passes through our parser.
+The first test below builds the value with `arggym.aspic.dsl.parse_dsl`, the engine
+layer's own reader of the notation, and scores it against the text path. It used to
+build it with `core.scoring.parse`, and `score_item` *is* `score_value(parse(text))`
+(`arggym/core/scoring.py`), so that compared an expression with itself and held whatever
+`score_value` did (#122). Two parsers reading one reference to the same score is a
+statement about the seam; one parser reading it twice was not.
+`test_the_operations_a_solver_submits_are_not_required_to_come_from_our_parser` is the
+other half: a value that came from no parser at all.
 
 Every level of one cheap column, not level 3 alone (#110): what an item's reference
 parses and scores to is a property of that item, and a spec may name any level the
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import pytest
 
+from arggym.aspic.dsl import parse_dsl
 from arggym.aspic.engine import Operation
 from arggym.core.answers import UnparseableAnswer
 from arggym.core.scoring import parse, score_item, score_value
@@ -76,8 +79,10 @@ def cell(task, level):
 @pytest.mark.parametrize("task,level", CELLS)
 def test_the_value_path_and_the_text_path_give_the_same_result(task, cell):
     it, score_input = cell
+    read = parse_dsl(it.reference)
+    assert not read.dropped, f"the engine layer's reader refused a line: {read.dropped}"
     from_text = score_item(it.reference, score_input)
-    from_value = score_value(parse(it.reference, score_input), score_input)
+    from_value = score_value(read.operations, score_input)
     assert from_value.as_dict() == from_text.as_dict()
 
 
@@ -105,7 +110,7 @@ def test_text_that_cannot_be_read_raises_rather_than_scoring(level):
     _, score_input = item_at("preference_construction", level)
     with pytest.raises(UnparseableAnswer) as e:
         parse("I do not think anything can be done here.", score_input)
-    assert e.value.reason.startswith("unparseable_lines:")
+    assert e.value.reason.startswith("unparseable_tokens:")
     assert e.value.diagnostics["n_unparseable"] > 0
 
 
@@ -115,7 +120,7 @@ def test_score_item_turns_that_back_into_a_row(level):
     _, score_input = item_at("preference_construction", level)
     r = score_item("I do not think anything can be done here.", score_input)
     assert r.score == 0.0 and r.success is False
-    assert r.reason.startswith("unparseable_lines:")
+    assert r.reason.startswith("unparseable_tokens:")
     assert r.diagnostics["unparseable_examples"]
 
 

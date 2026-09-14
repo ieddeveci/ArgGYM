@@ -72,6 +72,15 @@ def test_a_level_that_is_not_an_integer_is_refused():
         TasksetSpec(tasks=("status_query",), levels=(True,))
 
 
+def test_the_build_acceptance_guard_takes_a_share_and_is_off_by_default():
+    # Seed acceptance is 1.00 on every cell of the standard grid, so the seed
+    # guard cannot fire there; the candidate guard can, and a spec that does not
+    # name it keeps the old behaviour (#114).
+    assert TasksetSpec(tasks=("status_query",)).min_build_acceptance == 0.0
+    with pytest.raises(ValueError, match="min_build_acceptance"):
+        TasksetSpec(tasks=("status_query",), min_build_acceptance=1.5)
+
+
 def test_a_spec_round_trips_through_a_file(tmp_path):
     s = TasksetSpec(tasks=("status_query", "claim_chain"), levels=(3, 6),
                     seeds=SeedPolicy(take=4, scan_limit=20))

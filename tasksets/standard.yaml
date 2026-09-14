@@ -61,6 +61,13 @@ seeds:
 # decision rather than a silent property of the file.
 min_acceptance: 0.5
 
+# The guard above counts seeds, and every seed of this grid builds; what varies
+# is how many candidates the retry loop discards on the way, from none on nine
+# tasks to six in seven on semantics_query at level 12 (#114). This one counts
+# candidates. Set just under the thinnest cell measured on this grid, 0.14, so
+# it records today's floor and fires on a generator that falls below it.
+min_build_acceptance: 0.1
+
 # The only exportable profile. The axis is real -- nine tasks branch on it -- but
 # two tasks take no profile at all and only one mixes it into its seed, so a
 # non-FULL taskset would not be reproducible from its coordinates.

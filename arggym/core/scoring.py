@@ -224,7 +224,7 @@ def parse(text: str, item: Dict) -> List[Operation]:
     p = parse_answer(text)
     if p.n_unparseable:
         raise UnparseableAnswer(
-            f"unparseable_lines:{p.n_unparseable}",
+            f"unparseable_tokens:{p.n_unparseable}",
             {"n_lines": p.n_lines, "n_unparseable": p.n_unparseable,
              "unparseable_examples": p.unparseable_examples})
     return p.ops

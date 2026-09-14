@@ -58,9 +58,13 @@ EAGER = "eager"
 # implements all five, but only two were ever scheduled, so sceptical preferred,
 # credulous preferred and stable reached no item at any level, and level 3 asked one
 # semantics and was `status_query` reworded (#36).
+#
+# Credulous preferred from level 1, not level 3. Below 3 the schedule asked grounded
+# alone, so levels 1 and 2 were `status_query` with a longer answer format (#108); the
+# floating cluster every item opens with separates the two on every ordering, so the
+# entry levels can ask the pair the task is named for. Levels 3 and up are unchanged.
 SEMANTICS_BY_LEVEL = {
-    1: (GROUNDED,),
-    3: (GROUNDED, CRED_PREF),
+    1: (GROUNDED, CRED_PREF),
     4: (GROUNDED, CRED_PREF, EAGER),
     6: (GROUNDED, CRED_PREF, STABLE, EAGER),
     9: (GROUNDED, SCEPT_PREF, CRED_PREF, STABLE, EAGER),

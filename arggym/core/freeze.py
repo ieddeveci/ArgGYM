@@ -117,6 +117,18 @@ def reference_score(entry: Dict[str, Any]) -> float:
     return score_row(entry["reference_answer"], entry).score
 
 
+def minimum_unproven(entry: Dict[str, Any]) -> bool:
+    """Whether the row's stated minimum is a bound the search gave up on.
+
+    The six construction generators write `minimality_proven` into the item's
+    statistics, which the row carries under `metadata.gold.metadata`. Only an
+    explicit `False` counts: a task with no minimum search writes nothing there,
+    and nothing is not a failed proof.
+    """
+    stats = (entry.get("metadata", {}).get("gold", {}) or {}).get("metadata") or {}
+    return stats.get("minimality_proven") is False
+
+
 def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
               ) -> Tuple[List[Dict[str, Any]], CellReport]:
     """Scan seeds until the cell has `take` items, or fail naming the cell."""
@@ -144,6 +156,22 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
                                          "reason": top_reason(built.reasons),
                                          "reasons": dict(sorted(built.reasons.items()))})
             continue
+        if minimum_unproven(entry):
+            # The minimum search ran out of budget and fell back to every
+            # candidate it had, so `min_directives` is an upper bound rather than
+            # a minimum: on the one such row of the standard grid it said 55
+            # where 10 suffice, and the bloat gate admitted 110 directives where
+            # it should admit 20 (#124). A reference that scores below 1.0 stops
+            # the freeze; a stated minimum 5.5x the real one is the same class of
+            # claim, and the flag that says so was read by nothing. The seed is
+            # skipped and named, the way a seed that built nothing is.
+            reasons = {**built.reasons, "minimality_unproven": 1}
+            report.build_rejections["minimality_unproven"] = (
+                report.build_rejections.get("minimality_unproven", 0) + 1)
+            report.seeds_skipped.append({"seed": seed, "tries": built.calls,
+                                         "reason": "minimality_unproven",
+                                         "reasons": dict(sorted(reasons.items()))})
+            continue
         entry["metadata"]["reference_score"] = reference_score(entry)
         entry["metadata"]["source_index"] = len(rows)
         rows.append(entry)
@@ -163,6 +191,17 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
             f"seeds for {spec.seeds.take} items (acceptance {report.acceptance:.2f}, "
             f"spec asks for {spec.min_acceptance}). A degraded cell should be a "
             f"decision: raise min_acceptance deliberately or fix the generator.")
+    if report.build_acceptance < spec.min_build_acceptance:
+        # The guard above never fires on the standard grid, where every seed
+        # builds and the retry loop hides how many candidates it threw away
+        # (#114). This one reads the number the retry loop reports.
+        raise CellUnfilled(
+            f"{report.key()} filled, but kept {len(rows)} of {report.build_calls} "
+            f"candidates (build acceptance {report.build_acceptance:.2f}, spec asks for "
+            f"{spec.min_build_acceptance}). It discarded: "
+            f"{reasons_text(report.build_rejections)}. A cell this thin is a finding, "
+            f"not a setting: lower min_build_acceptance deliberately or fix what the "
+            f"reasons name.")
     return rows, report
 
 

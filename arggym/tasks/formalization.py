@@ -307,6 +307,14 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         test_root = (u % 2 == 0)
 
         second_route = u > 0 and queried and rng.random() < 0.4
+        # The draw stays where it is, so every item built before this keeps its
+        # stream; only what the draw buys changes. A second route to the one claim
+        # the item has queried makes every rule redundant to that claim, and an
+        # item with no rule its queried statuses rest on cannot fail `success` on
+        # an answer missing any rule -- three cells at levels 2 and 4 did that
+        # (#121). With two or more claims queried, redundant support is the point.
+        if second_route and len(queried) < 2:
+            second_route = False
         if second_route:
             b = rng.choice(queried)
             sentences.append(cyc.pick(LINE_TRANSITIONS).format(q=b))
@@ -410,7 +418,7 @@ def parse(text: str, item: Optional[FItem] = None) -> List[Operation]:
     """
     p = parse_answer(text)
     if p.n_unparseable:
-        raise UnparseableAnswer(f"unparseable_lines:{p.n_unparseable}",
+        raise UnparseableAnswer(f"unparseable_tokens:{p.n_unparseable}",
                                 {"n_parsed": len(p.ops),
                                  "n_unparseable": p.n_unparseable})
     return p.ops

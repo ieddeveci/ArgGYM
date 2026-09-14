@@ -39,6 +39,31 @@ def _patch(monkeypatch, bad):
     monkeypatch.setattr(F, "TaskDataset", factory)
 
 
+class _Wasteful:
+    """A dataset whose every item cost `calls` candidates, the first of which built."""
+
+    def __init__(self, real, calls):
+        self._real, self._calls = real, calls
+
+    def build_at(self, k):
+        entry, report = self._real.build_at(k)
+        return entry, BuildReport(report.item, self._calls,
+                                  {"refused_by_the_test": self._calls - 1})
+
+
+class _Unproven:
+    """A dataset that reports the seeds named as built with an unproven minimum."""
+
+    def __init__(self, real, bad):
+        self._real, self._bad = real, bad
+
+    def build_at(self, k):
+        entry, report = self._real.build_at(k)
+        if entry is not None and k in self._bad:
+            entry["metadata"]["gold"].setdefault("metadata", {})["minimality_proven"] = False
+        return entry, report
+
+
 def test_a_filled_cell_records_the_seeds_it_used(tmp_path):
     m = F.freeze(CHEAP, str(tmp_path / "t.jsonl"), verbose=False)
     cell = m["cells"]["claim_chain|L3|last_link_elitist"]
@@ -77,6 +102,36 @@ def test_a_degraded_cell_ships_when_the_spec_says_so(monkeypatch, tmp_path):
                           min_acceptance=0.3)
     m = F.freeze(lenient, str(tmp_path / "t.jsonl"), verbose=False)
     assert m["cells"]["claim_chain|L3|last_link_elitist"]["seeds_used"] == [3, 5]
+
+
+def test_a_cell_that_discards_most_of_what_it_builds_is_refused_when_the_spec_says(
+        monkeypatch, tmp_path):
+    # Every seed builds, so seed acceptance is 1.00 and the seed guard is silent;
+    # the cell reached its two items by throwing away eight candidates (#114).
+    real_cls = F.TaskDataset
+    monkeypatch.setattr(F, "TaskDataset", lambda *a, **kw: _Wasteful(real_cls(*a, **kw), 5))
+    strict = TasksetSpec(tasks=("claim_chain",), levels=(3,),
+                         orderings=("last_link_elitist",),
+                         seeds=SeedPolicy(start=0, take=2, scan_limit=10),
+                         min_build_acceptance=0.5)
+    with pytest.raises(SystemExit, match="build acceptance 0.20"):
+        F.freeze(strict, str(tmp_path / "t.jsonl"), verbose=False)
+    m = F.freeze(CHEAP, str(tmp_path / "t.jsonl"), verbose=False)
+    cell = m["cells"]["claim_chain|L3|last_link_elitist"]
+    assert cell["acceptance_rate"] == 1.0 and cell["build_acceptance_rate"] == 0.2
+
+
+def test_a_row_whose_minimum_the_search_gave_up_on_is_skipped_and_named(monkeypatch, tmp_path):
+    # A stated minimum the search could not prove is an upper bound wearing the
+    # name of a minimum, and the bloat gate reads it as one (#124). The seed is
+    # skipped like one that built nothing, and the skip says why.
+    real_cls = F.TaskDataset
+    monkeypatch.setattr(F, "TaskDataset", lambda *a, **kw: _Unproven(real_cls(*a, **kw), {0}))
+    m = F.freeze(CHEAP, str(tmp_path / "t.jsonl"), verbose=False)
+    cell = m["cells"]["claim_chain|L3|last_link_elitist"]
+    assert cell["seeds_used"] == [1, 2]
+    assert [(s["seed"], s["reason"]) for s in cell["seeds_skipped"]] == [(0, "minimality_unproven")]
+    assert cell["build_rejections"]["minimality_unproven"] == 1
 
 
 def test_the_same_spec_twice_gives_the_same_hash(tmp_path):

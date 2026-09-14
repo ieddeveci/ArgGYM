@@ -269,7 +269,7 @@ def test_the_prompt_states_that_a_stray_word_zeroes_the_answer(task, level):
     """The rule these five enforce and none of them used to state (#125).
 
     Behavioural as well as textual. All five refuse a stray word out of the parser --
-    `unparseable_tokens:1` on four and `unparseable_lines:1` on `perturbation` -- and it
+    `unparseable_tokens:1` on all five (#127) -- and it
     is that refusal the second half guards: the junk check still zeroes a word the format
     clause did not license. A wording check alone would survive the junk check going
     away.
@@ -387,12 +387,7 @@ def dropping_a_rule(item):
             yield rule, result
 
 
-@pytest.mark.parametrize("level", [
-    pytest.param(2, marks=pytest.mark.xfail(strict=True, reason=(
-        "#121: at level 2 the item queries one claim and writes two routes to it, so "
-        "every rule is on a redundant route and no removal moves a status"))),
-    *[lv for lv in LEVELS if lv != 2],
-])
+@pytest.mark.parametrize("level", LEVELS)
 def test_formalization_fails_when_a_queried_status_moves(level):
     """Which rule the queried statuses rest on is found rather than assumed.
 

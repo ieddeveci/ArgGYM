@@ -39,6 +39,10 @@ from arggym.tasks import counter_argument as ca
 CHEAP = [(lv, o, s) for lv in (3, 6) for o in ALL_ORDERINGS for s in SEEDS]
 GRID = [(lv, o, s) for lv in LEVELS for o in ALL_ORDERINGS for s in SEEDS]
 DEAR = [c for c in GRID if c not in CHEAP]
+#: The two off-grid levels where the decoy is in play and the chain count is four, which
+#: is where the arms collapsed into one answer (#109). A spec may name either; both build
+#: both arms in seconds on every ordering, unlike the level 13 and 14 tail (#111).
+DECOY = [(lv, o, s) for lv in (10, 11) for o in ALL_ORDERINGS for s in SEEDS]
 #: Where the draw may zero `n_strict` for the strict arm alone (#32), which is the only
 #: place the two arms are allowed to build different theories.
 DRAWN = (3, 4, 5)
@@ -81,6 +85,11 @@ def _the_ablation_holds(level: int, ordering: str, seed: int) -> None:
 
 @pytest.mark.parametrize("level,ordering,seed", CHEAP)
 def test_the_strict_arm_asks_its_own_question(level, ordering, seed):
+    _the_ablation_holds(level, ordering, seed)
+
+
+@pytest.mark.parametrize("level,ordering,seed", DECOY)
+def test_the_strict_arm_asks_its_own_question_where_the_decoy_enters(level, ordering, seed):
     _the_ablation_holds(level, ordering, seed)
 
 

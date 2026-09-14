@@ -169,7 +169,7 @@ def test_formalization_states_the_two_rules_that_zero_its_answer():
 
     Both cost the whole answer, not a directive. `parse` raises on any line the DSL cannot
     read -- the shipped reference inside a markdown fence scores 0.0 with
-    `unparseable_lines:2` -- and `status_map` swallows the engine's refusal of a
+    `unparseable_tokens:2` -- and `status_map` swallows the engine's refusal of a
     preference into an empty map that `score_value` turns into `engine_rejected`, so a
     `prefer_rule` over the answer's own strict rule, or a `prefer_premise` over its own
     axiom, scores 0.0 where the same directive costs one line of economy on the six
