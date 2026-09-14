@@ -60,10 +60,22 @@ EAGER = "eager"
 # credulous preferred and stable reached no item at any level, and level 3 asked one
 # semantics and was `status_query` reworded (#36).
 #
-# Credulous preferred from level 1, not level 3. Below 3 the schedule asked grounded
-# alone, so levels 1 and 2 were `status_query` with a longer answer format (#108); the
-# floating cluster every item opens with separates the two on every ordering, so the
-# entry levels can ask the pair the task is named for. Levels 3 and up are unchanged.
+# Levels 1, 2 and 3 are one band rather than a ramp. Three of `build`'s level-dependent
+# decisions agree across the three -- the cluster count is `randint(3, 4)` below level 6,
+# the unshielded ring needs stable, and the semantics are this pair -- so only the seed
+# salt separates them and the three levels are re-seedings of one generator. A theory
+# runs 14 to 24 directives on all of them (40 seeds x 4 orderings a level, and again at
+# 200). The first rung the task has is level 4. `tasksets/standard.yaml` starts at 3 for
+# reasons of its own, not because 1 and 2 are easier.
+#
+# Credulous preferred is the second member because the floating cluster every item opens
+# with separates it from grounded by construction -- the contested literal and the
+# floating conclusion above it are undecided under grounded and justified under credulous
+# preferred. Measured on every built item over levels 1-15 and all four orderings, both
+# literals split on 1509 of 1509. Eager was the alternative and is not eligible at the
+# entry levels: the padding below fills the theory out to `MAX_EAGER_ARGUMENTS`, which
+# takes those 14-24 directives to 31-38, so asking it at level 1 would put the task's
+# largest theories on its smallest level (#108).
 SEMANTICS_BY_LEVEL = {
     1: (GROUNDED, CRED_PREF),
     4: (GROUNDED, CRED_PREF, EAGER),
