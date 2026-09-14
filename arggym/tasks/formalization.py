@@ -307,12 +307,20 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         test_root = (u % 2 == 0)
 
         second_route = u > 0 and queried and rng.random() < 0.4
-        # The draw stays where it is, so every item built before this keeps its
-        # stream; only what the draw buys changes. A second route to the one claim
-        # the item has queried makes every rule redundant to that claim, and an
-        # item with no rule its queried statuses rest on cannot fail `success` on
-        # an answer missing any rule -- three cells at levels 2 and 4 did that
-        # (#121). With two or more claims queried, redundant support is the point.
+        # A second route to the one claim the item has queried makes every rule
+        # redundant to that claim, and an item with no rule its queried statuses
+        # rest on cannot fail `success` on an answer missing any rule (#121). With
+        # two or more claims queried, redundant support is the point.
+        #
+        # The draw stays where it is, so a unit that does not take the route reads
+        # the same `rng.random()` as before. The rest of that item does move: the
+        # unit skips an `rng.choice(queried)` and writes a NEW_TOPIC line instead
+        # of a LINE_TRANSITIONS one, and `_Cycler` shuffles each pool off the same
+        # `rng`. Sixteen of the 120 items the curriculum spans move, at levels 2
+        # to 6 -- 5, 2, 4, 4 and 1 of them -- and three are on the standard grid.
+        # That count is in dataset coordinates, so measure it through `make_item`:
+        # the seed `build` sees is `seed * 89 + k` (make_item_report, below), and
+        # sweeping raw `build(level, seed, ...)` counts a different set of items.
         if second_route and len(queried) < 2:
             second_route = False
         if second_route:
