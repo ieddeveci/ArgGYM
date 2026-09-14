@@ -153,6 +153,12 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     # Two defeasible chains keep a preference in the plain arm's answer. Levels 9, 10
     # and 12 to 15 already leave two or more, so this binds at 11 alone.
     if level >= 9:
+        # The cap only reads as a cap because the curriculum leaves room for it:
+        # `n_chain` is 4 at levels 9 to 11, 5 at 12 to 14 and 6 at 15. A curriculum
+        # that put fewer than two chains at a decoy level could not keep two
+        # defeasible ones, so say so here rather than clamping to zero and shipping
+        # a theory the comment above no longer describes.
+        assert n_chain >= 2, f"level {level} builds {n_chain} chains, too few to spare two"
         n_strict = min(n_strict, n_chain - 2)
     n_axiom_strict = 0
     use_decoy = level >= 9 and n_strict < n_chain
