@@ -1,0 +1,28 @@
+On TRUBA, the flow is:
+
+Copy the updated bundle into the ArgGYM repository root.
+Create a separate vLLM environment once:
+python3 -m venv ~/venvs/arggym-vllm
+source ~/venvs/arggym-vllm/bin/activate
+pip install -r hpc/vllm/requirements-vllm.txt
+deactivate
+Export your Hugging Face token if needed:
+export HF_TOKEN=...
+Submit a model job, for example:
+GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh hf-gemma4-26b-a4b-it
+
+or:
+
+GPU_TYPE=H200 TP_SIZE=1 ./hpc/vllm/submit_truba.sh hf-gemma4-31b-it
+Slurm allocates the GPU(s), starts vLLM, runs the existing ArgGYM evaluation over the frozen 1,440-item benchmark, then scores it automatically.
+
+Results will appear under:
+
+outputs/runs/
+
+and Slurm/vLLM logs under:
+
+outputs/slurm/
+outputs/vllm_logs/
+
+So in practice, after setup, each model is essentially one submission command.

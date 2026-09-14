@@ -16,6 +16,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+import re
+
 
 from evals.types import Attempt
 
@@ -85,6 +87,25 @@ class Endpoint:
                 "retries": self.retries}
 
 
+_THOUGHT_RE = re.compile(
+    r"<thought>(.*?)</thought>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def split_gemini_thought(content: str) -> tuple[str, str]:
+    """Separate Gemini's returned thought summary from the visible completion."""
+    matches = [
+        match.group(1).strip()
+        for match in _THOUGHT_RE.finditer(content)
+        if match.group(1).strip()
+    ]
+
+    reasoning = "\n\n".join(matches)
+    completion = _THOUGHT_RE.sub("", content).strip()
+
+    return completion, reasoning
+
 def reasoning_of(message: Any) -> str:
     """The reasoning trace, under whichever of the two names it arrived.
 
@@ -98,6 +119,20 @@ def reasoning_of(message: Any) -> str:
     if not extra and isinstance(message, dict):
         extra = message
     return extra.get("reasoning") or extra.get("reasoning_content") or ""
+
+def gemini_thought_summaries_enabled(endpoint: "Endpoint") -> bool:
+    """Whether this endpoint explicitly requested Gemini thought summaries."""
+    try:
+        return (
+            endpoint.extra_body
+            .get("extra_body", {})
+            .get("google", {})
+            .get("thinking_config", {})
+            .get("include_thoughts")
+            is True
+        )
+    except AttributeError:
+        return False
 
 
 class ChatClient:
@@ -172,27 +207,42 @@ class ChatClient:
                 continue
             reason = choice.finish_reason or ""
             refusal = getattr(choice.message, "refusal", None) or ""
+
             if reason not in _ANSWERED or refusal:
-                # Not an answer, so not a score. A refusal recorded as an empty
-                # completion is a zero on every task, which reports the
-                # provider's policy as the model's reasoning.
+                # Not an answer, so not a score.
                 return Attempt(
                     error=f"provider did not answer: finish_reason={reason!r}"
-                          + (f" refusal={refusal!r}" if refusal else ""),
-                    completion=choice.message.content or "", refusal=refusal,
+                        + (f" refusal={refusal!r}" if refusal else ""),
+                    completion=choice.message.content or "",
+                    refusal=refusal,
                     finish_reason=reason,
                     usage=(resp.usage.model_dump() if resp.usage else {}),
-                    latency_s=time.monotonic() - started, attempts=attempt,
-                    request=recorded)
+                    latency_s=time.monotonic() - started,
+                    attempts=attempt,
+                    request=recorded,
+                )
+
+            completion = choice.message.content or ""
+            reasoning = reasoning_of(choice.message)
+
+            if (
+                not reasoning
+                and gemini_thought_summaries_enabled(self.endpoint)
+            ):
+                completion, thought_summary = split_gemini_thought(completion)
+                if thought_summary:
+                    reasoning = thought_summary
+
             return Attempt(
-                completion=choice.message.content or "",
-                reasoning=reasoning_of(choice.message),
-                truncated=reason == "length", finish_reason=reason,
+                completion=completion,
+                reasoning=reasoning,
+                truncated=reason == "length",
+                finish_reason=reason,
                 usage=(resp.usage.model_dump() if resp.usage else {}),
-                latency_s=time.monotonic() - started, attempts=attempt,
-                request=recorded)
-        return Attempt(error=last, latency_s=time.monotonic() - started,
-                       attempts=attempt, request=recorded)
+                latency_s=time.monotonic() - started,
+                attempts=attempt,
+                request=recorded,
+            )
 
 
 def _retryable(exc: Exception) -> bool:

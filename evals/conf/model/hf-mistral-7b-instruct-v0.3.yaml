@@ -1,0 +1,11 @@
+name: hf-mistral-7b-instruct-v0.3
+model: mistralai/Mistral-7B-Instruct-v0.3
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 8192
+  temperature: 0.7
+  top_p: 0.95
+  seed: 0
+timeout_s: 5400
+retries: 2

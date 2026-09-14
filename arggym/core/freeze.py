@@ -38,7 +38,7 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: without moving a single question; versions 6 and 7 each state rules the scorer
 #: was already enforcing, and so move questions and no metadata at all -- the 280
 #: engine-scored and `formalization` questions at 6, the remaining 200 at 7.
-PROMPT_VERSION = 7
+PROMPT_VERSION = 8
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:
@@ -46,7 +46,7 @@ PROMPT_VERSION = 7
 #: way the bloat factor does (`docs/dataset-contract.md`): the prompt hash records
 #: that the question changed, and this records that an unchanged question is now
 #: scored differently. #89's name-collision rule is such a rule.
-SCORING_VERSION = 4
+SCORING_VERSION = 5
 
 
 @dataclass
