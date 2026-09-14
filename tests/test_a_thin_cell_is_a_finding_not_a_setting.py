@@ -52,16 +52,23 @@ class _Wasteful:
 
 
 class _Unproven:
-    """A dataset that reports the seeds named as built with an unproven minimum."""
+    """A dataset that reports the seeds named as built with an unproven minimum.
+
+    Its report carries a refusal of its own. The skip record is supposed to keep
+    the candidate rejections that seed had already made, and a fake whose report
+    had none could not tell a record that keeps them from one that drops them.
+    """
 
     def __init__(self, real, bad):
         self._real, self._bad = real, bad
 
     def build_at(self, k):
         entry, report = self._real.build_at(k)
-        if entry is not None and k in self._bad:
-            entry["metadata"]["gold"].setdefault("metadata", {})["minimality_proven"] = False
-        return entry, report
+        if entry is None or k not in self._bad:
+            return entry, report
+        entry["metadata"]["gold"].setdefault("metadata", {})["minimality_proven"] = False
+        return entry, BuildReport(report.item, report.calls + 2,
+                                  {"refused_by_the_test": 2})
 
 
 def test_a_filled_cell_records_the_seeds_it_used(tmp_path):
@@ -132,6 +139,11 @@ def test_a_row_whose_minimum_the_search_gave_up_on_is_skipped_and_named(monkeypa
     assert cell["seeds_used"] == [1, 2]
     assert [(s["seed"], s["reason"]) for s in cell["seeds_skipped"]] == [(0, "minimality_unproven")]
     assert cell["build_rejections"]["minimality_unproven"] == 1
+    # And the skip keeps what that seed had already refused, the way a seed that
+    # built nothing does. Writing `{"minimality_unproven": 1}` instead drops them,
+    # leaving a record that reads as a clean seed with one late failure.
+    assert cell["seeds_skipped"][0]["reasons"] == {"minimality_unproven": 1,
+                                                   "refused_by_the_test": 2}
 
 
 def test_the_same_spec_twice_gives_the_same_hash(tmp_path):
