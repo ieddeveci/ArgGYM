@@ -11,13 +11,37 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import arggym
 from evals import artifacts, taskset, values
+from evals.client import TIMEOUT
 from evals.prompt import region
+
+#: The tail of the latency distribution, reported instead of the maximum alone.
+#: The maximum is one item -- a provider hiccup moves it and nothing else --
+#: while a mean hides the tail entirely, and the tail is the whole question: a
+#: timeout is lost inference for the slowest few percent of items, not for the
+#: typical one. The maximum is reported beside it rather than instead of it, so
+#: a single outlier is visible as an outlier.
+#: It is published as `latency_s_p95`, spelled out rather than derived from this
+#: constant: the field name is what `report.py` and `results.csv` carry, and a
+#: name built at import time would let a changed percentile relabel an existing
+#: column instead of adding a new one. Changing the percentile means editing
+#: both, which is the point.
+LATENCY_PERCENTILE = 0.95
+
+#: How close to `timeout_s` counts as near the wall. A warning has to fire while
+#: there is still room to act, and this one has to fire before the first item is
+#: lost, because a request that hits the timeout is retried and makes the server
+#: generate the whole completion again. Four fifths leaves a quarter of the
+#: observed latency as headroom, and is wide enough that ordinary item-to-item
+#: variance on a healthy endpoint does not trip it. Nothing here is a threshold
+#: anything acts on automatically; it is a number in a report for a person.
+NEAR_TIMEOUT_FRACTION = 0.8
 
 
 class TasksetMismatch(SystemExit):
@@ -48,9 +72,17 @@ def score_one(gen: Dict[str, Any], row: Dict[str, Any],
     out: Dict[str, Any] = {
         "id": gen["id"], "task": gen["task"], "level": gen["level"],
         "ordering": gen["ordering"], "api_error": gen.get("error"),
+        # What kind of failure it was, as `client.py` labelled it at the moment
+        # it happened. Absent on generations made before that label existed,
+        # which `_error_kinds` reports as `unclassified` rather than guessing
+        # the kind back out of the message.
+        "api_error_kind": gen.get("error_kind"),
         "truncated": bool(gen.get("truncated")),
         "completion_tokens": (gen.get("usage") or {}).get("completion_tokens"),
-        "latency_s": gen.get("latency_s"), "attempts": gen.get("attempts"),
+        "latency_s": gen.get("latency_s"),
+        # The last request alone, which is what `timeout_s` bounds.
+        "attempt_latency_s": gen.get("attempt_latency_s"),
+        "attempts": gen.get("attempts"),
     }
     # Every documented field is present on every record, whatever happened.
     # `samples.jsonl` is read outside this process, and a reader that has to
@@ -106,6 +138,11 @@ def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float],
     out: Dict[str, Any] = {
         "n": n, "n_scored": len(ok),
         "n_api_error": sum(1 for r in records if r["api_error"]),
+        # Inside `n_api_error`, not beside it. A timeout is the one API error
+        # that moves with the token cap, and the August sweep's error rate rose
+        # from 9.8% to 21.8% between levels 3 and 9 -- a shape only visible when
+        # the count can be sliced by level, which is what this grouping is for.
+        "n_api_timeout": _n_timeout(records),
         "n_scorer_refused": sum(1 for r in records if r.get("scorer_refused")),
         # Read before the score. On the August sweep truncation removed 74-89%
         # of items for three of seven models, and a mean over what survived is
@@ -144,26 +181,117 @@ def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float],
     return out
 
 
-def coverage(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def coverage(records: Sequence[Dict[str, Any]],
+             timeout_s: Optional[float] = None) -> Dict[str, Any]:
     """What was not measured. No score in here, deliberately.
 
     A pooled mean over every record is a mean across tasks, which is the one
     number `aggregate` refuses to produce. Publishing it in the file the report
     reads would make the artifact contradict its own docstring, and it is the
     obvious thing for a reader to quote.
+
+    Latency belongs here for the same reason truncation does: it is a property
+    of the run rather than of the model, and it says whether the numbers below
+    it were measured at all. `timeout_s` comes from the manifest the run wrote,
+    and is `None` for a run whose manifest predates it -- the percentiles are
+    still reported, only the distance to the wall is not.
     """
     n = len(records)
     ok = [r for r in records if r["score"] is not None]
     return {
         "n": n, "n_scored": len(ok),
         "n_api_error": sum(1 for r in records if r["api_error"]),
+        "n_api_timeout": _n_timeout(records),
+        # The whole split, at the one level where the long tail of causes is
+        # worth printing. A per-task version would be mostly empty columns.
+        "api_errors_by_kind": _error_kinds(records),
         "n_scorer_refused": sum(1 for r in records if r.get("scorer_refused")),
         "truncated_rate": _rate(sum(r["truncated"] for r in records), n),
         "no_answer_region_rate": _rate(
             sum(bool(r.get("no_answer_region")) for r in ok), len(ok)),
         "answer_in_cot_rate": _rate(
             sum(bool(r.get("answer_in_cot")) for r in ok), len(ok)),
+        **_latency(records, timeout_s),
     }
+
+
+def _n_timeout(records: Sequence[Dict[str, Any]]) -> int:
+    return sum(1 for r in records
+               if r["api_error"] and r.get("api_error_kind") == TIMEOUT)
+
+
+def _error_kinds(records: Sequence[Dict[str, Any]]) -> Dict[str, int]:
+    """Every API error by cause, counted.
+
+    A record with an error and no kind is `unclassified` rather than guessed at.
+    It means the generation predates the label, and reading the cause back out
+    of the message would turn the taxonomy into a function of how a provider
+    words its errors -- which is the thing `error_kind` exists to stop.
+    """
+    counts: Dict[str, int] = defaultdict(int)
+    for r in records:
+        if r["api_error"]:
+            counts[r.get("api_error_kind") or "unclassified"] += 1
+    return dict(sorted(counts.items()))
+
+
+def _latency(records: Sequence[Dict[str, Any]],
+             timeout_s: Optional[float]) -> Dict[str, Any]:
+    """How much of the timeout budget the run actually used.
+
+    Over the generations that produced an answer, and not over the ones that
+    errored. A failed generation has a latency too and it measures something
+    else: a timeout's is the timeout, so including them would push the
+    percentile to the wall exactly when the wall is being hit and destroy the
+    warning; a 401's is milliseconds, and enough of those drag the percentile
+    down while the endpoint is not being exercised at all. What the errors cost
+    is counted by `api_errors_by_kind`, so nothing is lost by leaving them out
+    -- including the case this makes look empty, a run where everything timed
+    out and there is no latency to report, which `n_api_timeout` states loudly.
+
+    `attempt_latency_s` is the quantity `timeout_s` bounds. `latency_s` is the
+    whole item and exceeds the timeout as soon as one retry happens, so it is
+    the fallback for older generations only, where it overstates the latency of
+    a retried item and therefore overstates the risk -- the safe direction for
+    a warning.
+    """
+    answered = (_attempt_latency(r) for r in records if not r["api_error"])
+    values_s = sorted(v for v in answered if v is not None)
+    out: Dict[str, Any] = {
+        # Its own denominator: this is over the answered generations, which is
+        # neither `n` nor `n_scored` -- a row the scorer refused still made a
+        # request and still took time.
+        "n_latency_measured": len(values_s),
+        "latency_s_p50": _percentile(values_s, 0.5),
+        "latency_s_p95": _percentile(values_s, LATENCY_PERCENTILE),
+        "latency_s_max": round(values_s[-1], 1) if values_s else None,
+        # Repeated from the manifest so the percentile above can be read without
+        # opening another file. A latency of 2300s is comfortable under 5400 and
+        # over the wall under 1800, and the number alone says neither.
+        "timeout_s": timeout_s,
+    }
+    near = None if timeout_s is None else timeout_s * NEAR_TIMEOUT_FRACTION
+    out["near_timeout_s"] = round(near, 1) if near is not None else None
+    out["n_near_timeout"] = (None if near is None
+                             else sum(1 for v in values_s if v >= near))
+    return out
+
+
+def _attempt_latency(record: Dict[str, Any]) -> Optional[float]:
+    v = record.get("attempt_latency_s")
+    return record.get("latency_s") if v is None else v
+
+
+def _percentile(values_s: Sequence[float], q: float) -> Optional[float]:
+    """Nearest-rank, so every value reported is a latency something actually had.
+
+    Interpolating between two items would report a duration no request took,
+    which is a poor thing to size a timeout against.
+    """
+    if not values_s:
+        return None
+    i = min(len(values_s) - 1, max(0, math.ceil(q * len(values_s)) - 1))
+    return round(values_s[i], 1)
 
 
 def _rate(numerator: int, denominator: int) -> Optional[float]:
@@ -303,8 +431,12 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
                                            "by_task_ordering")
                 for v in grouped[g].values() if v.get("floor_error")}),
         },
-        # What was not measured, before anything that was.
-        "coverage": coverage(records),
+        # What was not measured, before anything that was. The timeout comes
+        # from the endpoint the run recorded (`Endpoint.redacted`), which is the
+        # only place it survives: this program never builds an `Endpoint` and
+        # never reads the config the run was launched with, so a default here
+        # would be a guess about a run someone else configured.
+        "coverage": coverage(records, (run.get("endpoint") or {}).get("timeout_s")),
         **grouped,
     }
     artifacts.write_json(os.path.join(run_dir, artifacts.METRICS), metrics)
@@ -328,6 +460,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
           # is a measurement of argumentation needs to see how often that
           # happened.
           f"{_pct(c['answer_in_cot_rate'])} answered only in the reasoning\n")
+    # Said on the terminal as well as in the file. The point of the number is to
+    # be read before a sweep loses items to it, and nobody opens metrics.json to
+    # check a thing they have no reason to suspect yet.
+    print(f"slowest request {_secs(c['latency_s_max'])}, "
+          f"p95 {_secs(c['latency_s_p95'])} "
+          f"over {c['n_latency_measured']} answered "
+          f"(timeout {_secs(c['timeout_s'])}, "
+          f"{_count(c['n_near_timeout'])} within "
+          f"{NEAR_TIMEOUT_FRACTION:.0%} of it)")
+    if c["api_errors_by_kind"]:
+        print("API errors by cause: "
+              + ", ".join(f"{k} {v}" for k, v in c["api_errors_by_kind"].items()))
+    print()
     if m["_meta"]["floors_unmeasured"]:
         print(f"floors could not be measured for some groups "
               f"({'; '.join(m['_meta']['floors_unmeasured'])}); their `corrected` "
@@ -349,6 +494,16 @@ def _f(x: Optional[float]) -> str:
 def _pct(x: Optional[float]) -> str:
     """A rate with no denominator has no percentage, and says so."""
     return "-" if x is None else f"{x:.1%}"
+
+
+def _secs(x: Optional[float]) -> str:
+    """Unknown reads as unknown. A run whose manifest never recorded a timeout
+    has no distance to the wall, and printing `0s` would claim it had."""
+    return "unknown" if x is None else f"{x:.0f}s"
+
+
+def _count(x: Optional[int]) -> str:
+    return "an unknown number" if x is None else str(x)
 
 
 if __name__ == "__main__":

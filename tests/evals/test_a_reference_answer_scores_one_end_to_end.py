@@ -19,12 +19,19 @@ from evals.score import score_run
 from evals.solver import ChatSolver
 
 
-def a_run(tmp_path, url, rows, taskset_file, template="xml_tags"):
+def a_run(tmp_path, url, rows, taskset_file, template="xml_tags", timeout_s=10):
+    """One run on disk, manifest included.
+
+    `timeout_s` is a parameter because it is a number the scorer reads back out
+    of the manifest: the latency headroom in `metrics.json` is measured against
+    it, so a test of that has to be able to set it.
+    """
     run_dir = os.fspath(tmp_path / "run")
     os.makedirs(run_dir)
     manifest, _ = taskset.load(taskset_file)
-    solver = ChatSolver(Endpoint(model="stub", base_url=url, timeout_s=10, retries=0),
-                        template=template)
+    solver = ChatSolver(
+        Endpoint(model="stub", base_url=url, timeout_s=timeout_s, retries=0),
+        template=template)
     artifacts.write_json(os.path.join(run_dir, artifacts.RUN), {
         "status": "completed", "taskset": taskset_file,
         "taskset_hash": manifest["taskset_hash"], "template": template,

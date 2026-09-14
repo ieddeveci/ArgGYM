@@ -41,6 +41,45 @@ _RETRYABLE = (408, 409, 429, 500, 502, 503, 504, 529)
 #: otherwise be scored as a wrong answer on every task.
 _ANSWERED = frozenset({"stop", "length", "eos", ""})
 
+#: The failure labels this module puts on `Attempt.error_kind`, plus `http_<n>`
+#: for anything that carried a status code and `finish_reason_<r>` for a
+#: provider that stopped without answering. Set here because here is the only
+#: place that still has the exception; downstream there is a sentence of prose
+#: and nothing else. `timeout` is the one that has to stand alone: it is the
+#: failure mode that moves with `max_tokens`, and inside a single `n_api_error`
+#: a rising timeout rate and a rising 429 rate are the same number.
+TIMEOUT = "timeout"
+CONNECTION = "connection"
+MALFORMED = "malformed_response"
+REFUSAL = "refusal"
+#: Neither a status nor a transport failure: a `TypeError` from a bad sampling
+#: value, an `ImportError` from a missing dependency. Ours, not the provider's.
+CALLER = "caller_error"
+
+
+def kind_of(exc: Exception) -> str:
+    """Which failure an exception from the SDK was.
+
+    A status code names itself, so `http_401` and `http_429` stay apart without
+    this module keeping a list of every status a provider might answer with.
+    The two that carry no status are the two worth naming: a timeout is the
+    failure a token cap causes, and a dropped connection is the one it does not.
+    """
+    status = getattr(exc, "status_code", None)
+    if status is not None:
+        return f"http_{status}"
+    try:
+        from openai import APIConnectionError, APITimeoutError
+    except ImportError:  # pragma: no cover - the group is installed in dev
+        return CALLER
+    # `APITimeoutError` subclasses `APIConnectionError`, so the narrower test
+    # runs first or every timeout is filed as a dropped connection.
+    if isinstance(exc, APITimeoutError):
+        return TIMEOUT
+    if isinstance(exc, APIConnectionError):
+        return CONNECTION
+    return CALLER
+
 
 @dataclass
 class Endpoint:
@@ -60,10 +99,14 @@ class Endpoint:
     #: mean this module knowing every provider -- which is what we are avoiding.
     extra_body: Dict[str, Any] = field(default_factory=dict)
     #: The same value `conf/config.yaml` sets, and for the same reason: on the
-    #: August sweep 1800s expired on roughly 8% of requests and each retry made
-    #: the server generate the whole completion again. A solver built outside
-    #: Hydra gets this default, so leaving it at 1800 shipped the failure to
-    #: exactly the caller who never saw the config that explains it.
+    #: August sweep 1800s expired on 9.8%, 14.8% and 21.8% of `qwen3.6-27b`'s
+    #: requests at levels 3, 6 and 9, and each retry made the server generate
+    #: the whole completion again. The rate rising with level is the part that
+    #: sizes a timeout, since a harder item is a longer generation. A solver
+    #: built outside Hydra gets this default, so leaving it at 1800 shipped the
+    #: failure to exactly the caller who never saw the config that explains it.
+    #: Whether 5400 is enough is measured rather than assumed: `score.py` reports
+    #: the latency percentile and how many generations came near this value.
     timeout_s: float = 5400.0
     retries: int = 2
 
@@ -149,13 +192,22 @@ class ChatClient:
         recorded = {k: v for k, v in body.items() if k != "messages"}
         recorded["n_messages"] = len(body["messages"])
         started = time.monotonic()
+        attempt_started = started
         last = "no attempt made"
+        last_kind: Optional[str] = None
         attempt = 0
         for attempt in range(1, max(self.endpoint.retries, 0) + 2):
+            # Restarted per attempt. `timeout_s` bounds one request, so "is the
+            # timeout big enough" is a question about this clock and not about
+            # the whole item: a generation that timed out once and succeeded on
+            # the retry spends more than `timeout_s` while no single request
+            # came near it.
+            attempt_started = time.monotonic()
             try:
                 resp = self._lazy().chat.completions.create(**body)
             except Exception as e:  # noqa: BLE001 - the taxonomy is below
                 last = f"{type(e).__name__}: {e}"
+                last_kind = kind_of(e)
                 if not _retryable(e) or attempt > self.endpoint.retries:
                     break
                 time.sleep(min(5 * attempt, 30))
@@ -166,6 +218,7 @@ class ChatClient:
                 # infrastructure, not reasoning. Retried, because a provider
                 # under load can return this intermittently.
                 last = "malformed response: no choices"
+                last_kind = MALFORMED
                 if attempt > self.endpoint.retries:
                     break
                 time.sleep(min(5 * attempt, 30))
@@ -176,22 +229,34 @@ class ChatClient:
                 # Not an answer, so not a score. A refusal recorded as an empty
                 # completion is a zero on every task, which reports the
                 # provider's policy as the model's reasoning.
+                now = time.monotonic()
                 return Attempt(
                     error=f"provider did not answer: finish_reason={reason!r}"
                           + (f" refusal={refusal!r}" if refusal else ""),
+                    # The provider's own reason, kept as the label. A
+                    # `content_filter` is a policy decision and an unknown
+                    # finish reason is a protocol surprise; folding both into
+                    # one bucket loses the only thing that tells them apart.
+                    error_kind=REFUSAL if refusal
+                    else f"finish_reason_{reason or 'empty'}",
                     completion=choice.message.content or "", refusal=refusal,
                     finish_reason=reason,
                     usage=(resp.usage.model_dump() if resp.usage else {}),
-                    latency_s=time.monotonic() - started, attempts=attempt,
+                    latency_s=now - started,
+                    attempt_latency_s=now - attempt_started, attempts=attempt,
                     request=recorded)
+            now = time.monotonic()
             return Attempt(
                 completion=choice.message.content or "",
                 reasoning=reasoning_of(choice.message),
                 truncated=reason == "length", finish_reason=reason,
                 usage=(resp.usage.model_dump() if resp.usage else {}),
-                latency_s=time.monotonic() - started, attempts=attempt,
+                latency_s=now - started,
+                attempt_latency_s=now - attempt_started, attempts=attempt,
                 request=recorded)
-        return Attempt(error=last, latency_s=time.monotonic() - started,
+        now = time.monotonic()
+        return Attempt(error=last, error_kind=last_kind, latency_s=now - started,
+                       attempt_latency_s=now - attempt_started,
                        attempts=attempt, request=recorded)
 
 

@@ -23,9 +23,17 @@ filter:
 
 endpoint:
   # Sized above the slowest generation we have seen rather than at a round
-  # number. On the August sweep a 1800s timeout expired on roughly 8% of
-  # requests, and each retry made the server generate the whole completion
-  # again: wasted inference, not lost data.
+  # number. On the August sweep a 1800s timeout expired on 9.8%, 14.8% and 21.8%
+  # of qwen3.6-27b's requests at levels 3, 6 and 9, and each retry made the
+  # server generate the whole completion again: wasted inference, not lost data.
+  # The rate rose with level, which is the direction that sizes a timeout -- a
+  # harder item is a longer generation -- so the worst cell is what this has to
+  # clear, not the best one.
+  #
+  # Whether 5400 clears it is now measured rather than argued: metrics.json
+  # reports the 95th-percentile request latency, the slowest request, and how
+  # many came within 80% of this number, and counts timeouts apart from the
+  # other API errors.
   timeout_s: 5400
   retries: 2
 

@@ -126,16 +126,67 @@ def coverage_table(runs: List[Dict[str, Any]]) -> str:
     on reasoning, and reading its mean as if it had is how the previous sweep's
     headline numbers went wrong.
     """
-    lines = ["| run | status | scored | API errors | truncated | no answer region "
-             "| answered only in reasoning |",
-             "|---|---|---:|---:|---:|---:|---:|"]
+    lines = ["| run | status | scored | API errors | of those, timeouts "
+             "| truncated | no answer region | answered only in reasoning |",
+             "|---|---|---:|---:|---:|---:|---:|---:|"]
     for m in runs:
         c, meta = m["coverage"], m["_meta"]
         lines.append(
             f"| {m['_label']} | {meta.get('run_status')} | {c['n_scored']} | "
-            f"{c['n_api_error']} | {_pct(c['truncated_rate'])} | "
+            # A subset of the column before it, and the header says so. A
+            # timeout is the API error that moves with the token cap, and it
+            # was uncountable inside the single bucket beside it.
+            f"{c['n_api_error']} | {_int(c.get('n_api_timeout'))} | "
+            f"{_pct(c['truncated_rate'])} | "
             f"{_pct(c['no_answer_region_rate'])} | "
             f"{_pct(c.get('answer_in_cot_rate'))} |")
+    return "\n".join(lines)
+
+
+def latency_table(runs: List[Dict[str, Any]]) -> str:
+    """How much of each run's timeout budget it used.
+
+    The percentile rather than the mean, because a timeout costs the slowest few
+    percent of items and the mean says nothing about them; the maximum beside it,
+    because a percentile that moved on one outlier should be readable as one. The
+    count at the wall is the number that decides anything: a run whose p95 sits
+    at four fifths of its timeout is one harder level away from losing items, and
+    a lost item is a whole generation regenerated on retry.
+
+    Over the generations that produced an answer. An errored one has a latency
+    too and it measures the failure rather than the model, so it is counted in
+    the coverage table instead (`evals/score.py:_latency`).
+    """
+    lines = ["| run | median | p95 | slowest | timeout | at 80% of timeout "
+             "| answered |",
+             "|---|---:|---:|---:|---:|---:|---:|"]
+    for m in runs:
+        c = m["coverage"]
+        lines.append(
+            f"| {m['_label']} | {_secs(c.get('latency_s_p50'))} | "
+            f"{_secs(c.get('latency_s_p95'))} | {_secs(c.get('latency_s_max'))} | "
+            f"{_secs(c.get('timeout_s'))} | {_int(c.get('n_near_timeout'))} | "
+            f"{_int(c.get('n_latency_measured'))} |")
+    return "\n".join(lines)
+
+
+def error_table(runs: List[Dict[str, Any]]) -> str:
+    """One row per cause of API error, or nothing at all when there were none.
+
+    `unclassified` is a generation made before the cause was recorded, not a
+    cause. The alternative -- reading the kind back out of the provider's
+    message -- would make the taxonomy depend on how a provider words things.
+    """
+    kinds = sorted({k for m in runs
+                    for k in (m["coverage"].get("api_errors_by_kind") or {})})
+    if not kinds:
+        return ""
+    head = "| cause | " + " | ".join(m["_label"] for m in runs) + " |"
+    lines = [head, "|---|" + "---:|" * len(runs)]
+    for k in kinds:
+        cells = [str((m["coverage"].get("api_errors_by_kind") or {}).get(k, 0))
+                 for m in runs]
+        lines.append(f"| {k} | " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
 
@@ -228,6 +279,22 @@ def render(runs: List[Dict[str, Any]]) -> str:
         "Read this table first. A run that lost most of its items to the token "
         "cap has not been measured on reasoning, whatever its mean says.", "",
         coverage_table(runs), "",
+    ]
+    errors = error_table(runs)
+    if errors:
+        # Only when something failed. On a clean sweep this section would be a
+        # table of zeros in a report whose first instruction is to read the
+        # coverage table, and `API errors 0` above has already said it.
+        parts += ["### API errors, by cause", "",
+                  "A timeout moves with the token cap and the other causes do "
+                  "not, so they are counted apart.", "", errors, ""]
+    parts += [
+        "## Latency headroom", "",
+        "Per request, over the generations that answered. A run whose p95 is "
+        "close to its timeout is one harder level away from losing items, and a "
+        "request that hits the timeout is retried -- the server generates the "
+        "whole completion again.", "",
+        latency_table(runs), "",
         "## Mean score, by task", "",
         "Each cell is the mean and, in brackets, how many items it is a mean "
         "of.", "",
@@ -259,7 +326,8 @@ def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
     # dataframe. Filtering the row to `fields` first, as this did, made that
     # comment describe a check that could not fire.
     fields = ["run", "task", "level", "ordering", "n", "n_scored", "n_untruncated",
-              "n_api_error", "n_scorer_refused", "mean", "mean_untruncated",
+              "n_api_error", "n_api_timeout", "n_scorer_refused", "mean",
+              "mean_untruncated",
               "success_rate", "floor", "floor_strategy", "corrected", "floor_error",
               "truncated_rate", "no_answer_region_rate",
               "answer_in_cot_rate", "zero_with_region"]
@@ -286,6 +354,18 @@ def _num(x: Optional[float]) -> str:
 
 def _pct(x: Optional[float]) -> str:
     return "-" if x is None else f"{x:.1%}"
+
+
+def _int(x: Optional[int]) -> str:
+    """`-` and not `0`, here and in `_secs`. Every `metrics.json` already on disk
+    was written before latency was measured and has none of these keys, and an
+    absent number rendered as zero prints a run with no timeouts recorded and a
+    run with no timeouts the same way."""
+    return "-" if x is None else str(x)
+
+
+def _secs(x: Optional[float]) -> str:
+    return "-" if x is None else f"{x:,.0f}s"
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
