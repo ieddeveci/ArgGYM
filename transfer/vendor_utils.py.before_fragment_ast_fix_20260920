@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import ast
+import hashlib
+import importlib
+import json
+import os
+import sys
+
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterable
+
+
+ROOT = Path(__file__).resolve().parents[1]
+VENDOR = Path(__file__).resolve().parent / "vendor"
+
+
+def ast_string(path: Path, name: str) -> str:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == name
+                ):
+                    value = ast.literal_eval(node.value)
+
+                    if not isinstance(value, str):
+                        raise TypeError(
+                            f"{path}:{name} is not a string"
+                        )
+
+                    return value
+
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+        ):
+            value = ast.literal_eval(node.value)
+
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"{path}:{name} is not a string"
+                )
+
+            return value
+
+    raise KeyError(f"{name} not found in {path}")
+
+
+@contextmanager
+def working_directory(path: Path):
+    """Temporarily execute with path as CWD.
+
+    Some pinned upstream evaluation code uses repository-relative file
+    paths at import time. This preserves that behavior without modifying
+    the vendored source itself.
+    """
+    old = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(old)
+
+
+@contextmanager
+def prepend_sys_path(path: Path):
+    value = str(path)
+    sys.path.insert(0, value)
+
+    try:
+        yield
+    finally:
+        try:
+            sys.path.remove(value)
+        except ValueError:
+            pass
+
+
+def fresh_import(
+    module_name: str,
+    directory: Path,
+    clear: Iterable[str] = (),
+):
+    for name in clear:
+        sys.modules.pop(name, None)
+
+    sys.modules.pop(module_name, None)
+
+    with prepend_sys_path(directory), working_directory(directory):
+        return importlib.import_module(module_name)
+
+
+def verify_vendor() -> dict:
+    manifest_path = VENDOR / "manifest.json"
+
+    manifest = json.loads(
+        manifest_path.read_text(encoding="utf-8")
+    )
+
+    for rec in manifest["files"]:
+        p = VENDOR / rec["path"]
+
+        got = hashlib.sha256(p.read_bytes()).hexdigest()
+
+        if got != rec["sha256"]:
+            raise RuntimeError(
+                f"vendor file hash mismatch: {rec['path']}"
+            )
+
+    return manifest

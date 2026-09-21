@@ -1,0 +1,24 @@
+endpoint_config: hf-gpt-oss-20b
+hf_model: openai/gpt-oss-20b
+params_b: 21
+active_params_b: 3.6
+tier: large-moe
+
+# Official checkpoint uses MXFP4 quantization for the MoE expert weights.
+# bfloat16 is the vLLM compute/unquantized-tensor dtype used by this ArgGYM lane.
+dtype: bfloat16
+quantization: mxfp4
+
+tensor_parallel_size: 1
+max_model_len: 65536
+gpu_memory_utilization: 0.9
+reasoning_parser: openai_gptoss
+trust_remote_code: false
+
+extra_args:
+- --no-enable-prefix-caching
+- --max-num-batched-tokens
+- '8192'
+
+tensor_parallel_size_h100: 1
+tensor_parallel_size_h200: 1

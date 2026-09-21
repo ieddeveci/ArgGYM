@@ -1,0 +1,13 @@
+from __future__ import annotations
+from typing import Any, Dict, Iterable, Protocol
+
+
+class TransferBenchmark(Protocol):
+    """Minimal contract for a frozen external benchmark adapter."""
+    name: str
+    version: str
+
+    def rows(self) -> Iterable[Dict[str, Any]]: ...
+    def prompt(self, row: Dict[str, Any]) -> list[dict[str, str]]: ...
+    def parse(self, completion: str) -> Any: ...
+    def score(self, prediction: Any, row: Dict[str, Any]) -> float: ...

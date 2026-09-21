@@ -1,0 +1,65 @@
+rows=20 existing=0
+[1/20] course_density20_v1::course_schedule::p34::000
+[2/20] course_density20_v1::course_schedule::p34::001
+[3/20] course_density20_v1::course_schedule::p34::002
+[4/20] course_density20_v1::course_schedule::p34::003
+[5/20] course_density20_v1::course_schedule::p34::004
+[6/20] course_density20_v1::course_schedule::p34::005
+[7/20] course_density20_v1::course_schedule::p34::006
+[8/20] course_density20_v1::course_schedule::p34::007
+[9/20] course_density20_v1::course_schedule::p34::008
+[10/20] course_density20_v1::course_schedule::p34::009
+[11/20] course_density20_v1::course_schedule::p45::000
+[12/20] course_density20_v1::course_schedule::p45::001
+[13/20] course_density20_v1::course_schedule::p45::002
+[14/20] course_density20_v1::course_schedule::p45::003
+[15/20] course_density20_v1::course_schedule::p45::004
+[16/20] course_density20_v1::course_schedule::p45::005
+[17/20] course_density20_v1::course_schedule::p45::006
+[18/20] course_density20_v1::course_schedule::p45::007
+[19/20] course_density20_v1::course_schedule::p45::008
+[20/20] course_density20_v1::course_schedule::p45::009
+{
+  "benchmark": "course_density20_v1",
+  "by_level_gold": {
+    "p34::False": {
+      "accuracy": 1.0,
+      "correct": 5,
+      "max_completion_tokens": 16021,
+      "mean_completion_tokens": 12299.4,
+      "mean_latency_s": 110.75223426818847,
+      "n": 5,
+      "truncated": 0
+    },
+    "p34::True": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 16223.6,
+      "mean_latency_s": 147.31061763763427,
+      "n": 5,
+      "truncated": 4
+    },
+    "p45::False": {
+      "accuracy": 0.8,
+      "correct": 4,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 12638.2,
+      "mean_latency_s": 113.86975092887879,
+      "n": 5,
+      "truncated": 1
+    },
+    "p45::True": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 16384.0,
+      "mean_latency_s": 148.68788056373597,
+      "n": 5,
+      "truncated": 5
+    }
+  },
+  "completed": 20,
+  "parser_version": "rg4_parser_v4",
+  "rows": 20
+}

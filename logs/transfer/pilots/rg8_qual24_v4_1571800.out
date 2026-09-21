@@ -1,0 +1,100 @@
+data rows: 24
+data sha256: 7fbfb2aeb690c23e9f5365f748886439ccbd2728f2b56fde63580b6f08077911
+RG8 QUAL24 VLLM READY port=29800
+{
+  "by_difficulty": {
+    "easy": {
+      "adapted_native_mean": 0.875,
+      "errors": 0,
+      "mean_latency_s": 22.6996091902256,
+      "n": 8,
+      "raw_native_mean": 0.23924497194432173,
+      "truncated": 0
+    },
+    "hard": {
+      "adapted_native_mean": 0.50625,
+      "errors": 0,
+      "mean_latency_s": 88.20237526297569,
+      "n": 8,
+      "raw_native_mean": 0.1256142506142506,
+      "truncated": 3
+    },
+    "medium": {
+      "adapted_native_mean": 0.75625,
+      "errors": 0,
+      "mean_latency_s": 49.261958956718445,
+      "n": 8,
+      "raw_native_mean": 0.0011791095364780519,
+      "truncated": 1
+    }
+  },
+  "by_task": {
+    "arc_1d": {
+      "adapted_native_mean": 0.3333333333333333,
+      "errors": 0,
+      "mean_latency_s": 105.73440392812093,
+      "n": 3,
+      "raw_native_mean": 0.30158730158730157,
+      "truncated": 2
+    },
+    "course_schedule": {
+      "adapted_native_mean": 0.6666666666666666,
+      "errors": 0,
+      "mean_latency_s": 83.65933911005656,
+      "n": 3,
+      "raw_native_mean": 0.0018279051221664858,
+      "truncated": 1
+    },
+    "family_relationships": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 3.995425303777059,
+      "n": 3,
+      "raw_native_mean": 0.6666666666666666,
+      "truncated": 0
+    },
+    "knights_knaves": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 24.177005370457966,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 0
+    },
+    "propositional_logic": {
+      "adapted_native_mean": 0.03333333333333333,
+      "errors": 0,
+      "mean_latency_s": 41.669601837793984,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 0
+    },
+    "self_reference": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 99.24215865135193,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 0
+    },
+    "syllogism": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 5.125022490819295,
+      "n": 3,
+      "raw_native_mean": 0.006020345543999641,
+      "truncated": 0
+    },
+    "zebra_puzzles": {
+      "adapted_native_mean": 0.6666666666666666,
+      "errors": 0,
+      "mean_latency_s": 63.50089240074158,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 1
+    }
+  },
+  "completed": 24,
+  "rows": 24
+}
+RG8 QUAL24 COMPLETE

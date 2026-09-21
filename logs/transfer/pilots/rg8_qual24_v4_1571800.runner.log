@@ -1,0 +1,121 @@
+rows=24 existing=0
+[1/24] rg8_qual24_v4::arc_1d::easy::000
+[2/24] rg8_qual24_v4::arc_1d::medium::000
+[3/24] rg8_qual24_v4::arc_1d::hard::000
+[4/24] rg8_qual24_v4::family_relationships::easy::000
+[5/24] rg8_qual24_v4::family_relationships::medium::000
+[6/24] rg8_qual24_v4::family_relationships::hard::000
+[7/24] rg8_qual24_v4::course_schedule::easy::000
+[8/24] rg8_qual24_v4::course_schedule::medium::000
+[9/24] rg8_qual24_v4::course_schedule::hard::000
+[10/24] rg8_qual24_v4::knights_knaves::easy::000
+[11/24] rg8_qual24_v4::knights_knaves::medium::000
+[12/24] rg8_qual24_v4::knights_knaves::hard::000
+[13/24] rg8_qual24_v4::propositional_logic::easy::000
+[14/24] rg8_qual24_v4::propositional_logic::medium::000
+[15/24] rg8_qual24_v4::propositional_logic::hard::000
+[16/24] rg8_qual24_v4::self_reference::easy::000
+[17/24] rg8_qual24_v4::self_reference::medium::000
+[18/24] rg8_qual24_v4::self_reference::hard::000
+[19/24] rg8_qual24_v4::syllogism::easy::000
+[20/24] rg8_qual24_v4::syllogism::medium::000
+[21/24] rg8_qual24_v4::syllogism::hard::000
+[22/24] rg8_qual24_v4::zebra_puzzles::easy::000
+[23/24] rg8_qual24_v4::zebra_puzzles::medium::000
+[24/24] rg8_qual24_v4::zebra_puzzles::hard::000
+{
+  "by_difficulty": {
+    "easy": {
+      "adapted_native_mean": 0.875,
+      "errors": 0,
+      "mean_latency_s": 22.6996091902256,
+      "n": 8,
+      "raw_native_mean": 0.23924497194432173,
+      "truncated": 0
+    },
+    "hard": {
+      "adapted_native_mean": 0.50625,
+      "errors": 0,
+      "mean_latency_s": 88.20237526297569,
+      "n": 8,
+      "raw_native_mean": 0.1256142506142506,
+      "truncated": 3
+    },
+    "medium": {
+      "adapted_native_mean": 0.75625,
+      "errors": 0,
+      "mean_latency_s": 49.261958956718445,
+      "n": 8,
+      "raw_native_mean": 0.0011791095364780519,
+      "truncated": 1
+    }
+  },
+  "by_task": {
+    "arc_1d": {
+      "adapted_native_mean": 0.3333333333333333,
+      "errors": 0,
+      "mean_latency_s": 105.73440392812093,
+      "n": 3,
+      "raw_native_mean": 0.30158730158730157,
+      "truncated": 2
+    },
+    "course_schedule": {
+      "adapted_native_mean": 0.6666666666666666,
+      "errors": 0,
+      "mean_latency_s": 83.65933911005656,
+      "n": 3,
+      "raw_native_mean": 0.0018279051221664858,
+      "truncated": 1
+    },
+    "family_relationships": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 3.995425303777059,
+      "n": 3,
+      "raw_native_mean": 0.6666666666666666,
+      "truncated": 0
+    },
+    "knights_knaves": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 24.177005370457966,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 0
+    },
+    "propositional_logic": {
+      "adapted_native_mean": 0.03333333333333333,
+      "errors": 0,
+      "mean_latency_s": 41.669601837793984,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 0
+    },
+    "self_reference": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 99.24215865135193,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 0
+    },
+    "syllogism": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "mean_latency_s": 5.125022490819295,
+      "n": 3,
+      "raw_native_mean": 0.006020345543999641,
+      "truncated": 0
+    },
+    "zebra_puzzles": {
+      "adapted_native_mean": 0.6666666666666666,
+      "errors": 0,
+      "mean_latency_s": 63.50089240074158,
+      "n": 3,
+      "raw_native_mean": 0.0,
+      "truncated": 1
+    }
+  },
+  "completed": 24,
+  "rows": 24
+}

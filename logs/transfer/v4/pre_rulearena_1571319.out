@@ -1,0 +1,37 @@
+========================================================================
+CUSTOM V4 FREEZE VERIFICATION
+========================================================================
+manifest sha256: 975c1d31e43cff2ed3354695aaf13844129e5231dca027e44d3d3cf09b9d714b
+rows: 3944
+max prompt tokens: 22729
+max prompt row: rulearena rulearena:nba:2:10
+
+CUSTOM V4 FREEZE VERIFICATION: PASS
+runtime endpoint: /arf/scratch/futan/ArgGYM/outputs/transfer/pre_rl_qwen3_14b_v4/rulearena/runtime_endpoint.json
+runtime port: 29319
+BENCH=rulearena
+PORT=29319
+RUNTIME_ENDPOINT_SHA=bd20ec9e0f79bb08aa8429e7e4ac1c94f8c08a46a0acfb458e71728145506a9b
+VLLM V4 PRE SERVER READY: rulearena port=29319
+V4 GENERATION COMPLETE: rulearena
+========================================================================
+CUSTOM V4 FREEZE VERIFICATION
+========================================================================
+manifest sha256: 975c1d31e43cff2ed3354695aaf13844129e5231dca027e44d3d3cf09b9d714b
+rows: 3944
+max prompt tokens: 22729
+max prompt row: rulearena rulearena:nba:2:10
+
+CUSTOM V4 FREEZE VERIFICATION: PASS
+{
+  "status": "complete",
+  "benchmark": "rulearena",
+  "total": 816,
+  "scored": 816,
+  "missing": 0,
+  "infrastructure_errors": 0,
+  "parser_errors": 0,
+  "truncated": 2,
+  "accuracy": 0.24387254901960784
+}
+OFFICIAL V4 PRE COMPLETE: rulearena

@@ -1,0 +1,37 @@
+========================================================================
+CUSTOM V4 FREEZE VERIFICATION
+========================================================================
+manifest sha256: 975c1d31e43cff2ed3354695aaf13844129e5231dca027e44d3d3cf09b9d714b
+rows: 3944
+max prompt tokens: 22729
+max prompt row: rulearena rulearena:nba:2:10
+
+CUSTOM V4 FREEZE VERIFICATION: PASS
+runtime endpoint: /arf/scratch/futan/ArgGYM/outputs/transfer/pre_rl_qwen3_14b_v4/logiqa2/runtime_endpoint.json
+runtime port: 29320
+BENCH=logiqa2
+PORT=29320
+RUNTIME_ENDPOINT_SHA=1eb22a014ae72e3fbe354f83e6fc6f5440399e48ddc41dcc9267a8f65038e012
+VLLM V4 PRE SERVER READY: logiqa2 port=29320
+V4 GENERATION COMPLETE: logiqa2
+========================================================================
+CUSTOM V4 FREEZE VERIFICATION
+========================================================================
+manifest sha256: 975c1d31e43cff2ed3354695aaf13844129e5231dca027e44d3d3cf09b9d714b
+rows: 3944
+max prompt tokens: 22729
+max prompt row: rulearena rulearena:nba:2:10
+
+CUSTOM V4 FREEZE VERIFICATION: PASS
+{
+  "status": "complete",
+  "benchmark": "logiqa2",
+  "total": 1572,
+  "scored": 1572,
+  "missing": 0,
+  "infrastructure_errors": 0,
+  "parser_errors": 0,
+  "truncated": 0,
+  "accuracy": 0.11450381679389313
+}
+OFFICIAL V4 PRE COMPLETE: logiqa2

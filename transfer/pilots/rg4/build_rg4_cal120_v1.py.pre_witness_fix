@@ -1,0 +1,313 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from copy import deepcopy
+from hashlib import sha256
+from itertools import product
+from pathlib import Path
+import argparse
+import json
+import os
+
+import reasoning_gym
+from reasoning_gym.logic.propositional_logic import Expression
+
+EXPECTED_RG_REV = "49b07130b3fcd12f2d064bba7c43869543a0e7e7"
+NAMESPACE = "rg4_cal120_v1"
+LEVELS = ("easy", "medium", "hard")
+PER_CELL = 10
+
+TASK_LEVELS = {
+    "propositional_logic": {
+        "easy": {
+            "min_vars": 4, "max_vars": 4,
+            "min_statements": 4, "max_statements": 4,
+            "min_complexity": 2, "max_complexity": 2,
+        },
+        "medium": {
+            "min_vars": 6, "max_vars": 6,
+            "min_statements": 6, "max_statements": 6,
+            "min_complexity": 3, "max_complexity": 3,
+        },
+        "hard": {
+            "min_vars": 8, "max_vars": 8,
+            "min_statements": 8, "max_statements": 8,
+            "min_complexity": 4, "max_complexity": 4,
+        },
+    },
+    "knights_knaves": {
+        "easy": {
+            "n_people": 5,
+            "depth_constraint": 2,
+            "width_constraint": 3,
+        },
+        "medium": {
+            "n_people": 6,
+            "depth_constraint": 3,
+            "width_constraint": 3,
+        },
+        "hard": {
+            "n_people": 7,
+            "depth_constraint": 3,
+            "width_constraint": 4,
+        },
+    },
+    "course_schedule": {
+        "easy": {
+            "min_num_courses": 15, "max_num_courses": 15,
+            "min_num_prerequisites": 2, "max_num_prerequisites": 3,
+            "min_cycle_length": 3, "max_cycle_length": 3,
+            "p_solvable": 0.5,
+        },
+        "medium": {
+            "min_num_courses": 25, "max_num_courses": 25,
+            "min_num_prerequisites": 2, "max_num_prerequisites": 4,
+            "min_cycle_length": 4, "max_cycle_length": 4,
+            "p_solvable": 0.5,
+        },
+        "hard": {
+            "min_num_courses": 35, "max_num_courses": 35,
+            "min_num_prerequisites": 3, "max_num_prerequisites": 5,
+            "min_cycle_length": 5, "max_cycle_length": 5,
+            "p_solvable": 0.5,
+        },
+    },
+    "zebra_puzzles": {
+        "easy": {"num_people": 4, "num_characteristics": 4},
+        "medium": {"num_people": 5, "num_characteristics": 5},
+        "hard": {"num_people": 6, "num_characteristics": 6},
+    },
+}
+
+
+def file_sha(path: Path) -> str:
+    h = sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def stable_seed(task: str, level: str) -> int:
+    raw = f"{NAMESPACE}|{task}|{level}".encode()
+    return int(sha256(raw).hexdigest()[:8], 16) & 0x7FFFFFFF
+
+
+def collect_vars(expr: Expression) -> set[str]:
+    if expr.operator is None:
+        return {expr.left}
+    out: set[str] = set()
+    if isinstance(expr.left, Expression):
+        out |= collect_vars(expr.left)
+    if expr.right is not None and isinstance(expr.right, Expression):
+        out |= collect_vars(expr.right)
+    return out
+
+
+def prop_candidate_ok(entry: dict, level: str) -> bool:
+    meta = entry["metadata"]
+    premise_texts = list(meta["premises"])
+
+    if len(set(premise_texts)) != len(premise_texts):
+        return False
+
+    premises = [Expression.from_string(x) for x in premise_texts]
+    witness = Expression.from_string(meta["example_answer"])
+
+    variables = sorted(
+        set().union(
+            *(collect_vars(x) for x in premises),
+            collect_vars(witness),
+        )
+    )
+    min_used = {"easy": 3, "medium": 5, "hard": 7}[level]
+    if len(variables) < min_used:
+        return False
+
+    premise_model_exists = False
+    witness_true_seen = False
+    witness_false_seen = False
+
+    for values in product((False, True), repeat=len(variables)):
+        assignment = dict(zip(variables, values))
+        w = bool(witness.evaluate(assignment))
+        witness_true_seen |= w
+        witness_false_seen |= not w
+        if all(p.evaluate(assignment) for p in premises):
+            premise_model_exists = True
+
+    return (
+        premise_model_exists
+        and witness_true_seen
+        and witness_false_seen
+    )
+
+
+def gold_self_score(task: str, entry: dict) -> float:
+    scorer = reasoning_gym.get_score_answer_fn(task)
+    answer = (
+        entry["metadata"]["example_answer"]
+        if task == "propositional_logic"
+        else entry["answer"]
+    )
+    return float(scorer(answer=answer, entry=entry))
+
+
+def select_cell(task: str, level: str) -> list[dict]:
+    cfg = deepcopy(TASK_LEVELS[task][level])
+    seed = stable_seed(task, level)
+    ds = reasoning_gym.create_dataset(
+        task,
+        seed=seed,
+        size=500,
+        **cfg,
+    )
+
+    rows = []
+    idx = 0
+    course_labels = Counter()
+
+    while len(rows) < PER_CELL:
+        if idx >= 500:
+            raise RuntimeError(
+                f"candidate exhaustion task={task} level={level}"
+            )
+
+        entry = deepcopy(ds[idx])
+        source_idx = idx
+        idx += 1
+
+        if task == "propositional_logic" and not prop_candidate_ok(entry, level):
+            continue
+
+        if task == "course_schedule":
+            label = "true" if bool(entry["metadata"]["solvable"]) else "false"
+            if course_labels[label] >= 5:
+                continue
+            course_labels[label] += 1
+
+        score = gold_self_score(task, entry)
+        if score != 1.0:
+            raise RuntimeError(
+                f"native gold self-score failure "
+                f"task={task} level={level} idx={source_idx} score={score}"
+            )
+
+        entry["metadata"] = deepcopy(entry.get("metadata") or {})
+        entry["metadata"]["pilot_difficulty_label"] = level
+        entry["metadata"]["pilot_generation_config"] = deepcopy(cfg)
+        entry["metadata"]["pilot_seed"] = seed
+
+        rows.append({
+            "id": f"{NAMESPACE}::{task}::{level}::{len(rows):03d}",
+            "benchmark": NAMESPACE,
+            "task": task,
+            "difficulty": level,
+            "generator_index": source_idx,
+            "generator_seed": seed,
+            "generation_config": deepcopy(cfg),
+            "entry": entry,
+        })
+
+    if task == "course_schedule":
+        expected = Counter({"true": 5, "false": 5})
+        if course_labels != expected:
+            raise RuntimeError(
+                f"course balance failed level={level}: {dict(course_labels)}"
+            )
+
+    return rows
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default="/arf/scratch/futan/ArgGYM")
+    args = ap.parse_args()
+
+    rg_rev = os.environ.get("ARGGYM_RG_REVISION", "").strip()
+    if rg_rev != EXPECTED_RG_REV:
+        raise RuntimeError(
+            f"RG revision mismatch expected={EXPECTED_RG_REV} actual={rg_rev!r}"
+        )
+
+    rows = []
+    for task in TASK_LEVELS:
+        for level in LEVELS:
+            rows.extend(select_cell(task, level))
+
+    if len(rows) != 120:
+        raise RuntimeError(f"expected 120 rows, got {len(rows)}")
+    if len({x["id"] for x in rows}) != 120:
+        raise RuntimeError("duplicate IDs")
+    if len({x["entry"]["question"] for x in rows}) != 120:
+        raise RuntimeError("duplicate questions")
+
+    task_counts = Counter(x["task"] for x in rows)
+    diff_counts = Counter(x["difficulty"] for x in rows)
+
+    expected_tasks = Counter({x: 30 for x in TASK_LEVELS})
+    expected_diffs = Counter({x: 40 for x in LEVELS})
+    if task_counts != expected_tasks:
+        raise RuntimeError(f"task counts wrong: {dict(task_counts)}")
+    if diff_counts != expected_diffs:
+        raise RuntimeError(f"difficulty counts wrong: {dict(diff_counts)}")
+
+    out_dir = Path(args.root) / "data/transfer/pilots/rg4"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data_path = out_dir / f"{NAMESPACE}.jsonl"
+    manifest_path = out_dir / f"{NAMESPACE}.manifest.json"
+
+    with data_path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+    course_by_level = defaultdict(Counter)
+    for row in rows:
+        if row["task"] == "course_schedule":
+            label = "true" if row["entry"]["metadata"]["solvable"] else "false"
+            course_by_level[row["difficulty"]][label] += 1
+
+    manifest = {
+        "benchmark": NAMESPACE,
+        "status": "calibration_pilot_frozen",
+        "reasoning_gym_revision": rg_rev,
+        "rows": 120,
+        "per_task": dict(sorted(task_counts.items())),
+        "per_difficulty": dict(sorted(diff_counts.items())),
+        "course_schedule_balance": {
+            k: dict(v) for k, v in sorted(course_by_level.items())
+        },
+        "data_path": str(data_path),
+        "data_sha256": file_sha(data_path),
+        "difficulty_policy": TASK_LEVELS,
+        "selection_policy": (
+            "deterministic generator order; no model outputs used; "
+            "course_schedule exactly 5 solvable + 5 unsolvable per level"
+        ),
+        "propositional_logic_filter": (
+            "unique premises; >=3/5/7 variables used by level; "
+            "combined premises satisfiable; witness non-tautological and "
+            "non-contradictory; native witness score=1.0"
+        ),
+    }
+
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    print("=" * 100)
+    print("RG4 CAL120 BUILD: PASS")
+    print("=" * 100)
+    print("rows:", len(rows))
+    print("data:", data_path)
+    print("sha256:", manifest["data_sha256"])
+    print("task counts:", dict(sorted(task_counts.items())))
+    print("difficulty counts:", dict(sorted(diff_counts.items())))
+    print("course balance:", manifest["course_schedule_balance"])
+    print("manifest:", manifest_path)
+
+
+if __name__ == "__main__":
+    main()

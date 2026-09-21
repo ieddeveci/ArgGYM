@@ -3,7 +3,7 @@ model: Qwen/Qwen3.6-35B-A3B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 32768
+  max_tokens: 81920
   temperature: 1.0
   top_p: 0.95
   seed: 0

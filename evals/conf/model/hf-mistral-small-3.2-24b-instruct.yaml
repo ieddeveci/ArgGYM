@@ -1,0 +1,12 @@
+name: hf-mistral-small-3.2-24b-instruct
+model: mistralai/Mistral-Small-3.2-24B-Instruct-2506
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+
+sampling:
+  max_tokens: 32768
+  temperature: 0.15
+  seed: 0
+
+timeout_s: 5400
+retries: 2

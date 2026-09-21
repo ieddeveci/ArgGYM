@@ -1,0 +1,365 @@
+version: 3
+protocol_status: FROZEN_PRE_POST_ONLY
+protocol_freeze_date: "2026-09-20"
+
+protocol_corrections:
+  - date: "2026-09-20"
+    benchmark: LogiQA 2.0
+    change: expected_items_1571_to_1572
+    reason: >-
+      The pinned official English MRC test.txt contains 1572 valid JSON
+      records. The earlier count of 1571 came from wc -l, which counts
+      newline bytes; the final record has no trailing newline. The official
+      evaluation script iterates over every source line and does not
+      deduplicate by id.
+
+  - date: "2026-09-20"
+    benchmark: Multi-LogiEval
+    change: repository_release_1556_vs_paper_1552
+    reason: >-
+      The pinned official repository contains 1556 core d1-d5 records,
+      whereas Table 5 of the published paper reports 1552. Git history
+      shows the d2 files were uploaded together on 2024-06-24 and were
+      not subsequently modified. No source-backed rule identifies four
+      records for removal, so all pinned repository rows are retained.
+      Files under d2_Data/nm use raw metadata logic=mm; reporting logic
+      family is normalized from the official directory family, so these
+      rows are reported as non-monotonic while raw metadata is preserved.
+
+
+  - date: "2026-09-20"
+    benchmark: transfer_decoding
+    change: qwen3_thinking_compatible_decoding
+    reason: >-
+      Before any PRE-RL transfer generation was produced, the decoding
+      protocol was revised for Qwen3-14B thinking mode. The earlier
+      benchmark-default greedy decoding and short completion limits could
+      constrain or truncate reasoning tokens. PRE and POST therefore use one
+      frozen Qwen3 thinking-mode sampling policy while preserving benchmark
+      prompts, few-shot examples, stop sequences, parsers, and metrics.
+
+purpose:
+  - ARG_GYM_BENCHMARK_CHANGE
+  - EXTERNAL_TRANSFER_CHANGE
+  - ARG_GYM_DIFFICULTY_CHANGE
+
+use_for_checkpoint_selection: false
+use_for_hyperparameter_tuning: false
+use_for_curriculum_changes: false
+use_for_early_stopping: false
+
+when_to_evaluate:
+  - PRE_RL_BASE_MODEL
+  - POST_RL_SELECTED_CHECKPOINT
+
+model_protocol:
+  base_model: Qwen/Qwen3-14B
+  base_revision: 40c069824f4251a91eefaf281ebe4c544efd3e18
+  dtype: bfloat16
+  max_model_len: 40960
+  reasoning_parser: qwen3
+  thinking_enabled: true
+  same_protocol_pre_post: true
+  transfer_decoding:
+    policy: qwen3_thinking_sampling_v1
+    do_sample: true
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+    min_p: 0.0
+    seed: 1234
+    max_output_tokens: 32768
+    preserve_benchmark_stop_sequences: true
+
+provenance:
+  source_freeze_file: outputs/transfer/protocol_freeze/source_revisions_20260920.txt
+  source_freeze_sha256: 2c384c883a56d7c7e45117ded5e850454953a1e7d519d866dcb66d95cce1f9ab
+
+lm_eval:
+  repository: EleutherAI/lm-evaluation-harness
+  revision: d6de81643928d653435c431bae19945d41d32520
+  use_task_defaults_unless_explicitly_overridden: true
+  apply_chat_template: true
+  log_samples: true
+
+benchmarks:
+
+  multilogieval:
+    display_name: Multi-LogiEval
+    implementation: custom_official_source
+    repository: Mihir3009/Multi-LogiEval
+    revision: 6d55ade5dfcc35e1382bf62335df3a061bc4c781
+
+    repository_core_items: 1556
+    published_paper_core_items: 1552
+    paper_repository_difference: 4
+
+    reporting_logic_family:
+      source: directory_family
+      mapping:
+        pl: propositional
+        fol: first_order
+        nm: non_monotonic
+      preserve_raw_logic_metadata: true
+      raw_metadata_note: >-
+        d2_Data/nm files contain raw logic metadata "mm"; they remain
+        byte-preserved but are reported under the non_monotonic family.
+
+    published_table_counts:
+      propositional: 525
+      first_order: 535
+      non_monotonic: 492
+      total: 1552
+
+    pinned_repository_counts:
+      propositional: 525
+      first_order: 535
+      non_monotonic: 496
+      total: 1556
+
+    selection:
+      roots:
+        - data/d1_Data
+        - data/d2_Data
+        - data/d3_Data
+        - data/d4_Data
+        - data/d5_Data
+      recursive_json: true
+      exclude:
+        - data/multivariable_fol_Data
+      use_json_metadata_fields:
+        - logic
+        - depth
+        - rule
+
+    task:
+      type: binary_entailment
+      prompting: zero_shot_cot
+      answer_space:
+        - yes
+        - no
+
+    decoding:
+      policy: qwen3_thinking_sampling_v1
+      do_sample: true
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      seed: 1234
+      max_output_tokens: 32768
+
+    primary_metric: accuracy
+    report_breakdowns:
+      - overall
+      - depth
+      - logic_type
+
+  rulearena:
+    display_name: RuleArena
+    implementation: custom_official_source
+    repository: SkyRiver-2000/RuleArena
+    revision: 59f60f6b4eb93a9b6d187ec781349d4f15618903
+
+    domains:
+      airline:
+        complexities: [0, 1, 2]
+        expected_total_items: 300
+      nba:
+        complexities: [0, 1, 2]
+        expected_total_items: 216
+      tax:
+        complexities: [0, 1, 2]
+        expected_total_items: 300
+
+    complexity_mapping:
+      0: level_1
+      1: level_2
+      2: level_3
+
+    use_example: false
+    textual_rules: false
+    distractor_rules: false
+    placeholder_rules: false
+    remake_data: false
+
+    decoding:
+      policy: qwen3_thinking_sampling_v1
+      do_sample: true
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      seed: 1234
+      max_output_tokens: 32768
+
+    primary_metric: final_answer_accuracy
+    use_official_answer_parsers_and_scorers: true
+
+    report_breakdowns:
+      - overall
+      - domain
+      - complexity
+
+  gsm8k:
+    display_name: GSM8K
+    implementation: lm_eval
+    repository: openai/gsm8k
+    dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+    harness_revision: d6de81643928d653435c431bae19945d41d32520
+
+    harness_task: gsm8k_cot
+    dataset_name: main
+    split: test
+    num_fewshot: 8
+    generation:
+      override: qwen3_thinking_sampling_v1
+      do_sample: true
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      seed: 1234
+      max_gen_toks: 32768
+      preserve_task_stop_sequences: true
+    primary_metric: exact_match
+    use_task_filters: true
+
+  logiqa2:
+    display_name: LogiQA 2.0
+    implementation: custom_official_source
+    repository: csitfun/LogiQA2.0
+    revision: 955e1d3df6c59d9bfb44d9913da1e1a27ec14e18
+
+    variant: english_mrc
+    data_file: logiqa/DATA/LOGIQA/test.txt
+    expected_items: 1572
+    source_file_sha256: 71940b37ae0184b677c253a148d57ad4e75d6113447b1563c2ca82483e4e4f8d
+    row_identity: source_line_index_plus_id
+    allow_duplicate_ids: true
+    observed_unique_ids: 1568
+    observed_duplicate_ids: [10906, 10948, 10591, 10571]
+
+    prompting:
+      source: logiqa/multi-choice-prompt.py
+      preserve_official_in_context_examples: true
+      answer_space: [A, B, C, D]
+
+    decoding:
+      policy: qwen3_thinking_sampling_v1
+      do_sample: true
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      seed: 1234
+      max_output_tokens: 32768
+
+    primary_metric: accuracy
+
+  finereason:
+    display_name: FineReason
+    implementation: custom_official_source
+    repository: DAMO-NLP-SG/FineReason
+    revision: 41532f7e272c82de6e259ef45f88626d2cd433d3
+
+    puzzle_families:
+      - sudoku
+      - graphcoloring
+      - game24
+      - gridpuzzle
+
+    evaluation_components:
+
+      state_checking:
+        datasets:
+          - sudoku_states
+          - graphcoloring_states
+          - game24_states
+          - gridpuzzle_states
+        prompters:
+          - sudoku_state_checking
+          - graphcoloring_state_checking
+          - game24_state_checking
+          - gridpuzzle_state_checking
+        scorer: state_checking_accuracy
+
+      state_transition:
+        datasets:
+          - sudoku_states
+          - graphcoloring_states
+          - game24_states
+          - gridpuzzle_states
+        prompters:
+          - sudoku_state_transition
+          - graphcoloring_state_transition
+          - game24_state_transition
+          - gridpuzzle_state_transition
+        scorer: state_transition_accuracy
+
+    exclude_end_to_end_from_primary_transfer: true
+
+    decoding:
+      policy: qwen3_thinking_sampling_v1
+      do_sample: true
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      min_p: 0.0
+      seed: 1234
+      max_output_tokens: 32768
+
+    primary_metrics:
+      - state_checking_accuracy
+      - state_transition_accuracy
+
+    aggregate_policy: report_separately
+    report_breakdowns:
+      - component
+      - puzzle_family
+
+  mmlu_pro:
+    display_name: MMLU-Pro
+    implementation: lm_eval
+    repository: TIGER-Lab/MMLU-Pro
+    dataset_revision: b189ec765aa7ed75c8acfea42df31fdae71f97be
+    harness_revision: d6de81643928d653435c431bae19945d41d32520
+
+    harness_task: mmlu_pro
+    subjects: all_14
+    split: test
+    use_pinned_task_defaults: true
+    generation_override: qwen3_thinking_sampling_v1
+    primary_metric: accuracy
+    report_breakdowns:
+      - overall
+      - subject
+
+  bbh:
+    display_name: BIG-Bench Hard
+    implementation: lm_eval
+    repository: SaylorTwift/bbh
+    dataset_revision: b5306be6f827cfafbb545ff5a51f96916029b0fd
+    harness_revision: d6de81643928d653435c431bae19945d41d32520
+
+    harness_task: bbh
+    resolved_variant: bbh_cot_fewshot
+    tasks: all_23
+    use_pinned_task_defaults: true
+    generation_override: qwen3_thinking_sampling_v1
+    report_breakdowns:
+      - overall
+      - task
+
+reporting:
+  compare:
+    - PRE_RL_BASE_MODEL
+    - POST_RL_SELECTED_CHECKPOINT
+
+  report_absolute_scores: true
+  report_delta:
+    formula: POST_RL_MINUS_PRE_RL
+
+  no_single_cross_benchmark_average: true
+
+  finereason_components_reported_separately: true

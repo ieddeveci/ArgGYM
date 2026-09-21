@@ -1,0 +1,51 @@
+data rows: 20
+data sha256: 9248f45f391657ba6a0ce0cca4568fc0d70c9554c02f347114952bc1eb890be6
+level counts: {'p34': 10, 'p45': 10}
+label balance: {'p34': {'true': 5, 'false': 5}, 'p45': {'false': 5, 'true': 5}}
+preflight structure: PASS
+COURSE DENSITY20 VLLM READY port=30208
+{
+  "benchmark": "course_density20_v1",
+  "by_level_gold": {
+    "p34::False": {
+      "accuracy": 1.0,
+      "correct": 5,
+      "max_completion_tokens": 16021,
+      "mean_completion_tokens": 12299.4,
+      "mean_latency_s": 110.75223426818847,
+      "n": 5,
+      "truncated": 0
+    },
+    "p34::True": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 16223.6,
+      "mean_latency_s": 147.31061763763427,
+      "n": 5,
+      "truncated": 4
+    },
+    "p45::False": {
+      "accuracy": 0.8,
+      "correct": 4,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 12638.2,
+      "mean_latency_s": 113.86975092887879,
+      "n": 5,
+      "truncated": 1
+    },
+    "p45::True": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 16384.0,
+      "mean_latency_s": 148.68788056373597,
+      "n": 5,
+      "truncated": 5
+    }
+  },
+  "completed": 20,
+  "parser_version": "rg4_parser_v4",
+  "rows": 20
+}
+COURSE DENSITY20 COMPLETE

@@ -1,0 +1,51 @@
+data rows: 20
+data sha256: ae10673ea7c48b2b748749a0b163cb067d8c2348749994d1a81b5caccf3c3770
+level counts: {'n13': 10, 'n14': 10}
+label balance: {'n13': {'false': 5, 'true': 5}, 'n14': {'false': 5, 'true': 5}}
+preflight structure: PASS
+COURSE BOUNDARY20 VLLM READY port=30181
+{
+  "benchmark": "course_boundary20_v1",
+  "by_level_gold": {
+    "n13::False": {
+      "accuracy": 0.8,
+      "correct": 4,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 12437.2,
+      "mean_latency_s": 112.2150686264038,
+      "n": 5,
+      "truncated": 1
+    },
+    "n13::True": {
+      "accuracy": 0.4,
+      "correct": 2,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 13558.0,
+      "mean_latency_s": 122.49238348007202,
+      "n": 5,
+      "truncated": 3
+    },
+    "n14::False": {
+      "accuracy": 1.0,
+      "correct": 5,
+      "max_completion_tokens": 13910,
+      "mean_completion_tokens": 11178.2,
+      "mean_latency_s": 100.30856013298035,
+      "n": 5,
+      "truncated": 0
+    },
+    "n14::True": {
+      "accuracy": 0.6,
+      "correct": 3,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 14590.6,
+      "mean_latency_s": 131.96811995506286,
+      "n": 5,
+      "truncated": 2
+    }
+  },
+  "completed": 20,
+  "parser_version": "rg4_parser_v4",
+  "rows": 20
+}
+COURSE BOUNDARY20 COMPLETE

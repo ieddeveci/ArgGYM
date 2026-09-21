@@ -1,0 +1,284 @@
+rows=120 existing=0
+[1/120] rg4_cal120_v1::propositional_logic::easy::000
+[2/120] rg4_cal120_v1::propositional_logic::easy::001
+[3/120] rg4_cal120_v1::propositional_logic::easy::002
+[4/120] rg4_cal120_v1::propositional_logic::easy::003
+[5/120] rg4_cal120_v1::propositional_logic::easy::004
+[6/120] rg4_cal120_v1::propositional_logic::easy::005
+[7/120] rg4_cal120_v1::propositional_logic::easy::006
+[8/120] rg4_cal120_v1::propositional_logic::easy::007
+[9/120] rg4_cal120_v1::propositional_logic::easy::008
+[10/120] rg4_cal120_v1::propositional_logic::easy::009
+[11/120] rg4_cal120_v1::propositional_logic::medium::000
+[12/120] rg4_cal120_v1::propositional_logic::medium::001
+[13/120] rg4_cal120_v1::propositional_logic::medium::002
+[14/120] rg4_cal120_v1::propositional_logic::medium::003
+[15/120] rg4_cal120_v1::propositional_logic::medium::004
+[16/120] rg4_cal120_v1::propositional_logic::medium::005
+[17/120] rg4_cal120_v1::propositional_logic::medium::006
+[18/120] rg4_cal120_v1::propositional_logic::medium::007
+[19/120] rg4_cal120_v1::propositional_logic::medium::008
+[20/120] rg4_cal120_v1::propositional_logic::medium::009
+[21/120] rg4_cal120_v1::propositional_logic::hard::000
+[22/120] rg4_cal120_v1::propositional_logic::hard::001
+[23/120] rg4_cal120_v1::propositional_logic::hard::002
+[24/120] rg4_cal120_v1::propositional_logic::hard::003
+[25/120] rg4_cal120_v1::propositional_logic::hard::004
+[26/120] rg4_cal120_v1::propositional_logic::hard::005
+[27/120] rg4_cal120_v1::propositional_logic::hard::006
+[28/120] rg4_cal120_v1::propositional_logic::hard::007
+[29/120] rg4_cal120_v1::propositional_logic::hard::008
+[30/120] rg4_cal120_v1::propositional_logic::hard::009
+[31/120] rg4_cal120_v1::knights_knaves::easy::000
+[32/120] rg4_cal120_v1::knights_knaves::easy::001
+[33/120] rg4_cal120_v1::knights_knaves::easy::002
+[34/120] rg4_cal120_v1::knights_knaves::easy::003
+[35/120] rg4_cal120_v1::knights_knaves::easy::004
+[36/120] rg4_cal120_v1::knights_knaves::easy::005
+[37/120] rg4_cal120_v1::knights_knaves::easy::006
+[38/120] rg4_cal120_v1::knights_knaves::easy::007
+[39/120] rg4_cal120_v1::knights_knaves::easy::008
+[40/120] rg4_cal120_v1::knights_knaves::easy::009
+[41/120] rg4_cal120_v1::knights_knaves::medium::000
+[42/120] rg4_cal120_v1::knights_knaves::medium::001
+[43/120] rg4_cal120_v1::knights_knaves::medium::002
+[44/120] rg4_cal120_v1::knights_knaves::medium::003
+[45/120] rg4_cal120_v1::knights_knaves::medium::004
+[46/120] rg4_cal120_v1::knights_knaves::medium::005
+[47/120] rg4_cal120_v1::knights_knaves::medium::006
+[48/120] rg4_cal120_v1::knights_knaves::medium::007
+[49/120] rg4_cal120_v1::knights_knaves::medium::008
+[50/120] rg4_cal120_v1::knights_knaves::medium::009
+[51/120] rg4_cal120_v1::knights_knaves::hard::000
+[52/120] rg4_cal120_v1::knights_knaves::hard::001
+[53/120] rg4_cal120_v1::knights_knaves::hard::002
+[54/120] rg4_cal120_v1::knights_knaves::hard::003
+[55/120] rg4_cal120_v1::knights_knaves::hard::004
+[56/120] rg4_cal120_v1::knights_knaves::hard::005
+[57/120] rg4_cal120_v1::knights_knaves::hard::006
+[58/120] rg4_cal120_v1::knights_knaves::hard::007
+[59/120] rg4_cal120_v1::knights_knaves::hard::008
+[60/120] rg4_cal120_v1::knights_knaves::hard::009
+[61/120] rg4_cal120_v1::course_schedule::easy::000
+[62/120] rg4_cal120_v1::course_schedule::easy::001
+[63/120] rg4_cal120_v1::course_schedule::easy::002
+[64/120] rg4_cal120_v1::course_schedule::easy::003
+[65/120] rg4_cal120_v1::course_schedule::easy::004
+[66/120] rg4_cal120_v1::course_schedule::easy::005
+[67/120] rg4_cal120_v1::course_schedule::easy::006
+[68/120] rg4_cal120_v1::course_schedule::easy::007
+[69/120] rg4_cal120_v1::course_schedule::easy::008
+[70/120] rg4_cal120_v1::course_schedule::easy::009
+[71/120] rg4_cal120_v1::course_schedule::medium::000
+[72/120] rg4_cal120_v1::course_schedule::medium::001
+[73/120] rg4_cal120_v1::course_schedule::medium::002
+[74/120] rg4_cal120_v1::course_schedule::medium::003
+[75/120] rg4_cal120_v1::course_schedule::medium::004
+[76/120] rg4_cal120_v1::course_schedule::medium::005
+[77/120] rg4_cal120_v1::course_schedule::medium::006
+[78/120] rg4_cal120_v1::course_schedule::medium::007
+[79/120] rg4_cal120_v1::course_schedule::medium::008
+[80/120] rg4_cal120_v1::course_schedule::medium::009
+[81/120] rg4_cal120_v1::course_schedule::hard::000
+[82/120] rg4_cal120_v1::course_schedule::hard::001
+[83/120] rg4_cal120_v1::course_schedule::hard::002
+[84/120] rg4_cal120_v1::course_schedule::hard::003
+[85/120] rg4_cal120_v1::course_schedule::hard::004
+[86/120] rg4_cal120_v1::course_schedule::hard::005
+[87/120] rg4_cal120_v1::course_schedule::hard::006
+[88/120] rg4_cal120_v1::course_schedule::hard::007
+[89/120] rg4_cal120_v1::course_schedule::hard::008
+[90/120] rg4_cal120_v1::course_schedule::hard::009
+[91/120] rg4_cal120_v1::zebra_puzzles::easy::000
+[92/120] rg4_cal120_v1::zebra_puzzles::easy::001
+[93/120] rg4_cal120_v1::zebra_puzzles::easy::002
+[94/120] rg4_cal120_v1::zebra_puzzles::easy::003
+[95/120] rg4_cal120_v1::zebra_puzzles::easy::004
+[96/120] rg4_cal120_v1::zebra_puzzles::easy::005
+[97/120] rg4_cal120_v1::zebra_puzzles::easy::006
+[98/120] rg4_cal120_v1::zebra_puzzles::easy::007
+[99/120] rg4_cal120_v1::zebra_puzzles::easy::008
+[100/120] rg4_cal120_v1::zebra_puzzles::easy::009
+[101/120] rg4_cal120_v1::zebra_puzzles::medium::000
+[102/120] rg4_cal120_v1::zebra_puzzles::medium::001
+[103/120] rg4_cal120_v1::zebra_puzzles::medium::002
+[104/120] rg4_cal120_v1::zebra_puzzles::medium::003
+[105/120] rg4_cal120_v1::zebra_puzzles::medium::004
+[106/120] rg4_cal120_v1::zebra_puzzles::medium::005
+[107/120] rg4_cal120_v1::zebra_puzzles::medium::006
+[108/120] rg4_cal120_v1::zebra_puzzles::medium::007
+[109/120] rg4_cal120_v1::zebra_puzzles::medium::008
+[110/120] rg4_cal120_v1::zebra_puzzles::medium::009
+[111/120] rg4_cal120_v1::zebra_puzzles::hard::000
+[112/120] rg4_cal120_v1::zebra_puzzles::hard::001
+[113/120] rg4_cal120_v1::zebra_puzzles::hard::002
+[114/120] rg4_cal120_v1::zebra_puzzles::hard::003
+[115/120] rg4_cal120_v1::zebra_puzzles::hard::004
+[116/120] rg4_cal120_v1::zebra_puzzles::hard::005
+[117/120] rg4_cal120_v1::zebra_puzzles::hard::006
+[118/120] rg4_cal120_v1::zebra_puzzles::hard::007
+[119/120] rg4_cal120_v1::zebra_puzzles::hard::008
+[120/120] rg4_cal120_v1::zebra_puzzles::hard::009
+{
+  "by_difficulty": {
+    "easy": {
+      "adapted_native_mean": 0.709,
+      "errors": 0,
+      "full_credit_rate": 0.65,
+      "mean_latency_s": 54.94709610939026,
+      "n": 40,
+      "truncated": 6
+    },
+    "hard": {
+      "adapted_native_mean": 0.5875,
+      "errors": 0,
+      "full_credit_rate": 0.55,
+      "mean_latency_s": 89.22180799841881,
+      "n": 40,
+      "truncated": 11
+    },
+    "medium": {
+      "adapted_native_mean": 0.7070833333333334,
+      "errors": 0,
+      "full_credit_rate": 0.65,
+      "mean_latency_s": 83.12237049341202,
+      "n": 40,
+      "truncated": 5
+    }
+  },
+  "by_task": {
+    "course_schedule": {
+      "adapted_native_mean": 0.36666666666666664,
+      "errors": 0,
+      "full_credit_rate": 0.36666666666666664,
+      "mean_latency_s": 125.92758657932282,
+      "n": 30,
+      "truncated": 15
+    },
+    "knights_knaves": {
+      "adapted_native_mean": 0.9314444444444444,
+      "errors": 0,
+      "full_credit_rate": 0.8333333333333334,
+      "mean_latency_s": 50.27088947296143,
+      "n": 30,
+      "truncated": 1
+    },
+    "propositional_logic": {
+      "adapted_native_mean": 0.5733333333333334,
+      "errors": 0,
+      "full_credit_rate": 0.4666666666666667,
+      "mean_latency_s": 42.40930411020915,
+      "n": 30,
+      "truncated": 0
+    },
+    "zebra_puzzles": {
+      "adapted_native_mean": 0.8,
+      "errors": 0,
+      "full_credit_rate": 0.8,
+      "mean_latency_s": 84.44725263913473,
+      "n": 30,
+      "truncated": 6
+    }
+  },
+  "by_task_difficulty": {
+    "course_schedule::easy": {
+      "adapted_native_mean": 0.3,
+      "errors": 0,
+      "full_credit_rate": 0.3,
+      "mean_latency_s": 133.9880823612213,
+      "n": 10,
+      "truncated": 6
+    },
+    "course_schedule::hard": {
+      "adapted_native_mean": 0.4,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 114.34736788272858,
+      "n": 10,
+      "truncated": 4
+    },
+    "course_schedule::medium": {
+      "adapted_native_mean": 0.4,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 129.44730949401855,
+      "n": 10,
+      "truncated": 5
+    },
+    "knights_knaves::easy": {
+      "adapted_native_mean": 0.986,
+      "errors": 0,
+      "full_credit_rate": 0.9,
+      "mean_latency_s": 32.75639135837555,
+      "n": 10,
+      "truncated": 0
+    },
+    "knights_knaves::hard": {
+      "adapted_native_mean": 0.89,
+      "errors": 0,
+      "full_credit_rate": 0.8,
+      "mean_latency_s": 52.8010931968689,
+      "n": 10,
+      "truncated": 1
+    },
+    "knights_knaves::medium": {
+      "adapted_native_mean": 0.9183333333333333,
+      "errors": 0,
+      "full_credit_rate": 0.8,
+      "mean_latency_s": 65.25518386363983,
+      "n": 10,
+      "truncated": 0
+    },
+    "propositional_logic::easy": {
+      "adapted_native_mean": 0.55,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 19.382336449623107,
+      "n": 10,
+      "truncated": 0
+    },
+    "propositional_logic::hard": {
+      "adapted_native_mean": 0.6599999999999999,
+      "errors": 0,
+      "full_credit_rate": 0.6,
+      "mean_latency_s": 57.87183225154877,
+      "n": 10,
+      "truncated": 0
+    },
+    "propositional_logic::medium": {
+      "adapted_native_mean": 0.51,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 49.97374362945557,
+      "n": 10,
+      "truncated": 0
+    },
+    "zebra_puzzles::easy": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "full_credit_rate": 1.0,
+      "mean_latency_s": 33.66157426834106,
+      "n": 10,
+      "truncated": 0
+    },
+    "zebra_puzzles::hard": {
+      "adapted_native_mean": 0.4,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 131.86693866252898,
+      "n": 10,
+      "truncated": 6
+    },
+    "zebra_puzzles::medium": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "full_credit_rate": 1.0,
+      "mean_latency_s": 87.81324498653412,
+      "n": 10,
+      "truncated": 0
+    }
+  },
+  "completed": 120,
+  "parser_version": "rg4_parser_v2",
+  "rows": 120
+}

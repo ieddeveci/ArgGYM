@@ -1,0 +1,551 @@
+from __future__ import annotations
+
+import copy
+import json
+import re
+
+import numpy as np
+
+from transfer.base import TransferRow
+from transfer.integrity import FROZEN
+from transfer.vendor_utils import (
+    VENDOR,
+    ast_string,
+    fresh_import,
+)
+
+
+class RuleArenaAdapter:
+    name = "rulearena"
+    version = "59f60f6-0shot-comp0-2"
+
+    def __init__(self):
+        self.root = FROZEN / "rulearena"
+        self.vendor = VENDOR / "rulearena"
+
+        self._init_airline()
+        self._init_nba()
+        self._init_tax()
+
+    def _init_airline(self):
+        directory = self.vendor / "airline"
+        auto = directory / "auto_test.py"
+
+        self.airline_system = ast_string(
+            auto,
+            "system_prompt",
+        )
+
+        self.airline_template = ast_string(
+            auto,
+            "prompt_template",
+        )
+
+        self.airline_rules = (
+            directory / "reference_rules.txt"
+        ).read_text(encoding="utf-8")
+
+        self.airline_compute = fresh_import(
+            "compute_answer",
+            directory,
+            clear=(
+                "compute_answer",
+                "structure",
+            ),
+        )
+
+        self.airline_check_base_tables = (
+            self.airline_compute.load_checking_fee()
+        )
+
+    def _init_nba(self):
+        directory = self.vendor / "nba"
+        auto = directory / "auto_test.py"
+
+        self.nba_system = ast_string(
+            auto,
+            "system_prompt",
+        )
+
+        self.nba_template = ast_string(
+            auto,
+            "prompt_template",
+        )
+
+        self.nba_rules = (
+            directory / "reference_rules.txt"
+        ).read_text(encoding="utf-8")
+
+    def _init_tax(self):
+        directory = self.vendor / "tax"
+        auto = directory / "auto_test.py"
+
+        self.tax_system = ast_string(
+            auto,
+            "system_prompt",
+        )
+
+        self.tax_template = ast_string(
+            auto,
+            "prompt_template",
+        )
+
+        clear = (
+            "prompt",
+            "structured_forms",
+            "micro_evaluation",
+        )
+
+        self.tax_prompt = fresh_import(
+            "prompt",
+            directory,
+            clear=clear,
+        )
+
+        self.tax_struct = fresh_import(
+            "structured_forms",
+            directory,
+        )
+
+        self.tax_micro = fresh_import(
+            "micro_evaluation",
+            directory,
+        )
+
+        try:
+            self.tax_tbd_mark = ast_string(
+                auto,
+                "tbd_mark",
+            )
+        except Exception:
+            self.tax_tbd_mark = getattr(
+                self.tax_prompt,
+                "tbd_mark",
+                "[__]",
+            )
+
+    def _airline_prompt(
+        self,
+        question_prompt,
+    ):
+        return (
+            self.airline_template
+            .replace(
+                "$reference_rules",
+                self.airline_rules,
+            )
+            .replace(
+                "$question_prompt",
+                question_prompt,
+            )
+            .replace(
+                "$example_prompt",
+                "",
+            )
+        )
+
+    @staticmethod
+    def _nba_query(query):
+        return (
+            "Team Situations:\n"
+            + "\n".join(
+                query["team_situations"]
+            )
+            + "\n\nPlayer Situations:\n"
+            + "\n".join(
+                query["player_situations"]
+            )
+            + "\n\nOperations:\n"
+            + "\n".join(
+                query["operations"]
+            )
+        )
+
+    def _nba_prompt(self, query):
+        return (
+            self.nba_template
+            .replace(
+                "$reference_rules",
+                self.nba_rules,
+            )
+            .replace(
+                "$question",
+                self._nba_query(query),
+            )
+            .replace(
+                "$example",
+                "",
+            )
+        )
+
+    def _tax_prompt(self, tax_payer):
+        payer = copy.deepcopy(tax_payer)
+
+        forms = [
+            self.tax_prompt.basic_forms
+        ]
+
+        if payer["itemized"]:
+            forms.append(
+                self.tax_prompt.itemized_forms
+            )
+
+        if payer["self_employed"]:
+            forms.append(
+                self.tax_prompt.self_employ_forms
+            )
+
+        if payer[
+            "has_student_loans_or_education_expenses"
+        ]:
+            forms.append(
+                self.tax_prompt.edu_forms
+            )
+
+        if payer["child_and_dependent"]:
+            forms.append(
+                self.tax_prompt.schedule_8812
+            )
+
+        forms = "".join(forms)
+
+        for key, value in list(
+            payer["data"].items()
+        ):
+            shown = (
+                f"${value:,}"
+                if not isinstance(value, str)
+                else value
+            )
+
+            forms = forms.replace(
+                "$" + key,
+                shown,
+            )
+
+        forms = forms.replace(
+            "$TBD",
+            self.tax_tbd_mark,
+        )
+
+        prompt = (
+            self.tax_template
+            .replace(
+                "$forms",
+                forms,
+            )
+        )
+
+        replacements = {
+            "$name":
+                payer["name"],
+            "$age":
+                str(payer["age"]),
+            "$spouse_age":
+                str(payer["spouse_age"]),
+            "$blind":
+                str(payer["blind"]),
+            "$spouse_blind":
+                str(payer["spouse_blind"]),
+            "$filing_status":
+                payer["filing_status"],
+            "$itemized":
+                str(payer["itemized"]),
+            "$num_qualifying_children":
+                str(
+                    payer[
+                        "num_qualifying_children"
+                    ]
+                ),
+            "$num_other_dependents":
+                str(
+                    payer[
+                        "num_other_dependents"
+                    ]
+                ),
+            "$example":
+                "",
+        }
+
+        for key, value in replacements.items():
+            prompt = prompt.replace(
+                key,
+                value,
+            )
+
+        return prompt
+
+    @staticmethod
+    def _load_json(path):
+        return json.loads(
+            path.read_text(
+                encoding="utf-8"
+            )
+        )
+
+    def rows(self):
+        # Airline
+        for complexity in (0, 1, 2):
+            path = (
+                self.root
+                / "airline"
+                / "synthesized_problems"
+                / f"comp_{complexity}.jsonl"
+            )
+
+            with path.open(
+                encoding="utf-8"
+            ) as f:
+                for idx, line in enumerate(f):
+                    if not line.strip():
+                        continue
+
+                    obj = json.loads(line)
+
+                    info = copy.deepcopy(
+                        obj["info"]
+                    )
+
+                    fee, _ = (
+                        self.airline_compute
+                        .compute_answer(
+                            **info,
+                            check_base_tables=(
+                                self.airline_check_base_tables
+                            ),
+                        )
+                    )
+
+                    yield TransferRow(
+                        row_id=(
+                            "rulearena:"
+                            f"airline:"
+                            f"{complexity}:"
+                            f"{idx}"
+                        ),
+                        payload={
+                            "prompt":
+                                self._airline_prompt(
+                                    obj["prompt"]
+                                ),
+                        },
+                        gold=fee,
+                        metadata={
+                            "domain": "airline",
+                            "complexity":
+                                complexity,
+                            "source_index": idx,
+                        },
+                    )
+
+        # NBA
+        for complexity in (0, 1, 2):
+            path = (
+                self.root
+                / "nba"
+                / "annotated_problems"
+                / f"comp_{complexity}.json"
+            )
+
+            for idx, query in enumerate(
+                self._load_json(path)
+            ):
+                if not query["answer"]:
+                    target = "Answer: False"
+                else:
+                    target = (
+                        "Answer: True. "
+                        "Illegal Operation: "
+                        f"{query['illegal_operation']}. "
+                        "Problematic Team: "
+                        f"{query['problematic_team']}"
+                    )
+
+                yield TransferRow(
+                    row_id=(
+                        "rulearena:"
+                        f"nba:"
+                        f"{complexity}:"
+                        f"{idx}"
+                    ),
+                    payload={
+                        "prompt":
+                            self._nba_prompt(query),
+                    },
+                    gold=target,
+                    metadata={
+                        "domain": "nba",
+                        "complexity":
+                            complexity,
+                        "source_index": idx,
+                    },
+                )
+
+        # Tax
+        for complexity in (0, 1, 2):
+            path = (
+                self.root
+                / "tax"
+                / "synthesized_problems"
+                / f"comp_{complexity}.json"
+            )
+
+            for idx, obj in enumerate(
+                self._load_json(path)
+            ):
+                payer_dict = copy.deepcopy(
+                    obj["dict"]
+                )
+
+                payer = (
+                    self.tax_struct.TaxPayer(
+                        **copy.deepcopy(
+                            obj["pydantic"]
+                        )
+                    )
+                )
+
+                answer, _ = (
+                    self.tax_micro.compute_answer(
+                        payer
+                    )
+                )
+
+                yield TransferRow(
+                    row_id=(
+                        "rulearena:"
+                        f"tax:"
+                        f"{complexity}:"
+                        f"{idx}"
+                    ),
+                    payload={
+                        "prompt":
+                            self._tax_prompt(
+                                payer_dict
+                            ),
+                    },
+                    gold=float(answer),
+                    metadata={
+                        "domain": "tax",
+                        "complexity":
+                            complexity,
+                        "source_index": idx,
+                    },
+                )
+
+    def messages(self, row):
+        domain = row.metadata["domain"]
+
+        system = {
+            "airline":
+                self.airline_system,
+            "nba":
+                self.nba_system,
+            "tax":
+                self.tax_system,
+        }[domain]
+
+        return [
+            {
+                "role": "system",
+                "content": system,
+            },
+            {
+                "role": "user",
+                "content":
+                    row.payload["prompt"],
+            },
+        ]
+
+    def parse(self, completion, row):
+        domain = row.metadata["domain"]
+
+        response = completion.replace(
+            "**",
+            "",
+        )
+
+        if domain == "airline":
+            start = response.find(
+                "The total cost is"
+            )
+
+            if start == -1:
+                return None
+
+            conclusion = response[start:]
+
+            value_idx = conclusion.find("$")
+
+            if value_idx == -1:
+                return None
+
+            value = (
+                conclusion[value_idx + 1:]
+                .replace(",", "")
+                .replace(".", "")
+            )
+
+            if value.isnumeric():
+                return int(value)
+
+            return value
+
+        if domain == "nba":
+            return response
+
+        pattern = (
+            r"The total tax "
+            r"(owed|overpaid) is "
+            r"\$((?:\d{1,3}(?:,\d{3})*|\d+)"
+            r"(\.\d+)?)."
+        )
+
+        match = re.search(
+            pattern,
+            response,
+        )
+
+        if not match:
+            return None
+
+        value = float(
+            match.group(2).replace(",", "")
+        )
+
+        if match.group(1) == "overpaid":
+            value = -value
+
+        return value
+
+    def score(self, prediction, row):
+        domain = row.metadata["domain"]
+
+        if prediction is None:
+            return 0.0
+
+        if domain == "airline":
+            return float(
+                prediction == row.gold
+                or (
+                    isinstance(
+                        prediction,
+                        str,
+                    )
+                    and str(
+                        row.gold
+                    ) in prediction
+                )
+            )
+
+        if domain == "nba":
+            return float(
+                str(row.gold) in prediction
+            )
+
+        return float(
+            np.isclose(
+                float(prediction),
+                float(row.gold),
+            )
+        )

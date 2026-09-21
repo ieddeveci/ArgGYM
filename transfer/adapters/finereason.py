@@ -1,0 +1,312 @@
+from __future__ import annotations
+
+import importlib
+import json
+import sys
+import types
+
+from pydantic import BaseModel, Field
+
+from transfer.base import TransferRow
+from transfer.integrity import FROZEN
+from transfer.vendor_utils import (
+    VENDOR,
+    prepend_sys_path,
+)
+
+
+class _Sample(BaseModel):
+    inputs: dict = Field(
+        default_factory=dict
+    )
+    outputs: dict = Field(
+        default_factory=dict
+    )
+    prompt: str = ""
+    raw_output: str = ""
+    pred: str = ""
+
+
+class FineReasonAdapter:
+    name = "finereason"
+    version = (
+        "41532f7-state-checking-transition"
+    )
+
+    def __init__(self):
+        self.root = (
+            FROZEN
+            / "finereason"
+            / "data"
+        )
+
+        self.vendor = (
+            VENDOR
+            / "finereason"
+        )
+
+        self._prompting = (
+            self._load_prompting()
+        )
+
+    def _load_prompting(self):
+        # FineReason prompting.py only needs
+        # Sample from data_loading. Supply a
+        # minimal compatible class so we don't
+        # depend on Fire or the original loader.
+        stub = types.ModuleType(
+            "data_loading"
+        )
+        stub.Sample = _Sample
+
+        def _unused_select_data(*args, **kwargs):
+            raise RuntimeError(
+                "FineReason select_data() must not be called by the "
+                "ArgGYM transfer adapter; frozen rows come only from "
+                "data/transfer/frozen."
+            )
+
+        stub.select_data = _unused_select_data
+
+        # FineReason prompting.py imports Fire only for CLI entrypoints.
+        # The transfer evaluator never invokes that CLI, so provide a
+        # minimal import-compatible stub instead of modifying the SIF.
+        fire_stub = types.ModuleType(
+            "fire"
+        )
+
+        def _unused_fire(*args, **kwargs):
+            raise RuntimeError(
+                "FineReason Fire CLI is disabled in the ArgGYM "
+                "transfer evaluator"
+            )
+
+        fire_stub.Fire = _unused_fire
+
+        old_data_loading = sys.modules.get(
+            "data_loading"
+        )
+        old_fire = sys.modules.get(
+            "fire"
+        )
+
+        sys.modules[
+            "data_loading"
+        ] = stub
+        sys.modules[
+            "fire"
+        ] = fire_stub
+
+        for name in (
+            "prompting",
+            "sudoku_tree",
+            "graphcoloring_tree",
+            "game24_tree",
+            "gridpuzzle_tree",
+        ):
+            sys.modules.pop(
+                name,
+                None,
+            )
+
+        try:
+            with prepend_sys_path(
+                self.vendor
+            ):
+                return importlib.import_module(
+                    "prompting"
+                )
+        finally:
+            if old_data_loading is None:
+                sys.modules.pop(
+                    "data_loading",
+                    None,
+                )
+            else:
+                sys.modules[
+                    "data_loading"
+                ] = old_data_loading
+
+            if old_fire is None:
+                sys.modules.pop(
+                    "fire",
+                    None,
+                )
+            else:
+                sys.modules[
+                    "fire"
+                ] = old_fire
+
+    @staticmethod
+    def _records(path):
+        with path.open(
+            encoding="utf-8"
+        ) as f:
+            for line in f:
+                if line.strip():
+                    yield json.loads(line)
+
+    @staticmethod
+    def _prompter_name(
+        family,
+        component,
+    ):
+        if component == "state_checking":
+            suffix = "state_checking"
+        else:
+            suffix = "state_transition"
+
+        return f"{family}_{suffix}"
+
+    def rows(self):
+        families = (
+            "sudoku",
+            "graphcoloring",
+            "game24",
+            "gridpuzzle",
+        )
+
+        for family in families:
+            path = (
+                self.root
+                / f"{family}_states.json"
+            )
+
+            records = list(
+                self._records(path)
+            )
+
+            for component in (
+                "state_checking",
+                "state_transition",
+            ):
+                prompter_name = (
+                    self._prompter_name(
+                        family,
+                        component,
+                    )
+                )
+
+                for idx, obj in enumerate(
+                    records
+                ):
+                    sample = _Sample(
+                        inputs=obj.get(
+                            "inputs",
+                            {},
+                        ),
+                        outputs=obj.get(
+                            "outputs",
+                            {},
+                        ),
+                    )
+
+                    prompter = (
+                        self._prompting
+                        .select_prompter(
+                            prompter_name
+                        )
+                    )
+
+                    prompt = prompter.run(
+                        sample
+                    )
+
+                    if (
+                        component
+                        == "state_checking"
+                    ):
+                        gold = (
+                            sample.outputs
+                            .get(
+                                "current_status"
+                            )
+                        )
+                    else:
+                        gold = "1"
+
+                    yield TransferRow(
+                        row_id=(
+                            "finereason:"
+                            f"{family}:"
+                            f"{component}:"
+                            f"{idx}"
+                        ),
+                        payload={
+                            "inputs":
+                                sample.inputs,
+                            "outputs":
+                                sample.outputs,
+                            "prompt":
+                                prompt,
+                            "prompter_name":
+                                prompter_name,
+                        },
+                        gold=gold,
+                        metadata={
+                            "puzzle_family":
+                                family,
+                            "component":
+                                component,
+                            "source_index":
+                                idx,
+                        },
+                    )
+
+    def messages(self, row):
+        return [
+            {
+                "role": "user",
+                "content":
+                    row.payload["prompt"],
+            }
+        ]
+
+    def parse(
+        self,
+        completion,
+        row,
+    ):
+        # Some transition prompters keep
+        # per-example state initialized in run().
+        sample = _Sample(
+            inputs=row.payload["inputs"],
+            outputs=row.payload["outputs"],
+        )
+
+        prompter = (
+            self._prompting
+            .select_prompter(
+                row.payload[
+                    "prompter_name"
+                ]
+            )
+        )
+
+        # Initialize its state exactly as the
+        # official evaluation does.
+        prompter.run(sample)
+
+        return prompter.get_answer(
+            completion
+        )
+
+    def score(
+        self,
+        prediction,
+        row,
+    ):
+        if (
+            row.metadata["component"]
+            == "state_transition"
+        ):
+            return float(
+                prediction == "1"
+            )
+
+        return float(
+            prediction
+            == row.payload["outputs"].get(
+                "current_status"
+            )
+        )

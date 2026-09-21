@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -25,8 +26,6 @@ def load_profile(name: str) -> dict:
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     if cfg["dtype"] != "bfloat16":
         raise SystemExit("This benchmark lane requires BF16 weights.")
-    if float(cfg["params_b"]) > 40:
-        raise SystemExit(">40B total parameters refused by benchmark policy.")
     return cfg
 
 
@@ -74,7 +73,7 @@ def vllm_command(cfg: dict, revision: str, port: int) -> list[str]:
 
 
 def wait_until_ready(base_url: str, proc: subprocess.Popen, expected_model: str,
-                     timeout_s: int = 1800) -> None:
+                     timeout_s: int = 7200) -> None:
     deadline = time.monotonic() + timeout_s
     endpoint = base_url.rstrip("/") + "/models"
     while time.monotonic() < deadline:
@@ -187,6 +186,9 @@ def prepare_run_directory(
         "gpu_type": os.getenv("GPU_TYPE"),
         "cuda_visible_devices": os.getenv("CUDA_VISIBLE_DEVICES"),
         "vllm_version": get_vllm_version(command[0]),
+        "python_version": sys.version.split()[0],
+        "container_image": os.getenv("ARGGYM_RUNTIME_IMAGE"),
+        "container_image_sha256": os.getenv("ARGGYM_RUNTIME_SHA256"),
     }
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
                              encoding="utf-8")
@@ -204,7 +206,9 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_profile(args.profile)
-    revision = resolve_revision(cfg["hf_model"])
+    revision = str(
+        cfg.get("revision") or resolve_revision(cfg["hf_model"])
+    )
     base_url = f"http://127.0.0.1:{args.port}/v1"
     command = vllm_command(cfg, revision, args.port)
 
@@ -240,7 +244,7 @@ def main() -> None:
 
             subprocess.run(
                 [
-                    "uv", "run", "python", "-m", "evals.run",
+                    sys.executable, "-m", "evals.run",
                     f'model={cfg["endpoint_config"]}',
                     f"template={args.template}",
                     f"elicitation={args.elicitation}",
@@ -263,7 +267,7 @@ def main() -> None:
 
             if not args.skip_score:
                 subprocess.run(
-                    ["uv", "run", "python", "-m", "evals.score", str(run_dir)],
+                    [sys.executable, "-m", "evals.score", str(run_dir)],
                     cwd=ROOT,
                     env=env,
                     check=True,

@@ -1,0 +1,37 @@
+========================================================================
+CUSTOM V4 FREEZE VERIFICATION
+========================================================================
+manifest sha256: 975c1d31e43cff2ed3354695aaf13844129e5231dca027e44d3d3cf09b9d714b
+rows: 3944
+max prompt tokens: 22729
+max prompt row: rulearena rulearena:nba:2:10
+
+CUSTOM V4 FREEZE VERIFICATION: PASS
+runtime endpoint: /arf/scratch/futan/ArgGYM/outputs/transfer/pre_rl_qwen3_14b_v4/multilogieval/runtime_endpoint.json
+runtime port: 29318
+BENCH=multilogieval
+PORT=29318
+RUNTIME_ENDPOINT_SHA=89c270e8a17ffdb711e5a598f17c5e54ccf2cf05fc5c485426ba3301620f0a72
+VLLM V4 PRE SERVER READY: multilogieval port=29318
+V4 GENERATION COMPLETE: multilogieval
+========================================================================
+CUSTOM V4 FREEZE VERIFICATION
+========================================================================
+manifest sha256: 975c1d31e43cff2ed3354695aaf13844129e5231dca027e44d3d3cf09b9d714b
+rows: 3944
+max prompt tokens: 22729
+max prompt row: rulearena rulearena:nba:2:10
+
+CUSTOM V4 FREEZE VERIFICATION: PASS
+{
+  "status": "complete",
+  "benchmark": "multilogieval",
+  "total": 1556,
+  "scored": 1556,
+  "missing": 0,
+  "infrastructure_errors": 0,
+  "parser_errors": 0,
+  "truncated": 0,
+  "accuracy": 0.7255784061696658
+}
+OFFICIAL V4 PRE COMPLETE: multilogieval

@@ -1,0 +1,100 @@
+experiment:
+  kind: main_stage1
+  # Safety latch. Change to true only after the smoke/pilot review is complete.
+  main_run_unlocked: true
+  frozen_taskset_hash: 121f452f2744ef0a6022c4731097b6b1
+  baseline_model_revision: 40c069824f4251a91eefaf281ebe4c544efd3e18
+
+model:
+  name: Qwen/Qwen3-14B
+  revision: 40c069824f4251a91eefaf281ebe4c544efd3e18
+  dtype: bfloat16
+
+data:
+  train: data/rl/curriculum/stage1.jsonl
+  dev: data/rl/curriculum/dev.jsonl
+
+peft:
+  r: 32
+  alpha: 16
+  dropout: 0.0
+  target_modules: all-linear
+
+generation:
+  num_generations: 8
+  num_generations_eval: 1
+  max_prompt_length: 8192
+  # Provisional main cap. Smoke + baseline-CDF audit decides whether this stays
+  # 20,480 or moves to 24,576 / 32,768 before main_run_unlocked is set true.
+  max_completion_length: 32768
+  max_model_length: 40960
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  min_p: 0.0
+  repetition_penalty: 1.0
+  enable_thinking: true
+
+training:
+  output_dir: outputs/rl/qwen3_14b_stage1
+  run_name: qwen3_14b_arggym_grpo_stage1
+  seed: 0
+  data_seed: 0
+  # Literature-backed conservative LoRA-RL starting point. Only compare to
+  # 1e-5 on generated pilot data if the smoke run is stable.
+  learning_rate: 5.0e-6
+  # 3 trainer GPUs x batch 1 x grad-accum 8 / G=8 = 3 unique prompt groups
+  # per optimizer step. 4,320 training prompts / 3 = exactly 1,440 updates.
+  max_steps: 480
+  warmup_steps: 40
+  lr_scheduler_type: constant_with_warmup
+  optim: adamw_torch_fused
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-8
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  per_device_eval_batch_size: 1
+  gradient_checkpointing: true
+  disable_dropout: true
+  # Critical: stage1 -> stage2 -> stage3 must remain ordered.
+  shuffle_dataset: false
+  logging_steps: 1
+  # Evaluate/save halfway through and at the end of each 480-step curriculum stage.
+  save_steps: 120
+  save_total_limit: 8
+  eval_strategy: steps
+  eval_on_start: true
+  load_best_model_at_end: true
+  metric_for_best_model: eval_reward
+  greater_is_better: true
+  eval_steps: 120
+  loss_type: dapo
+  mask_truncated_completions: true
+  scale_rewards: none
+  epsilon: 0.20
+  epsilon_high: 0.28
+  beta: 0.0
+  num_iterations: 1
+  importance_sampling_level: token
+  use_liger_kernel: true
+  logprob_token_chunk_size: 256
+  cast_lm_head_to_fp32: false
+  top_entropy_quantile: 1.0
+  entropy_coef: 0.0
+  off_policy_mask_threshold: null
+  vllm_importance_sampling_correction: true
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_clip_min: null
+  vllm_importance_sampling_clip_max: 3.0
+  bf16: true
+  fp16: false
+  tf32: true
+  log_completions: false
+
+vllm:
+  server_base_url: http://127.0.0.1:8000
+  server_timeout: 600
+  gpu_memory_utilization: 0.70

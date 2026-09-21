@@ -1,0 +1,168 @@
+data rows: 120
+data sha256: df68bb45ec08273550eb3a8b3e08a6f4798dd97f62604fc56fb0afa09675499c
+preflight structure: PASS
+RG4 CAL120 VLLM READY port=29906
+{
+  "by_difficulty": {
+    "easy": {
+      "adapted_native_mean": 0.709,
+      "errors": 0,
+      "full_credit_rate": 0.65,
+      "mean_latency_s": 54.94709610939026,
+      "n": 40,
+      "truncated": 6
+    },
+    "hard": {
+      "adapted_native_mean": 0.5875,
+      "errors": 0,
+      "full_credit_rate": 0.55,
+      "mean_latency_s": 89.22180799841881,
+      "n": 40,
+      "truncated": 11
+    },
+    "medium": {
+      "adapted_native_mean": 0.7070833333333334,
+      "errors": 0,
+      "full_credit_rate": 0.65,
+      "mean_latency_s": 83.12237049341202,
+      "n": 40,
+      "truncated": 5
+    }
+  },
+  "by_task": {
+    "course_schedule": {
+      "adapted_native_mean": 0.36666666666666664,
+      "errors": 0,
+      "full_credit_rate": 0.36666666666666664,
+      "mean_latency_s": 125.92758657932282,
+      "n": 30,
+      "truncated": 15
+    },
+    "knights_knaves": {
+      "adapted_native_mean": 0.9314444444444444,
+      "errors": 0,
+      "full_credit_rate": 0.8333333333333334,
+      "mean_latency_s": 50.27088947296143,
+      "n": 30,
+      "truncated": 1
+    },
+    "propositional_logic": {
+      "adapted_native_mean": 0.5733333333333334,
+      "errors": 0,
+      "full_credit_rate": 0.4666666666666667,
+      "mean_latency_s": 42.40930411020915,
+      "n": 30,
+      "truncated": 0
+    },
+    "zebra_puzzles": {
+      "adapted_native_mean": 0.8,
+      "errors": 0,
+      "full_credit_rate": 0.8,
+      "mean_latency_s": 84.44725263913473,
+      "n": 30,
+      "truncated": 6
+    }
+  },
+  "by_task_difficulty": {
+    "course_schedule::easy": {
+      "adapted_native_mean": 0.3,
+      "errors": 0,
+      "full_credit_rate": 0.3,
+      "mean_latency_s": 133.9880823612213,
+      "n": 10,
+      "truncated": 6
+    },
+    "course_schedule::hard": {
+      "adapted_native_mean": 0.4,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 114.34736788272858,
+      "n": 10,
+      "truncated": 4
+    },
+    "course_schedule::medium": {
+      "adapted_native_mean": 0.4,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 129.44730949401855,
+      "n": 10,
+      "truncated": 5
+    },
+    "knights_knaves::easy": {
+      "adapted_native_mean": 0.986,
+      "errors": 0,
+      "full_credit_rate": 0.9,
+      "mean_latency_s": 32.75639135837555,
+      "n": 10,
+      "truncated": 0
+    },
+    "knights_knaves::hard": {
+      "adapted_native_mean": 0.89,
+      "errors": 0,
+      "full_credit_rate": 0.8,
+      "mean_latency_s": 52.8010931968689,
+      "n": 10,
+      "truncated": 1
+    },
+    "knights_knaves::medium": {
+      "adapted_native_mean": 0.9183333333333333,
+      "errors": 0,
+      "full_credit_rate": 0.8,
+      "mean_latency_s": 65.25518386363983,
+      "n": 10,
+      "truncated": 0
+    },
+    "propositional_logic::easy": {
+      "adapted_native_mean": 0.55,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 19.382336449623107,
+      "n": 10,
+      "truncated": 0
+    },
+    "propositional_logic::hard": {
+      "adapted_native_mean": 0.6599999999999999,
+      "errors": 0,
+      "full_credit_rate": 0.6,
+      "mean_latency_s": 57.87183225154877,
+      "n": 10,
+      "truncated": 0
+    },
+    "propositional_logic::medium": {
+      "adapted_native_mean": 0.51,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 49.97374362945557,
+      "n": 10,
+      "truncated": 0
+    },
+    "zebra_puzzles::easy": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "full_credit_rate": 1.0,
+      "mean_latency_s": 33.66157426834106,
+      "n": 10,
+      "truncated": 0
+    },
+    "zebra_puzzles::hard": {
+      "adapted_native_mean": 0.4,
+      "errors": 0,
+      "full_credit_rate": 0.4,
+      "mean_latency_s": 131.86693866252898,
+      "n": 10,
+      "truncated": 6
+    },
+    "zebra_puzzles::medium": {
+      "adapted_native_mean": 1.0,
+      "errors": 0,
+      "full_credit_rate": 1.0,
+      "mean_latency_s": 87.81324498653412,
+      "n": 10,
+      "truncated": 0
+    }
+  },
+  "completed": 120,
+  "parser_version": "rg4_parser_v2",
+  "rows": 120
+}
+RG4 CAL120 COMPLETE

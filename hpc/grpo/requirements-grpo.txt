@@ -1,0 +1,10 @@
+# Training-only stack, pinned for a rebuildable article runtime.
+# The base image supplies CUDA/Torch/Transformers/vLLM; vLLM is nevertheless
+# pinned explicitly here so dependency resolution cannot change its version.
+# The definition also asserts the final installed versions after resolution.
+trl[vllm]==1.13.0
+vllm==0.28.0
+peft==0.21.0
+datasets==5.0.1
+accelerate==1.15.0
+PyYAML==6.0.3

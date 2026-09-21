@@ -107,19 +107,28 @@ def split_gemini_thought(content: str) -> tuple[str, str]:
     return completion, reasoning
 
 def reasoning_of(message: Any) -> str:
-    """The reasoning trace, under whichever of the two names it arrived.
+    """Return reasoning from vLLM/OpenAI-compatible response variants."""
 
-    vLLM renamed `reasoning_content` to `reasoning` and warns that a client can
-    read an empty one while the other is populated; OpenRouter uses `reasoning`.
-    Neither is in the OpenAI schema, so both arrive in `model_extra` -- the SDK's
-    response models allow extra fields, which is what makes this ten lines
-    instead of a dependency.
-    """
+    direct = (
+        getattr(message, "reasoning", None)
+        or getattr(message, "reasoning_content", None)
+    )
+    if direct:
+        return direct
+
+    if isinstance(message, dict):
+        return (
+            message.get("reasoning")
+            or message.get("reasoning_content")
+            or ""
+        )
+
     extra = getattr(message, "model_extra", None) or {}
-    if not extra and isinstance(message, dict):
-        extra = message
-    return extra.get("reasoning") or extra.get("reasoning_content") or ""
-
+    return (
+        extra.get("reasoning")
+        or extra.get("reasoning_content")
+        or ""
+    )
 def gemini_thought_summaries_enabled(endpoint: "Endpoint") -> bool:
     """Whether this endpoint explicitly requested Gemini thought summaries."""
     try:
@@ -211,8 +220,7 @@ class ChatClient:
             if reason not in _ANSWERED or refusal:
                 # Not an answer, so not a score.
                 return Attempt(
-                    error=f"provider did not answer: finish_reason={reason!r}"
-                        + (f" refusal={refusal!r}" if refusal else ""),
+                    error=last,
                     completion=choice.message.content or "",
                     refusal=refusal,
                     finish_reason=reason,

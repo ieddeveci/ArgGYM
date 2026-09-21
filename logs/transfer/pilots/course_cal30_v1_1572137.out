@@ -1,0 +1,56 @@
+data rows: 30
+data sha256: c83f8c90683aa1cbc244cd5ab9caa3bfc9a0f196704a49f3487306571ef9f0b8
+label balance: {'easy': {'true': 5, 'false': 5}, 'hard': {'true': 5, 'false': 5}, 'medium': {'false': 5, 'true': 5}}
+preflight structure: PASS
+COURSE CAL30 VLLM READY port=30137
+{
+  "benchmark": "course_cal30_v1",
+  "by_difficulty_gold": {
+    "easy::False": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 5428.4,
+      "mean_latency_s": 47.90201563835144,
+      "n": 5,
+      "truncated": 0
+    },
+    "easy::True": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 3576.6,
+      "mean_latency_s": 31.6344295501709,
+      "n": 5,
+      "truncated": 0
+    },
+    "hard::False": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 10172.8,
+      "mean_latency_s": 89.6784842967987,
+      "n": 5,
+      "truncated": 0
+    },
+    "hard::True": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 12714.8,
+      "mean_latency_s": 113.96247172355652,
+      "n": 5,
+      "truncated": 0
+    },
+    "medium::False": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 6846.0,
+      "mean_latency_s": 60.59749064445496,
+      "n": 5,
+      "truncated": 0
+    },
+    "medium::True": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 5898.8,
+      "mean_latency_s": 52.09759440422058,
+      "n": 5,
+      "truncated": 0
+    }
+  },
+  "completed": 30,
+  "parser_version": "rg4_parser_v4",
+  "rows": 30
+}
+COURSE CAL30 COMPLETE

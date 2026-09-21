@@ -1,0 +1,15 @@
+RG source revision: PASS
+========================================================================
+REASONING GYM V4 FREEZE VERIFICATION
+========================================================================
+rows: 1000
+tasks: 10
+data sha256: c005eca94a9bd9c8ba1c2a3660349e300daddd101cf427bb61f573f5ccd31ca6
+freeze manifest: outputs/transfer/protocol_freeze/v4/reasoning_gym/freeze_manifest.json
+freeze manifest sha256: edb05e3736b632f1384aa6996ce1fae972adce04a35e9a8a1a8434e2a8062a97
+
+REASONING GYM V4 FREEZE VERIFICATION: PASS
+RG NATIVE GOLD SELF-SCORE: 1000/1000 PASS
+RG local port: 29321
+RG runtime endpoint: /arf/scratch/futan/ArgGYM/outputs/transfer/pre_rl_qwen3_14b_v4/reasoning_gym/runtime_endpoint_1571321.json
+VLLM V4 PRE SERVER READY: reasoning_gym

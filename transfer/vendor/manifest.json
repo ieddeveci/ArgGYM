@@ -1,0 +1,186 @@
+{
+  "files": [
+    {
+      "bytes": 1999,
+      "path": "finereason/data_loading.py",
+      "sha256": "7ce3c24ab30bd49e8b102e6c039fae5cd1d6e2a2e5090d24f0c896049b8a454e"
+    },
+    {
+      "bytes": 2507,
+      "path": "finereason/game24_tree.py",
+      "sha256": "903276bab393fb86206ab81bc90e5c71cc25779b66cfa6f967c057e14a9dd20b"
+    },
+    {
+      "bytes": 2514,
+      "path": "finereason/graphcoloring_tree.py",
+      "sha256": "392895cc1a22ce9daad23b0619e4421fa05ee555512253604f492dd7496e3eb7"
+    },
+    {
+      "bytes": 14040,
+      "path": "finereason/gridpuzzle_tree.py",
+      "sha256": "d456ddf7fe0a9e30fd6e5573bd2afd25fc62865507719d032bbb740faf7dd90e"
+    },
+    {
+      "bytes": 1484,
+      "path": "finereason/main.py",
+      "sha256": "58b6dd2532e767acb729d00463342d6224f3dde712adb0b6637ef9bb0b388129"
+    },
+    {
+      "bytes": 5921,
+      "path": "finereason/modeling.py",
+      "sha256": "ff1ff8b1c83031c656339eee8b3c7ed072212fabc9d86ee5aeb13d4b00c95953"
+    },
+    {
+      "bytes": 36720,
+      "path": "finereason/prompting.py",
+      "sha256": "299fca387c947120afa156f077cd1d1891989f5118e146401e65a29a3c4916ea"
+    },
+    {
+      "bytes": 859,
+      "path": "finereason/scoring.py",
+      "sha256": "9486abd92e5209c394efb89fb13a0048a2728c2e4c236fcc2921c403acbc3a92"
+    },
+    {
+      "bytes": 2542,
+      "path": "finereason/sudoku_tree.py",
+      "sha256": "e3c1945fd3645144ab11d1ecf39ab62661dd13c3579c946f6655f7ae7b57d95e"
+    },
+    {
+      "bytes": 4816,
+      "path": "logiqa2/multi-choice-prompt.py",
+      "sha256": "a05afc2760441b13031c315e5a7f5831cd87d7e1a9edb8cefe22a34333c0bcbf"
+    },
+    {
+      "bytes": 15670,
+      "path": "rulearena/airline/auto_test.py",
+      "sha256": "445eef96c24b59807958ed8728d3ed3b7687186d6b184ba76bf79f55b6e315d5"
+    },
+    {
+      "bytes": 5731,
+      "path": "rulearena/airline/compute_answer.py",
+      "sha256": "5d1703f35df56ef2cbcb38f4eeb43c418feef4200c247e7894cd6b4846f80a14"
+    },
+    {
+      "bytes": 534,
+      "path": "rulearena/airline/fee_tables/bag_1/0.csv",
+      "sha256": "c45ebc4609403656e542ea7691500703921107571b01b2c1d1b79999f758677b"
+    },
+    {
+      "bytes": 533,
+      "path": "rulearena/airline/fee_tables/bag_1/1.csv",
+      "sha256": "8a43e162de7497aa63e449cad31593fc9288c53888e21a90f4564baca132b7c8"
+    },
+    {
+      "bytes": 587,
+      "path": "rulearena/airline/fee_tables/bag_2/0.csv",
+      "sha256": "df0f600a5549887cdbc10516aefb62d41f14008af4813242967467e302438371"
+    },
+    {
+      "bytes": 583,
+      "path": "rulearena/airline/fee_tables/bag_2/1.csv",
+      "sha256": "9aca4bc0e03afc2c24099e18c2568a8ebf6944e03ec7282b31fecf5cc6faf8f4"
+    },
+    {
+      "bytes": 697,
+      "path": "rulearena/airline/fee_tables/bag_3/0.csv",
+      "sha256": "8960377620304ed3c10fa82872a81d5061764ea0105ef0b31a4f3dfccd849b80"
+    },
+    {
+      "bytes": 697,
+      "path": "rulearena/airline/fee_tables/bag_3/1.csv",
+      "sha256": "8960377620304ed3c10fa82872a81d5061764ea0105ef0b31a4f3dfccd849b80"
+    },
+    {
+      "bytes": 731,
+      "path": "rulearena/airline/fee_tables/bag_4/0.csv",
+      "sha256": "59c2a38fd575d3741d4c58146dd6852cafc4f64ff273ab300a19065e66b949e3"
+    },
+    {
+      "bytes": 731,
+      "path": "rulearena/airline/fee_tables/bag_4/1.csv",
+      "sha256": "59c2a38fd575d3741d4c58146dd6852cafc4f64ff273ab300a19065e66b949e3"
+    },
+    {
+      "bytes": 6592,
+      "path": "rulearena/airline/gen_questions.py",
+      "sha256": "81fbab5332d2a5078458ebbf339192afc81b1260bbae8107c70f9572248da949"
+    },
+    {
+      "bytes": 23142,
+      "path": "rulearena/airline/micro_evaluation.py",
+      "sha256": "1232e93890c40aafccc9ffe752d472067ab1f030b2f1c5d690eb59305579c815"
+    },
+    {
+      "bytes": 19624,
+      "path": "rulearena/airline/reference_rules.txt",
+      "sha256": "24d38221ec6d4eff4b8d81312e4e9e1542bc141891cab128d9d7b13c19311c71"
+    },
+    {
+      "bytes": 48120,
+      "path": "rulearena/airline/reference_rules_textual.txt",
+      "sha256": "155b310742726d3e1d580f77aeabd5347005b331d89f0f4b0e711bcce436869b"
+    },
+    {
+      "bytes": 9102,
+      "path": "rulearena/airline/structure.py",
+      "sha256": "860056d4c5defea5bea1faff60f21e9087c2646867d102dd65084c3704285181"
+    },
+    {
+      "bytes": 18793,
+      "path": "rulearena/nba/auto_test.py",
+      "sha256": "8a8677c36579dd945f978da8cd8eed264d5072cb719fa6f1e260ef9aceb2e29c"
+    },
+    {
+      "bytes": 23855,
+      "path": "rulearena/nba/micro_evaluation.py",
+      "sha256": "4e2eb89b3f2f9e9ff9373a46e9895fae099ef72e34e01b02df53361d5825f5d6"
+    },
+    {
+      "bytes": 98208,
+      "path": "rulearena/nba/reference_rules.txt",
+      "sha256": "eae4dbb7d7ec5847bb56b9280fe811ca275edc34431fad855d330cfb7d1db0ed"
+    },
+    {
+      "bytes": 14208,
+      "path": "rulearena/tax/auto_test.py",
+      "sha256": "90a01c09422068f5689a2d658b5def2cfc58e18473dfc104c2b5b5d134fa27f3"
+    },
+    {
+      "bytes": 14501,
+      "path": "rulearena/tax/gen_payer.py",
+      "sha256": "8b0516212585b49b79acaf2903da70a6a7329661464ffaf516a783f391012272"
+    },
+    {
+      "bytes": 44332,
+      "path": "rulearena/tax/micro_evaluation.py",
+      "sha256": "866e44f16a817c0c415e1c2640ebdf0d58e046f9d8f3d60fc7da201ff9a4d026"
+    },
+    {
+      "bytes": 91160,
+      "path": "rulearena/tax/one_shot_example.py",
+      "sha256": "303e35a308bb2827817df0356da2c641477b7be8020dcd0ec3a158485d61573d"
+    },
+    {
+      "bytes": 61015,
+      "path": "rulearena/tax/prompt.py",
+      "sha256": "90ee4a72e4486312e0bc739b294320edfe6d011600328da18562ab23869d0a2e"
+    },
+    {
+      "bytes": 55434,
+      "path": "rulearena/tax/prompt_distractor.py",
+      "sha256": "83b18ab79cfd461536b20d307be21d6fa1d8d5d2929a0819b4e253a01f2a5914"
+    },
+    {
+      "bytes": 12338,
+      "path": "rulearena/tax/structured_forms.py",
+      "sha256": "4d5a01ae0998f5cb965f00b62f2a1aba98e979649ecc88f6c2977ddb6b04a8ad"
+    }
+  ],
+  "note": "Problem data are excluded. Custom benchmark data are read only from data/transfer/frozen.",
+  "source_revisions": {
+    "finereason": "41532f7e272c82de6e259ef45f88626d2cd433d3",
+    "logiqa2": "955e1d3df6c59d9bfb44d9913da1e1a27ec14e18",
+    "rulearena": "59f60f6b4eb93a9b6d187ec781349d4f15618903"
+  },
+  "status": "PINNED_OFFICIAL_EVALUATION_CODE_SNAPSHOT"
+}

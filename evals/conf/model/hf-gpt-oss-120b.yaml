@@ -1,0 +1,16 @@
+name: hf-gpt-oss-120b
+model: openai/gpt-oss-120b
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+
+sampling:
+  max_tokens: 32768
+  temperature: 1.0
+  seed: 0
+  reasoning_effort: medium
+
+extra_body:
+  include_reasoning: true
+
+timeout_s: 5400
+retries: 2

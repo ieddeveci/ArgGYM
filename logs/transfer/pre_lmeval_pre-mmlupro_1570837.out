@@ -1,0 +1,100 @@
+========================================
+PRE-RL LM-EVAL
+benchmark: mmlu_pro
+task:      arggym_mmlu_pro_pinned
+job:       1570837
+node:      kolyoz48
+========================================
+Sun Sep 20 16:30:18 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.95.05              Driver Version: 580.95.05      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H200                    On  |   00000000:42:00.0 Off |                    0 |
+| N/A   43C    P0             75W /  700W |       0MiB / 143771MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+INFO 09-20 16:32:10 [api_utils.py:272] non-default args: {'dtype': 'bfloat16', 'seed': 1234, 'max_model_len': 40960, 'gpu_memory_utilization': 0.9, 'disable_log_stats': True, 'model': '/arf/scratch/futan/arggym_hf_cache/hub/models--Qwen--Qwen3-14B/snapshots/40c069824f4251a91eefaf281ebe4c544efd3e18'}
+INFO 09-20 16:32:10 [model.py:672] Resolved architecture: Qwen3ForCausalLM
+INFO 09-20 16:32:10 [model.py:1965] Using max model len 40960
+INFO 09-20 16:32:10 [scheduler.py:242] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 09-20 16:32:10 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(EngineCore pid=862932) INFO 09-20 16:32:15 [core.py:122] Initializing a V1 LLM engine (v0.28.0) with config: model='/arf/scratch/futan/arggym_hf_cache/hub/models--Qwen--Qwen3-14B/snapshots/40c069824f4251a91eefaf281ebe4c544efd3e18', speculative_config=None, tokenizer='/arf/scratch/futan/arggym_hf_cache/hub/models--Qwen--Qwen3-14B/snapshots/40c069824f4251a91eefaf281ebe4c544efd3e18', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=40960, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=1234, served_model_name=/arf/scratch/futan/arggym_hf_cache/hub/models--Qwen--Qwen3-14B/snapshots/40c069824f4251a91eefaf281ebe4c544efd3e18, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [16384], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=862932) INFO 09-20 16:32:48 [parallel_state.py:1638] world_size=1 rank=0 local_rank=0 distributed_init_method=file:///tmp/vllm_dist_6d521c383cf04e648b730f0983afee07 backend=nccl
+(EngineCore pid=862932) INFO 09-20 16:32:48 [parallel_state.py:1982] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(EngineCore pid=862932) INFO 09-20 16:32:48 [gpu_worker.py:396] Using V2 Model Runner
+(EngineCore pid=862932) INFO 09-20 16:32:50 [model_runner.py:358] Loading model from scratch...
+(EngineCore pid=862932) INFO 09-20 16:32:51 [cuda.py:486] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore pid=862932) INFO 09-20 16:32:51 [flash_attn.py:866] Using FlashAttention version 3
+(EngineCore pid=862932) INFO 09-20 16:32:52 [weight_utils.py:858] Filesystem type for checkpoints: LUSTRE. Checkpoint size: 27.51 GiB. Available RAM: 802.83 GiB.
+(EngineCore pid=862932) INFO 09-20 16:32:52 [weight_utils.py:820] Prefetching checkpoint files into page cache started (in background, num_threads=8, block_size=16777216 bytes)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 10% (1/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 20% (2/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 30% (3/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 40% (4/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 50% (5/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 60% (6/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 70% (7/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:792] Prefetching checkpoint files: 80% (8/8)
+(EngineCore pid=862932) INFO 09-20 16:32:53 [weight_utils.py:815] Prefetching checkpoint files into page cache finished in 1.37s
+(EngineCore pid=862932) INFO 09-20 16:33:05 [default_loader.py:430] Loading weights took 13.30 seconds
+(EngineCore pid=862932) INFO 09-20 16:33:06 [model_runner.py:380] Model loading took 27.52 GiB memory and 16.593596 seconds
+(EngineCore pid=862932) INFO 09-20 16:33:06 [topk_topp_sampler.py:62] Using FlashInfer for top-p & top-k sampling.
+(EngineCore pid=862932) INFO 09-20 16:33:20 [caching.py:343] reconstructed serializable fn from standalone compile artifacts. num_artifacts=3 num_submods=41
+(EngineCore pid=862932) INFO 09-20 16:33:20 [decorators.py:311] Directly load AOT compilation from path /arf/home/futan/.cache/vllm/torch_compile_cache/torch_aot_compile/136d463dcabb553051f1e1f409f74a43028200eafcec784bac746435cf7447ef/rank_0_0/model
+(EngineCore pid=862932) INFO 09-20 16:33:20 [monitor.py:53] torch.compile took 3.70 s in total
+(EngineCore pid=862932) INFO 09-20 16:33:21 [monitor.py:81] Initial profiling/warmup run took 0.65 s
+(EngineCore pid=862932) INFO 09-20 16:33:23 [gpu_worker.py:578] Available KV cache memory: 95.34 GiB
+(EngineCore pid=862932) INFO 09-20 16:33:23 [kv_cache_utils.py:1869] GPU KV cache size: 624,832 tokens, Maximum concurrency for 40,960 tokens per request: 15.25x
+(EngineCore pid=862932) INFO 09-20 16:33:26 [kernel_warmup.py:260] Using FlashInfer autotune cache file: /arf/home/futan/.cache/vllm/flashinfer_autotune_cache/0.6.16.post3/90a/ac1a12439d443dae39fa64dce8d2b6a625afb81768e4211da9ea0c32ae828de3/autotune_configs.json
+(EngineCore pid=862932) INFO 09-20 16:33:34 [model_runner.py:906] Graph capturing finished in 8 secs, took 0.88 GiB
+(EngineCore pid=862932) INFO 09-20 16:33:34 [gpu_worker.py:804] Free memory on device (139.29/139.8 GiB) on startup. Desired GPU memory utilization is (0.9, 125.82 GiB). Actual usage is 28.42 GiB for consumed memory (weights + non-torch), 2.06 GiB for peak activation, and 0.88 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=101265636045` (94.31 GiB) to fit into requested memory, or `--kv-cache-memory=115722857984` (107.78 GiB) to fully utilize gpu memory. Current kv cache memory in use is 95.34 GiB.
+(EngineCore pid=862932) INFO 09-20 16:33:41 [jit_monitor.py:85] Kernel JIT monitor activated; monitored JIT compilations during inference will use mode=warn.
+(EngineCore pid=862932) INFO 09-20 16:33:42 [torch_utils.py:262] Reducing Torch threads from 32 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+(EngineCore pid=862932) INFO 09-20 16:33:42 [core.py:347] init engine (profile, create kv cache, warmup model) took 35.71 s (compilation: 3.70 s)
+(EngineCore pid=862932) INFO 09-20 16:33:42 [kernel.py:308] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 09-20 16:33:44 [hf.py:551] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(EngineCore pid=862932) WARNING 09-20 16:34:24 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _gumbel_sample_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(EngineCore pid=862932) WARNING 09-20 16:34:26 [jit_monitor.py:141] Triton kernel JIT compilation during inference: _topk_topp_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+INFO 09-20 17:12:29 [utils.py:615] [shutdown] Process manager: send sigterm to process EngineCore
+(EngineCore pid=862932) INFO 09-20 17:12:29 [core.py:1329] [shutdown] EngineCore: trigger received signal=SIGTERM
+(EngineCore pid=862932) INFO 09-20 17:12:29 [core.py:1465] [shutdown] EngineCore: start mode=abort timeout=0s
+(EngineCore pid=862932) INFO 09-20 17:12:29 [core.py:1496] [shutdown] EngineCore: request processing complete; starting resource teardown
+(EngineCore pid=862932) INFO 09-20 17:12:29 [core.py:1342] [shutdown] EngineCore: exiting busy loop
+vllm ({'pretrained': '/arf/scratch/futan/arggym_hf_cache/hub/models--Qwen--Qwen3-14B/snapshots/40c069824f4251a91eefaf281ebe4c544efd3e18', 'dtype': 'bfloat16', 'tensor_parallel_size': 1, 'gpu_memory_utilization': 0.9, 'max_model_len': 40960, 'enable_thinking': True, 'think_end_token': '</think>'}), gen_kwargs: ({}), limit: None, num_fewshot: None, batch_size: auto
+|        Tasks         |Version|    Filter    |n-shot|  Metric   |   |Value |   |Stderr|
+|----------------------|------:|--------------|-----:|-----------|---|-----:|---|-----:|
+|arggym_mmlu_pro_pinned|    2.0|custom-extract|     5|exact_match|↑  |0.5959|±  |0.0043|
+| - biology            |    3.1|custom-extract|     5|exact_match|↑  |0.7671|±  |0.0158|
+| - business           |    3.1|custom-extract|     5|exact_match|↑  |0.6806|±  |0.0166|
+| - chemistry          |    3.1|custom-extract|     5|exact_match|↑  |0.4973|±  |0.0149|
+| - computer_science   |    3.1|custom-extract|     5|exact_match|↑  |0.6732|±  |0.0232|
+| - economics          |    3.1|custom-extract|     5|exact_match|↑  |0.7701|±  |0.0145|
+| - engineering        |    3.1|custom-extract|     5|exact_match|↑  |0.3075|±  |0.0148|
+| - health             |    3.1|custom-extract|     5|exact_match|↑  |0.7042|±  |0.0160|
+| - history            |    3.1|custom-extract|     5|exact_match|↑  |0.6037|±  |0.0251|
+| - law                |    3.1|custom-extract|     5|exact_match|↑  |0.3688|±  |0.0145|
+| - math               |    3.1|custom-extract|     5|exact_match|↑  |0.5655|±  |0.0135|
+| - other              |    3.1|custom-extract|     5|exact_match|↑  |0.6786|±  |0.0154|
+| - philosophy         |    3.1|custom-extract|     5|exact_match|↑  |0.5812|±  |0.0221|
+| - physics            |    3.1|custom-extract|     5|exact_match|↑  |0.6228|±  |0.0135|
+| - psychology         |    3.1|custom-extract|     5|exact_match|↑  |0.7444|±  |0.0155|
+
+|        Groups        |Version|    Filter    |n-shot|  Metric   |   |Value |   |Stderr|
+|----------------------|------:|--------------|-----:|-----------|---|-----:|---|-----:|
+|arggym_mmlu_pro_pinned|      2|custom-extract|     5|exact_match|↑  |0.5959|±  |0.0043|
+
+
+PRE-RL LM-EVAL COMPLETE: mmlu_pro
+2026-09-20T14:12:38Z

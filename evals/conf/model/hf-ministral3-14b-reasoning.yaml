@@ -1,0 +1,13 @@
+name: hf-ministral3-14b-reasoning
+model: mistralai/Ministral-3-14B-Reasoning-2512
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+
+sampling:
+  max_tokens: 32768
+  temperature: 1.0
+  top_p: 0.95
+  seed: 0
+
+timeout_s: 5400
+retries: 2

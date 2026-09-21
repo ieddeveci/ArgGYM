@@ -1,0 +1,23 @@
+group: arggym_mmlu_pro_pinned
+task:
+  - arggym_mmlu_pro_pinned_biology
+  - arggym_mmlu_pro_pinned_business
+  - arggym_mmlu_pro_pinned_chemistry
+  - arggym_mmlu_pro_pinned_computer_science
+  - arggym_mmlu_pro_pinned_economics
+  - arggym_mmlu_pro_pinned_engineering
+  - arggym_mmlu_pro_pinned_health
+  - arggym_mmlu_pro_pinned_history
+  - arggym_mmlu_pro_pinned_law
+  - arggym_mmlu_pro_pinned_math
+  - arggym_mmlu_pro_pinned_other
+  - arggym_mmlu_pro_pinned_philosophy
+  - arggym_mmlu_pro_pinned_physics
+  - arggym_mmlu_pro_pinned_psychology
+aggregate_metric_list:
+  - aggregation: mean
+    metric: exact_match
+    weight_by_size: true
+    filter_list: custom-extract
+metadata:
+  version: 2.0

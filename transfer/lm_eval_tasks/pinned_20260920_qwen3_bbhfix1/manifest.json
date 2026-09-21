@@ -1,0 +1,296 @@
+{
+  "dataset_revisions": {
+    "bbh": "b5306be6f827cfafbb545ff5a51f96916029b0fd",
+    "gsm8k": "740312add88f781978c0658806c59bc2815b9866",
+    "mmlu_pro": "b189ec765aa7ed75c8acfea42df31fdae71f97be"
+  },
+  "files": [
+    {
+      "bytes": 1362,
+      "path": "bbh/_bbh.yaml",
+      "sha256": "4f75a6ff9a16ce7df06ab7495fb02d8c80c95cb6fbef5adf4ed0e50dcf5316ec"
+    },
+    {
+      "bytes": 1374,
+      "path": "bbh/_bbh_cot_fewshot.yaml",
+      "sha256": "c38cc64139986f1ffc8a5e11793674a7eef2665bfb22c7f4eca678be39184a27"
+    },
+    {
+      "bytes": 707,
+      "path": "bbh/_cot_fewshot_template_yaml",
+      "sha256": "8a812a5fb1183d4c3862e4fb8c260ca56f16590449ced4d06809e2d9195dc25c"
+    },
+    {
+      "bytes": 2127,
+      "path": "bbh/boolean_expressions.yaml",
+      "sha256": "7be8e8d080a9c3f8eba11672b821cb9be32fb2caea43b4ff1a2b61c62a78dd10"
+    },
+    {
+      "bytes": 4209,
+      "path": "bbh/causal_judgement.yaml",
+      "sha256": "f4281e785422f613a90a243c516d48aa0ee55c22712ed5673ce0946a9b9ce1be"
+    },
+    {
+      "bytes": 1570,
+      "path": "bbh/date_understanding.yaml",
+      "sha256": "3d4b631f21729d69d2840965a4386c72d4d7f526ba7c140057717c5310af3fdc"
+    },
+    {
+      "bytes": 4154,
+      "path": "bbh/disambiguation_qa.yaml",
+      "sha256": "efb8ae11b16b6f0811137432fb7f190bc1eb660d888fc5e31882dd79f360f41b"
+    },
+    {
+      "bytes": 3059,
+      "path": "bbh/dyck_languages.yaml",
+      "sha256": "757226d1e7355f463cb5acf92bed3c69c5f4ec5de87dbb2baeedf28ef8f56c92"
+    },
+    {
+      "bytes": 5220,
+      "path": "bbh/formal_fallacies.yaml",
+      "sha256": "1dbe62bc9aa37e096f7a2e965f7c2060d15eb7fb869d91886460d625650fe099"
+    },
+    {
+      "bytes": 5670,
+      "path": "bbh/geometric_shapes.yaml",
+      "sha256": "7417c9c00d668844aa6d61490ac0b1039e28e8e319ba0e131316e69536a4ec50"
+    },
+    {
+      "bytes": 3590,
+      "path": "bbh/hyperbaton.yaml",
+      "sha256": "f0f6212db407bba591afc69898461e45c5f09481aa331bb9c3e83b95c3e73b4f"
+    },
+    {
+      "bytes": 3026,
+      "path": "bbh/logical_deduction_five_objects.yaml",
+      "sha256": "da8309e98c307c0a82ebdbc3d2e9913797bfb1502ffb3299c5f02bc8ca6cc418"
+    },
+    {
+      "bytes": 3028,
+      "path": "bbh/logical_deduction_seven_objects.yaml",
+      "sha256": "d3d2de77fbe4d0d0e5100de7b2eb61d4a76e6c628948dca65c7b9866bf826f12"
+    },
+    {
+      "bytes": 3028,
+      "path": "bbh/logical_deduction_three_objects.yaml",
+      "sha256": "853ebf53533759bef65cc963905cec5aca0fed6d672cd9025f138a894baffc5c"
+    },
+    {
+      "bytes": 2626,
+      "path": "bbh/movie_recommendation.yaml",
+      "sha256": "6a02a31188e2800e34970cb0fb87d73949cbdda1048a5cc52aa5a4eae058de72"
+    },
+    {
+      "bytes": 2887,
+      "path": "bbh/multistep_arithmetic_two.yaml",
+      "sha256": "84a9a63f28eade0b90a4314c57929f80940ab05a3d69a9722fdb49519a94a966"
+    },
+    {
+      "bytes": 2594,
+      "path": "bbh/navigate.yaml",
+      "sha256": "f971d9e38a6e1abe180e8a7d5cc48896923779345719d38ee605d86e9ec026ab"
+    },
+    {
+      "bytes": 1840,
+      "path": "bbh/object_counting.yaml",
+      "sha256": "0828c3fdd37ba740a5abe1a4e3fc0966a3b3caad28622f05578d48eeba4903db"
+    },
+    {
+      "bytes": 2905,
+      "path": "bbh/penguins_in_a_table.yaml",
+      "sha256": "d2a4e90deb4e0d414085dadbf00db52a2e2accd7d555233ab6d4fc1e80286335"
+    },
+    {
+      "bytes": 2998,
+      "path": "bbh/reasoning_about_colored_objects.yaml",
+      "sha256": "8965c3536de07ac9119324b6108e59f0fc11c9f9dce7d8366f64f098b2e07ddc"
+    },
+    {
+      "bytes": 4067,
+      "path": "bbh/ruin_names.yaml",
+      "sha256": "ce7aae9c214fc3e3b54a84ae0a98700ec8af77af6bf46b4591ecff46d37e2e69"
+    },
+    {
+      "bytes": 7070,
+      "path": "bbh/salient_translation_error_detection.yaml",
+      "sha256": "ca2918f4827bb412fbcd04a51f5ef0746745b896aae7fe42eb5fa9f2fc4c6e22"
+    },
+    {
+      "bytes": 3573,
+      "path": "bbh/snarks.yaml",
+      "sha256": "f9d73f836ff57abff8d5dbc16398111d81c41681bfcb0b8de153acd9d5e8e507"
+    },
+    {
+      "bytes": 1076,
+      "path": "bbh/sports_understanding.yaml",
+      "sha256": "a70e17d9528b11ef75c1442594442fac0d75b79ed0c26ac36e9b73f925fc03e8"
+    },
+    {
+      "bytes": 3728,
+      "path": "bbh/temporal_sequences.yaml",
+      "sha256": "566ed785f64b03d5363ed25c579ed83778465cf6e3919c64e8aada78af7b1a1b"
+    },
+    {
+      "bytes": 3132,
+      "path": "bbh/tracking_shuffled_objects_five_objects.yaml",
+      "sha256": "dd9c595ed08850b6f0cdc99b57806e23e8387b3bbdc73ec7bba9c1bcf10bb8e6"
+    },
+    {
+      "bytes": 3134,
+      "path": "bbh/tracking_shuffled_objects_seven_objects.yaml",
+      "sha256": "c94c1cab41ed62e4c9ccbf1ea1898c5a806bba87003b4f226470cfcfe6ea137b"
+    },
+    {
+      "bytes": 3134,
+      "path": "bbh/tracking_shuffled_objects_three_objects.yaml",
+      "sha256": "e07b53b779f6d3053ac9be12320d1ca1314191945367bbc10bca64c6ccdb1e89"
+    },
+    {
+      "bytes": 3393,
+      "path": "bbh/web_of_lies.yaml",
+      "sha256": "df4a8d7c0c360367048bdba3a2381c6230428dab57eccf43b3398e9d7ffcbffa"
+    },
+    {
+      "bytes": 2529,
+      "path": "bbh/word_sorting.yaml",
+      "sha256": "91d308da979d02338b35ce7e54acd29329cfc1f02604fd2ab9eba6a5a2710ca6"
+    },
+    {
+      "bytes": 3498,
+      "path": "gsm8k/arggym_gsm8k_cot_pinned.yaml",
+      "sha256": "0413df7d347fdfed63843ad19cf7d63e4fa216706c8c3524eed5067893828708"
+    },
+    {
+      "bytes": 4776,
+      "path": "mmlu_pro/README.md",
+      "sha256": "7a46bdda17a62d7ae4752a9c12e990ac43ede208e1a44a7a5a5b426bb8a1ceea"
+    },
+    {
+      "bytes": 919,
+      "path": "mmlu_pro/_default_template_yaml",
+      "sha256": "ca510b1d516064049a2108a7497705cd0cea530f5e3b38e778e9fb1781a92d60"
+    },
+    {
+      "bytes": 691,
+      "path": "mmlu_pro/_mmlu_pro.yaml",
+      "sha256": "fe7f1ec2903c1d2e08360596fc91fa321793aaaeae1d7c345f9e753b4c176a1c"
+    },
+    {
+      "bytes": 344,
+      "path": "mmlu_pro/mmlu_pro_biology.yaml",
+      "sha256": "1b3da32465f542baa89f033375a2344646e7f6083e6d028c8715c8fc335952a1"
+    },
+    {
+      "bytes": 348,
+      "path": "mmlu_pro/mmlu_pro_business.yaml",
+      "sha256": "f4366227bd5e6eea14f137240ba1b2c3bb0c2c9d6367567dd2c42a89ac037b24"
+    },
+    {
+      "bytes": 352,
+      "path": "mmlu_pro/mmlu_pro_chemistry.yaml",
+      "sha256": "c23981f0be5edfd768bbcc39483519e499a61cc1a44ffb153d8199a720decd1c"
+    },
+    {
+      "bytes": 380,
+      "path": "mmlu_pro/mmlu_pro_computer_science.yaml",
+      "sha256": "8ba8005fee03794325f377e61a8451e84b6b6eace59eea92483f9aa5fb47826e"
+    },
+    {
+      "bytes": 352,
+      "path": "mmlu_pro/mmlu_pro_economics.yaml",
+      "sha256": "0a574652709d152860611587dff4216158039d4d880e944688ce5400a872c85e"
+    },
+    {
+      "bytes": 360,
+      "path": "mmlu_pro/mmlu_pro_engineering.yaml",
+      "sha256": "1d124c510a32a45e68de82f632b6803f3134899147f3c7ea18929b27f442160c"
+    },
+    {
+      "bytes": 340,
+      "path": "mmlu_pro/mmlu_pro_health.yaml",
+      "sha256": "e9461b6dd11db2c24e1ac6a2cc002c09ab8503a5aa8a60d65979eb96fdcb0562"
+    },
+    {
+      "bytes": 344,
+      "path": "mmlu_pro/mmlu_pro_history.yaml",
+      "sha256": "c0b4c58e55f5b638fd6e663d3274a81101084a92e56b6dd527177fdb6a17bbfb"
+    },
+    {
+      "bytes": 328,
+      "path": "mmlu_pro/mmlu_pro_law.yaml",
+      "sha256": "52939baafe4d57a9bb445fc6c3ea3646111283cd4dcb9789e4cec664320720a6"
+    },
+    {
+      "bytes": 332,
+      "path": "mmlu_pro/mmlu_pro_math.yaml",
+      "sha256": "655469377cfc5ae17f321d64b6f8206c5f8e7b30f6bcf96e774f81475cdc6a9c"
+    },
+    {
+      "bytes": 336,
+      "path": "mmlu_pro/mmlu_pro_other.yaml",
+      "sha256": "f7d59d7c8f60f1291e5efcbe4ea1fc12bf3d6b9e35819678a505bc2ae548b2c8"
+    },
+    {
+      "bytes": 356,
+      "path": "mmlu_pro/mmlu_pro_philosophy.yaml",
+      "sha256": "67f8c6c22d7291c6579568c0b6afb1d1161b9e8c31833465bdefc5de802361d7"
+    },
+    {
+      "bytes": 344,
+      "path": "mmlu_pro/mmlu_pro_physics.yaml",
+      "sha256": "e60f927308e7b7503057b74d4714828509f7911fef573253f2718caab9fd64fa"
+    },
+    {
+      "bytes": 356,
+      "path": "mmlu_pro/mmlu_pro_psychology.yaml",
+      "sha256": "21203fa697310ad953f26a045123b7018be66d4cd1b30868c3c13a9202cbae43"
+    },
+    {
+      "bytes": 2079,
+      "path": "mmlu_pro/utils.py",
+      "sha256": "d47eae06ecf1e9535b033394de62185327a1dca977cb29049003699adeb92801"
+    }
+  ],
+  "generation_policy": {
+    "completion_budget_policy": "benchmark_specific",
+    "do_sample": true,
+    "min_p": 0.0,
+    "name": "qwen3_thinking_sampling_v1",
+    "preserve_task_stop_sequences": true,
+    "seed": 1234,
+    "temperature": 0.6,
+    "top_k": 20,
+    "top_p": 0.95
+  },
+  "include_path": "/arf/scratch/futan/ArgGYM/transfer/lm_eval_tasks/pinned_20260920_qwen3",
+  "lm_eval_revision": "d6de81643928d653435c431bae19945d41d32520",
+  "status": "LM_EVAL_TASK_DEFINITIONS_FROZEN_PRE_EVAL_QWEN3",
+  "tasks": {
+    "bbh": {
+      "conceptual_task_families": 23,
+      "do_sample": true,
+      "group": "arggym_bbh_pinned",
+      "lm_eval_task_configs": 27,
+      "max_gen_toks": 1024,
+      "num_fewshot": 3,
+      "split": "test",
+      "variant": "cot_fewshot"
+    },
+    "gsm8k": {
+      "do_sample": true,
+      "max_gen_toks": 8192,
+      "num_fewshot": 8,
+      "split": "test",
+      "task": "arggym_gsm8k_cot_pinned"
+    },
+    "mmlu_pro": {
+      "do_sample": true,
+      "fewshot_split": "validation",
+      "group": "arggym_mmlu_pro_pinned",
+      "max_gen_toks": 2048,
+      "num_fewshot": 5,
+      "split": "test",
+      "subjects": 14
+    }
+  }
+}

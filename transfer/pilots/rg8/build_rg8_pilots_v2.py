@@ -1,0 +1,435 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+from collections import Counter
+from copy import deepcopy
+from hashlib import sha256
+from itertools import product
+from pathlib import Path
+import argparse
+import json
+import re
+import subprocess
+
+import reasoning_gym
+from reasoning_gym.logic.propositional_logic import Expression
+
+EXPECTED_RG_REV = "49b07130b3fcd12f2d064bba7c43869543a0e7e7"
+
+TASK_LEVELS = {
+    "arc_1d": {
+        "easy":   {"min_size": 10,  "max_size": 10,  "num_train": 3},
+        "medium": {"min_size": 50,  "max_size": 50,  "num_train": 3},
+        "hard":   {"min_size": 100, "max_size": 100, "num_train": 3},
+    },
+    "family_relationships": {
+        "easy":   {"min_family_size": 4,  "max_family_size": 4},
+        "medium": {"min_family_size": 7,  "max_family_size": 7},
+        "hard":   {"min_family_size": 11, "max_family_size": 11},
+    },
+    "course_schedule": {
+        "easy": {
+            "min_num_courses": 5, "max_num_courses": 5,
+            "min_num_prerequisites": 1, "max_num_prerequisites": 2,
+            "min_cycle_length": 3, "max_cycle_length": 3,
+            "p_solvable": 0.5,
+        },
+        "medium": {
+            "min_num_courses": 25, "max_num_courses": 25,
+            "min_num_prerequisites": 2, "max_num_prerequisites": 3,
+            "min_cycle_length": 4, "max_cycle_length": 4,
+            "p_solvable": 0.5,
+        },
+        "hard": {
+            "min_num_courses": 50, "max_num_courses": 50,
+            "min_num_prerequisites": 3, "max_num_prerequisites": 5,
+            "min_cycle_length": 6, "max_cycle_length": 6,
+            "p_solvable": 0.5,
+        },
+    },
+    "knights_knaves": {
+        "easy":   {"n_people": 2, "depth_constraint": 2, "width_constraint": 2},
+        "medium": {"n_people": 4, "depth_constraint": 2, "width_constraint": 3},
+        "hard":   {"n_people": 5, "depth_constraint": 3, "width_constraint": 3},
+    },
+    "propositional_logic": {
+        "easy": {
+            "min_vars": 2, "max_vars": 2,
+            "min_statements": 2, "max_statements": 2,
+            "min_complexity": 1, "max_complexity": 1,
+        },
+        "medium": {
+            "min_vars": 6, "max_vars": 6,
+            "min_statements": 6, "max_statements": 6,
+            "min_complexity": 3, "max_complexity": 3,
+        },
+        "hard": {
+            "min_vars": 10, "max_vars": 10,
+            "min_statements": 10, "max_statements": 10,
+            "min_complexity": 5, "max_complexity": 5,
+        },
+    },
+    "self_reference": {
+        "easy":   {"difficulty": 1},
+        "medium": {"difficulty": 5},
+        "hard":   {"difficulty": 10},
+    },
+    "syllogism": {
+        # Pinned curriculum ladder:
+        # easy: All only
+        # medium: All + No + Some
+        # hard: all four quantifiers
+        # We set invalid_ratio=0.5 for class balance and disable inversions
+        # so this pilot measures syllogistic validity consistently.
+        "easy": {
+            "allow_all": True, "allow_no": False,
+            "allow_some": False, "allow_some_not": False,
+            "invalid_ratio": 0.5, "inversion_probability": 0.0,
+        },
+        "medium": {
+            "allow_all": True, "allow_no": True,
+            "allow_some": True, "allow_some_not": False,
+            "invalid_ratio": 0.5, "inversion_probability": 0.0,
+        },
+        "hard": {
+            "allow_all": True, "allow_no": True,
+            "allow_some": True, "allow_some_not": True,
+            "invalid_ratio": 0.5, "inversion_probability": 0.0,
+        },
+    },
+    "zebra_puzzles": {
+        "easy":   {"num_people": 2, "num_characteristics": 2},
+        "medium": {"num_people": 4, "num_characteristics": 4},
+        "hard":   {"num_people": 7, "num_characteristics": 7},
+    },
+}
+
+LEVELS = ("easy", "medium", "hard")
+
+
+def stable_seed(namespace: str, task: str, level: str) -> int:
+    raw = f"{namespace}|{task}|{level}".encode()
+    return int(sha256(raw).hexdigest()[:8], 16) & 0x7FFFFFFF
+
+
+def collect_vars(expr: Expression) -> set[str]:
+    if expr.operator is None:
+        return {expr.left}
+    out = set()
+    if isinstance(expr.left, Expression):
+        out |= collect_vars(expr.left)
+    if expr.right is not None and isinstance(expr.right, Expression):
+        out |= collect_vars(expr.right)
+    return out
+
+
+def premises_satisfiable(entry: dict) -> bool:
+    if entry["metadata"]["source_dataset"] != "propositional_logic":
+        return True
+    premises = [Expression.from_string(x) for x in entry["metadata"]["premises"]]
+    variables = sorted(set().union(*(collect_vars(x) for x in premises)))
+    for values in product((False, True), repeat=len(variables)):
+        assignment = dict(zip(variables, values))
+        if all(p.evaluate(assignment) for p in premises):
+            return True
+    return False
+
+
+FAMILY_MEDIUM = {"brother", "sister", "grandmother", "grandfather"}
+FAMILY_HARD = {
+    "aunt", "uncle", "niece", "nephew",
+    "mother-in-law", "father-in-law",
+}
+
+def _expr_truths(expr: Expression, variables: list[str]) -> list[bool]:
+    out = []
+    for values in product((False, True), repeat=len(variables)):
+        assignment = dict(zip(variables, values))
+        out.append(bool(expr.evaluate(assignment)))
+    return out
+
+
+def propositional_candidate_ok(entry: dict, level: str) -> bool:
+    meta = entry["metadata"]
+    premise_texts = list(meta["premises"])
+
+    # Reject duplicate premises such as Q, Q.
+    if len(set(premise_texts)) != len(premise_texts):
+        return False
+
+    premises = [Expression.from_string(x) for x in premise_texts]
+    conclusion = Expression.from_string(meta["example_answer"])
+
+    variables = sorted(
+        set().union(
+            *(collect_vars(x) for x in premises),
+            collect_vars(conclusion),
+        )
+    )
+
+    # Ensure the advertised variable scale is actually used.
+    min_used = {"easy": 2, "medium": 4, "hard": 8}[level]
+    if len(variables) < min_used:
+        return False
+
+    # Reject tautological/contradictory witness conclusions.
+    cvals = _expr_truths(conclusion, variables)
+    if all(cvals) or not any(cvals):
+        return False
+
+    # For medium/hard, require the example conclusion to need the
+    # combined premise set rather than already following from one premise.
+    if level in {"medium", "hard"}:
+        for premise in premises:
+            entails = True
+            for values in product((False, True), repeat=len(variables)):
+                assignment = dict(zip(variables, values))
+                if premise.evaluate(assignment) and not conclusion.evaluate(assignment):
+                    entails = False
+                    break
+            if entails:
+                return False
+
+    return True
+
+
+def family_candidate_ok(entry: dict, level: str) -> bool:
+    rel = str(entry["metadata"]["relationship"]).lower()
+
+    if level == "easy":
+        return rel in {
+            "wife", "husband", "mother", "father", "son", "daughter"
+        }
+
+    if level == "medium":
+        return rel in FAMILY_MEDIUM
+
+    return rel in FAMILY_HARD
+
+
+def syllogism_candidate_ok(entry: dict, level: str) -> bool:
+    meta = entry["metadata"]
+    statements = [
+        str(meta["premise1"]),
+        str(meta["premise2"]),
+        str(meta["conclusion"]),
+    ]
+
+    has_some_not = any(
+        re.match(r"^Some .+ are not .+$", x)
+        for x in statements
+    )
+
+    if level == "easy":
+        return all(x.startswith("All ") for x in statements)
+
+    if level == "medium":
+        return (
+            not has_some_not
+            and any(
+                x.startswith("No ")
+                or x.startswith("Some ")
+                for x in statements
+            )
+        )
+
+    return has_some_not
+
+
+def candidate_ok(task: str, level: str, entry: dict) -> bool:
+    if task == "propositional_logic":
+        return (
+            premises_satisfiable(entry)
+            and propositional_candidate_ok(entry, level)
+        )
+
+    if task == "family_relationships":
+        return family_candidate_ok(entry, level)
+
+    if task == "syllogism":
+        return syllogism_candidate_ok(entry, level)
+
+    return True
+
+
+def gold_self_score(task: str, entry: dict) -> float:
+    fn = reasoning_gym.get_score_answer_fn(task)
+
+    # propositional_logic intentionally stores answer=None because any
+    # non-trivial entailed conclusion is acceptable. The generator's
+    # own valid witness is stored as metadata["example_answer"].
+    if task == "propositional_logic":
+        witness = entry["metadata"]["example_answer"]
+        return float(fn(answer=witness, entry=entry))
+
+    return float(fn(answer=entry["answer"], entry=entry))
+
+
+def file_sha(path: Path) -> str:
+    h = sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def rg_revision(rg_root: Path) -> str:
+    import os
+
+    passed = os.environ.get("ARGGYM_RG_REVISION", "").strip()
+    if passed:
+        return passed
+
+    raise RuntimeError(
+        "ARGGYM_RG_REVISION is not set. Resolve the Reasoning Gym "
+        "revision on the host with `git -C <rg-root> rev-parse HEAD` "
+        "and pass it into the container."
+    )
+
+
+def select_rows(namespace: str, per_level: int) -> list[dict]:
+    rows = []
+    for task, level_map in TASK_LEVELS.items():
+        for level in LEVELS:
+            cfg = deepcopy(level_map[level])
+            seed = stable_seed(namespace, task, level)
+            # Enough virtual rows to skip invalid propositional-logic candidates.
+            ds = reasoning_gym.create_dataset(
+                task,
+                seed=seed,
+                size=1000,
+                **cfg,
+            )
+            accepted = 0
+            idx = 0
+            while accepted < per_level:
+                if idx >= 1000:
+                    raise RuntimeError(f"candidate exhaustion: {task}/{level}")
+                entry = deepcopy(ds[idx])
+                idx += 1
+
+                if not candidate_ok(task, level, entry):
+                    continue
+
+                score = gold_self_score(task, entry)
+                if score != 1.0:
+                    raise RuntimeError(
+                        f"native gold self-score failure: {task}/{level}/idx={idx-1}: {score}"
+                    )
+
+                entry["metadata"] = deepcopy(entry.get("metadata") or {})
+                entry["metadata"]["pilot_difficulty_label"] = level
+                entry["metadata"]["pilot_generation_config"] = cfg
+                entry["metadata"]["pilot_seed"] = seed
+
+                row = {
+                    "id": f"{namespace}::{task}::{level}::{accepted:03d}",
+                    "benchmark": namespace,
+                    "task": task,
+                    "difficulty": level,
+                    "generator_index": idx - 1,
+                    "generator_seed": seed,
+                    "generation_config": cfg,
+                    "entry": entry,
+                }
+                rows.append(row)
+                accepted += 1
+    return rows
+
+
+def write_jsonl(path: Path, rows: list[dict]) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def write_preview(path: Path, rows: list[dict]) -> None:
+    with path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write("=" * 100 + "\n")
+            f.write(
+                f"{row['task']} | {row['difficulty']} | "
+                f"seed={row['generator_seed']} idx={row['generator_index']}\n"
+            )
+            f.write("generation_config=" + json.dumps(row["generation_config"], sort_keys=True) + "\n")
+            f.write("metadata=" + json.dumps(row["entry"]["metadata"], ensure_ascii=False, sort_keys=True) + "\n\n")
+            f.write("QUESTION\n")
+            f.write(row["entry"]["question"] + "\n\n")
+            f.write("GOLD\n")
+            f.write(str(row["entry"]["answer"]) + "\n\n")
+
+
+def build_one(out_dir: Path, namespace: str, per_level: int, rg_rev: str) -> dict:
+    rows = select_rows(namespace, per_level)
+    data_path = out_dir / f"{namespace}.jsonl"
+    preview_path = out_dir / f"{namespace}.preview.txt"
+    manifest_path = out_dir / f"{namespace}.manifest.json"
+
+    write_jsonl(data_path, rows)
+    write_preview(preview_path, rows)
+
+    task_counts = Counter(r["task"] for r in rows)
+    difficulty_counts = Counter(r["difficulty"] for r in rows)
+
+    manifest = {
+        "benchmark": namespace,
+        "status": "pilot_frozen",
+        "reasoning_gym_revision": rg_rev,
+        "rows": len(rows),
+        "per_task": dict(sorted(task_counts.items())),
+        "per_difficulty": dict(sorted(difficulty_counts.items())),
+        "data_path": str(data_path),
+        "data_sha256": file_sha(data_path),
+        "preview_path": str(preview_path),
+        "difficulty_policy": TASK_LEVELS,
+        "selection_filters": "propositional_logic: satisfiable + nondegenerate; family_relationships: relation-depth proxy; syllogism: quantifier-content ladder; all independent of model outputs",
+        "native_gold_self_score": "all rows == 1.0",
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default="/arf/scratch/futan/ArgGYM")
+    ap.add_argument(
+        "--rg-root",
+        default="/arf/scratch/futan/arggym_transfer_sources/reasoning_gym_v4",
+    )
+    args = ap.parse_args()
+
+    root = Path(args.root)
+    rg_root = Path(args.rg_root)
+    rev = rg_revision(rg_root)
+    if rev != EXPECTED_RG_REV:
+        raise RuntimeError(
+            f"Reasoning Gym revision drift: expected={EXPECTED_RG_REV} actual={rev}"
+        )
+
+    out_dir = root / "data/transfer/pilots/rg8"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    manifests = [
+        build_one(out_dir, "rg8_qual24_v2", per_level=1, rg_rev=rev),
+        build_one(out_dir, "rg8_quant120_v2", per_level=5, rg_rev=rev),
+    ]
+
+    print("=" * 100)
+    print("RG8 PILOT BUILD: PASS")
+    print("=" * 100)
+    for m in manifests:
+        print(
+            f"{m['benchmark']}: rows={m['rows']} "
+            f"sha256={m['data_sha256']} "
+            f"path={m['data_path']}"
+        )
+    print()
+    print("Qualitative preview:")
+    print(out_dir / "rg8_qual24_v2.preview.txt")
+
+
+if __name__ == "__main__":
+    main()

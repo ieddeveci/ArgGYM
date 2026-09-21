@@ -1,0 +1,37 @@
+version: 1
+master_seed_namespace: arggym-rl-article-v1
+profile: FULL
+
+bands:
+  easy: [1, 2, 3, 4, 5]
+  medium: [6, 7, 8, 9, 10]
+  hard: [11, 12, 13, 14, 15]
+
+stages:
+  - name: stage1
+    namespace: RL_TRAIN_STAGE_1
+    n_rows: 1440
+    band_counts:
+      easy: 720
+      medium: 504
+      hard: 216
+  - name: stage2
+    namespace: RL_TRAIN_STAGE_2
+    n_rows: 1440
+    band_counts:
+      easy: 576
+      medium: 432
+      hard: 432
+  - name: stage3
+    namespace: RL_TRAIN_STAGE_3
+    n_rows: 1440
+    band_counts:
+      easy: 288
+      medium: 432
+      hard: 720
+
+dev:
+  namespace: RL_DEV
+  # One independent accepted item for every task x level x ordering cell.
+  per_cell: 1
+  n_rows: 720

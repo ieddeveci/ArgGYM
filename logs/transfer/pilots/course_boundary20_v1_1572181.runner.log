@@ -1,0 +1,65 @@
+rows=20 existing=0
+[1/20] course_boundary20_v1::course_schedule::n13::000
+[2/20] course_boundary20_v1::course_schedule::n13::001
+[3/20] course_boundary20_v1::course_schedule::n13::002
+[4/20] course_boundary20_v1::course_schedule::n13::003
+[5/20] course_boundary20_v1::course_schedule::n13::004
+[6/20] course_boundary20_v1::course_schedule::n13::005
+[7/20] course_boundary20_v1::course_schedule::n13::006
+[8/20] course_boundary20_v1::course_schedule::n13::007
+[9/20] course_boundary20_v1::course_schedule::n13::008
+[10/20] course_boundary20_v1::course_schedule::n13::009
+[11/20] course_boundary20_v1::course_schedule::n14::000
+[12/20] course_boundary20_v1::course_schedule::n14::001
+[13/20] course_boundary20_v1::course_schedule::n14::002
+[14/20] course_boundary20_v1::course_schedule::n14::003
+[15/20] course_boundary20_v1::course_schedule::n14::004
+[16/20] course_boundary20_v1::course_schedule::n14::005
+[17/20] course_boundary20_v1::course_schedule::n14::006
+[18/20] course_boundary20_v1::course_schedule::n14::007
+[19/20] course_boundary20_v1::course_schedule::n14::008
+[20/20] course_boundary20_v1::course_schedule::n14::009
+{
+  "benchmark": "course_boundary20_v1",
+  "by_level_gold": {
+    "n13::False": {
+      "accuracy": 0.8,
+      "correct": 4,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 12437.2,
+      "mean_latency_s": 112.2150686264038,
+      "n": 5,
+      "truncated": 1
+    },
+    "n13::True": {
+      "accuracy": 0.4,
+      "correct": 2,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 13558.0,
+      "mean_latency_s": 122.49238348007202,
+      "n": 5,
+      "truncated": 3
+    },
+    "n14::False": {
+      "accuracy": 1.0,
+      "correct": 5,
+      "max_completion_tokens": 13910,
+      "mean_completion_tokens": 11178.2,
+      "mean_latency_s": 100.30856013298035,
+      "n": 5,
+      "truncated": 0
+    },
+    "n14::True": {
+      "accuracy": 0.6,
+      "correct": 3,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 14590.6,
+      "mean_latency_s": 131.96811995506286,
+      "n": 5,
+      "truncated": 2
+    }
+  },
+  "completed": 20,
+  "parser_version": "rg4_parser_v4",
+  "rows": 20
+}

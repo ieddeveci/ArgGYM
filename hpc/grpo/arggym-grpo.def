@@ -1,0 +1,68 @@
+Bootstrap: docker
+From: docker.io/vllm/vllm-openai:v0.28.0-x86_64-cu129-ubuntu2404
+
+%labels
+    org.arggym.runtime "TRUBA ArgGYM GRPO runtime"
+    org.arggym.vllm "0.28.0"
+    org.arggym.trl "1.13.0"
+
+%files
+    hpc/grpo/requirements-grpo.txt /opt/arggym/requirements-grpo.txt
+    pyproject.toml /opt/arggym/pyproject.toml
+
+%post
+    set -eu
+    if command -v uv >/dev/null 2>&1; then
+        uv pip install --system -r /opt/arggym/requirements-grpo.txt
+    else
+        python3 -m pip install --no-cache-dir -r /opt/arggym/requirements-grpo.txt
+    fi
+
+    python3 - <<'PY' > /opt/arggym/project-requirements.txt
+import tomllib
+from pathlib import Path
+p = Path('/opt/arggym/pyproject.toml')
+data = tomllib.loads(p.read_text(encoding='utf-8'))
+for dep in data.get('project', {}).get('dependencies', []):
+    if isinstance(dep, str):
+        print(dep)
+PY
+    if command -v uv >/dev/null 2>&1; then
+        uv pip install --system -r /opt/arggym/project-requirements.txt
+    else
+        python3 -m pip install --no-cache-dir -r /opt/arggym/project-requirements.txt
+    fi
+
+    python3 - <<'PY'
+import importlib.metadata as md
+from trl import GRPOConfig
+
+assert md.version('vllm').split('+', 1)[0] == '0.28.0', md.version('vllm')
+assert md.version('trl').split('+', 1)[0] == '1.13.0', md.version('trl')
+required = {
+    'loss_type', 'scale_rewards', 'epsilon', 'epsilon_high', 'num_iterations',
+    'disable_dropout', 'shuffle_dataset', 'mask_truncated_completions',
+    'importance_sampling_level', 'vllm_importance_sampling_correction',
+    'num_generations_eval', 'min_p', 'top_k', 'chat_template_kwargs',
+}
+missing = sorted(required - set(GRPOConfig.__dataclass_fields__))
+assert not missing, f'GRPOConfig missing required fields: {missing}'
+print('ArgGYM GRPO API compatibility: PASS')
+for name in ('torch','transformers','vllm','trl','peft','datasets','accelerate'):
+    print(name, md.version(name))
+PY
+
+%test
+    python3 - <<'PY'
+import importlib.metadata as md
+from trl import GRPOConfig
+assert md.version('vllm').split('+', 1)[0] == '0.28.0'
+assert md.version('trl').split('+', 1)[0] == '1.13.0'
+assert 'epsilon_high' in GRPOConfig.__dataclass_fields__
+assert 'vllm_importance_sampling_correction' in GRPOConfig.__dataclass_fields__
+print('ArgGYM GRPO runtime test: PASS')
+PY
+
+%environment
+    export PYTHONUNBUFFERED=1
+    export TOKENIZERS_PARALLELISM=false

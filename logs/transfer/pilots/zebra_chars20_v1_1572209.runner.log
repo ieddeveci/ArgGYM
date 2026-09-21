@@ -1,0 +1,47 @@
+rows=20 existing=0
+[1/20] zebra_chars20_v1::zebra_puzzles::c6::000
+[2/20] zebra_chars20_v1::zebra_puzzles::c6::001
+[3/20] zebra_chars20_v1::zebra_puzzles::c6::002
+[4/20] zebra_chars20_v1::zebra_puzzles::c6::003
+[5/20] zebra_chars20_v1::zebra_puzzles::c6::004
+[6/20] zebra_chars20_v1::zebra_puzzles::c6::005
+[7/20] zebra_chars20_v1::zebra_puzzles::c6::006
+[8/20] zebra_chars20_v1::zebra_puzzles::c6::007
+[9/20] zebra_chars20_v1::zebra_puzzles::c6::008
+[10/20] zebra_chars20_v1::zebra_puzzles::c6::009
+[11/20] zebra_chars20_v1::zebra_puzzles::c7::000
+[12/20] zebra_chars20_v1::zebra_puzzles::c7::001
+[13/20] zebra_chars20_v1::zebra_puzzles::c7::002
+[14/20] zebra_chars20_v1::zebra_puzzles::c7::003
+[15/20] zebra_chars20_v1::zebra_puzzles::c7::004
+[16/20] zebra_chars20_v1::zebra_puzzles::c7::005
+[17/20] zebra_chars20_v1::zebra_puzzles::c7::006
+[18/20] zebra_chars20_v1::zebra_puzzles::c7::007
+[19/20] zebra_chars20_v1::zebra_puzzles::c7::008
+[20/20] zebra_chars20_v1::zebra_puzzles::c7::009
+{
+  "benchmark": "zebra_chars20_v1",
+  "by_level": {
+    "c6": {
+      "accuracy": 0.6,
+      "correct": 6,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 12669.8,
+      "mean_latency_s": 113.46404778957367,
+      "n": 10,
+      "truncated": 4
+    },
+    "c7": {
+      "accuracy": 0.4,
+      "correct": 4,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 14293.2,
+      "mean_latency_s": 127.31054615974426,
+      "n": 10,
+      "truncated": 5
+    }
+  },
+  "completed": 20,
+  "parser_version": "rg4_parser_v4",
+  "rows": 20
+}

@@ -1,0 +1,14 @@
+version: 1
+protocol_status: FREEZE_EXACT_REVISIONS_SPLITS_PROMPTS_SCORERS_BEFORE_MAIN_RL
+use_for_checkpoint_selection: false
+when_to_evaluate:
+  - PRE_RL_BASE_MODEL
+  - POST_RL_SELECTED_CHECKPOINT
+benchmarks:
+  - Multi-LogiEval
+  - RuleArena
+  - GSM8K
+  - LogiQA 2.0
+  - FineReason
+  - MMLU-Pro
+  - BIG-Bench Hard

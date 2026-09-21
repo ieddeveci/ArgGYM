@@ -1,0 +1,262 @@
+"""Train Qwen3-14B with GRPO on contamination-checked ArgGYM pools."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import platform
+import socket
+import subprocess
+import sys
+from importlib import metadata as importlib_metadata
+from pathlib import Path
+from typing import Any, Dict, Optional, Sequence
+
+import yaml
+
+from rl.reward import arggym_reward
+
+
+def load_config(path: str) -> Dict[str, Any]:
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    if not isinstance(cfg, dict):
+        raise ValueError(f"{path} must contain a mapping")
+    return cfg
+
+
+def _manifest_for(data_path: str) -> Dict[str, Any]:
+    p = Path(data_path).with_suffix(Path(data_path).suffix + ".manifest.json")
+    if not p.exists():
+        raise SystemExit(f"RL pool manifest is missing: {p}")
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def _verify_split(path: str, want: str, frozen_hash: Optional[str] = None) -> Dict[str, Any]:
+    m = _manifest_for(path)
+    if m.get("split_namespace") != want:
+        raise SystemExit(f"{path} is {m.get('split_namespace')!r}, expected {want!r}")
+    got = m.get("frozen_taskset_hash")
+    if frozen_hash is not None and got != frozen_hash:
+        raise SystemExit(
+            f"{path} was contamination-checked against frozen taskset {got}, "
+            f"but expected {frozen_hash}"
+        )
+    return m
+
+
+def _version(name: str) -> Optional[str]:
+    try:
+        return importlib_metadata.version(name)
+    except importlib_metadata.PackageNotFoundError:
+        return None
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--config", required=True)
+    p.add_argument("--resume-from-checkpoint", default=None)
+    a = p.parse_args(argv)
+    cfg = load_config(a.config)
+
+    # Heavy imports stay below config parsing so source-level tests do not need CUDA.
+    from datasets import concatenate_datasets, load_dataset
+    from peft import LoraConfig
+    from trl import GRPOConfig, GRPOTrainer
+
+    exp = cfg["experiment"]
+    data = cfg["data"]
+    frozen_hash = exp["frozen_taskset_hash"]
+    if exp["kind"] == "smoke":
+        train_paths = [data["train"]]
+        train_manifests = [_verify_split(data["train"], "RL_SMOKE_TRAIN", frozen_hash)]
+        dev_manifest = _verify_split(data["dev"], "RL_SMOKE_DEV", frozen_hash)
+    elif exp["kind"] == "main":
+        expected = ("RL_TRAIN_STAGE_1", "RL_TRAIN_STAGE_2", "RL_TRAIN_STAGE_3")
+        train_paths = list(data["train_stages"])
+        train_manifests = [
+            _verify_split(path, want, frozen_hash) for path, want in zip(train_paths, expected)
+        ]
+        dev_manifest = _verify_split(data["dev"], "RL_DEV", frozen_hash)
+    else:
+        raise SystemExit(f"unknown experiment.kind={exp['kind']!r}")
+
+    stage_datasets = [load_dataset("json", data_files=p, split="train") for p in train_paths]
+    train = stage_datasets[0] if len(stage_datasets) == 1 else concatenate_datasets(stage_datasets)
+    dev = load_dataset("json", data_files=data["dev"], split="train")
+
+    model_cfg = cfg["model"]
+    tr = cfg["training"]
+    generation = cfg["generation"]
+    vllm = cfg["vllm"]
+    peft_cfg = cfg["peft"]
+
+    model_source = os.environ.get("ARGGYM_MODEL_PATH", model_cfg["name"])
+    model_init_kwargs: Dict[str, Any] = {"dtype": model_cfg.get("dtype", "bfloat16")}
+    if not Path(model_source).exists():
+        model_init_kwargs["revision"] = model_cfg["revision"]
+
+    args = GRPOConfig(
+        output_dir=tr["output_dir"],
+        run_name=tr.get("run_name"),
+        seed=int(tr.get("seed", 0)),
+        data_seed=int(tr.get("data_seed", tr.get("seed", 0))),
+        model_init_kwargs=model_init_kwargs,
+        bf16=bool(tr.get("bf16", True)),
+        fp16=bool(tr.get("fp16", False)),
+        tf32=bool(tr.get("tf32", True)),
+        learning_rate=float(tr["learning_rate"]),
+        max_steps=int(tr["max_steps"]),
+        warmup_steps=int(tr.get("warmup_steps", 0)),
+        lr_scheduler_type=tr.get("lr_scheduler_type", "constant_with_warmup"),
+        optim=tr.get("optim", "adamw_torch_fused"),
+        adam_beta1=float(tr.get("adam_beta1", 0.9)),
+        adam_beta2=float(tr.get("adam_beta2", 0.999)),
+        adam_epsilon=float(tr.get("adam_epsilon", 1.0e-8)),
+        weight_decay=float(tr.get("weight_decay", 0.0)),
+        max_grad_norm=float(tr.get("max_grad_norm", 1.0)),
+        per_device_train_batch_size=int(tr["per_device_train_batch_size"]),
+        gradient_accumulation_steps=int(tr["gradient_accumulation_steps"]),
+        per_device_eval_batch_size=int(tr.get("per_device_eval_batch_size", 1)),
+        gradient_checkpointing=bool(tr.get("gradient_checkpointing", True)),
+        disable_dropout=bool(tr.get("disable_dropout", True)),
+        shuffle_dataset=bool(tr.get("shuffle_dataset", False)),
+        logging_steps=int(tr.get("logging_steps", 1)),
+        logging_first_step=True,
+        save_strategy="steps",
+        save_steps=int(tr["save_steps"]),
+        save_total_limit=int(tr.get("save_total_limit", 3)),
+        eval_strategy="steps",
+        eval_steps=int(tr["eval_steps"]),
+        eval_on_start=bool(tr.get("eval_on_start", True)),
+        load_best_model_at_end=bool(tr.get("load_best_model_at_end", True)),
+        metric_for_best_model=tr.get("metric_for_best_model", "eval_reward"),
+        greater_is_better=bool(tr.get("greater_is_better", True)),
+        report_to="none",
+        remove_unused_columns=False,
+        num_generations=int(generation.get("num_generations", 8)),
+        num_generations_eval=int(generation.get("num_generations_eval", 1)),
+        max_completion_length=int(generation["max_completion_length"]),
+        temperature=float(generation.get("temperature", 0.6)),
+        top_p=float(generation.get("top_p", 0.95)),
+        top_k=int(generation.get("top_k", 20)),
+        min_p=float(generation.get("min_p", 0.0)),
+        repetition_penalty=float(generation.get("repetition_penalty", 1.0)),
+        chat_template_kwargs={"enable_thinking": bool(generation.get("enable_thinking", True))},
+        use_vllm=True,
+        vllm_mode="server",
+        vllm_server_base_url=os.environ.get(
+            "VLLM_SERVER_BASE_URL", vllm.get("server_base_url", "http://127.0.0.1:8000")
+        ),
+        vllm_server_timeout=float(vllm.get("server_timeout", 600.0)),
+        loss_type=tr.get("loss_type", "dapo"),
+        mask_truncated_completions=bool(tr.get("mask_truncated_completions", True)),
+        scale_rewards=tr.get("scale_rewards", "none"),
+        epsilon=float(tr.get("epsilon", 0.2)),
+        epsilon_high=float(tr.get("epsilon_high", 0.28)),
+        beta=float(tr.get("beta", 0.0)),
+        num_iterations=int(tr.get("num_iterations", 1)),
+        importance_sampling_level=tr.get("importance_sampling_level", "token"),
+        vllm_importance_sampling_correction=bool(
+            tr.get("vllm_importance_sampling_correction", True)
+        ),
+        vllm_importance_sampling_mode=str(
+            tr.get("vllm_importance_sampling_mode", "sequence_mask")
+        ),
+        vllm_importance_sampling_clip_min=tr.get(
+            "vllm_importance_sampling_clip_min", None
+        ),
+        vllm_importance_sampling_clip_max=tr.get(
+            "vllm_importance_sampling_clip_max", 3.0
+        ),
+        log_completions=bool(tr.get("log_completions", False)),
+    )
+
+    print(
+        "GRPO vLLM IS resolved: "
+        f"correction={args.vllm_importance_sampling_correction} "
+        f"mode={args.vllm_importance_sampling_mode} "
+        f"clip_min={args.vllm_importance_sampling_clip_min} "
+        f"clip_max={args.vllm_importance_sampling_clip_max}",
+        flush=True,
+    )
+
+    lora = LoraConfig(
+        r=int(peft_cfg.get("r", 32)),
+        lora_alpha=int(peft_cfg.get("alpha", 16)),
+        lora_dropout=float(peft_cfg.get("dropout", 0.0)),
+        bias="none",
+        task_type="CAUSAL_LM",
+        target_modules=peft_cfg.get("target_modules", "all-linear"),
+    )
+
+    trainer = GRPOTrainer(
+        model=model_source,
+        args=args,
+        reward_funcs=arggym_reward,
+        train_dataset=train,
+        eval_dataset=dev,
+        peft_config=lora,
+    )
+
+    out = Path(tr["output_dir"])
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        code_git_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+        ).strip()
+    except Exception:
+        code_git_sha = None
+
+    model_path = Path(model_source)
+    model_resolved = str(model_path.resolve()) if model_path.exists() else None
+    runtime = {
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "host": socket.gethostname(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "container": os.environ.get("ARGGYM_GRPO_IMAGE"),
+        "container_sha256": os.environ.get("ARGGYM_GRPO_IMAGE_SHA256"),
+        "code_git_sha": code_git_sha,
+        "model_source": model_source,
+        "model_source_resolved": model_resolved,
+        "model_revision": model_cfg.get("revision"),
+        "versions": {
+            name: _version(name)
+            for name in (
+                "arggym",
+                "python-argumentation",
+                "torch",
+                "transformers",
+                "trl",
+                "vllm",
+                "peft",
+                "datasets",
+                "accelerate",
+            )
+        },
+    }
+
+    (out / "arggym_rl_manifest.json").write_text(
+        json.dumps(
+            {
+                "config": cfg,
+                "train_pools": train_manifests,
+                "dev_pool": dev_manifest,
+                "runtime": runtime,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    trainer.train(resume_from_checkpoint=a.resume_from_checkpoint)
+    trainer.save_model(str(out / "final_adapter"))
+    trainer.save_state()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

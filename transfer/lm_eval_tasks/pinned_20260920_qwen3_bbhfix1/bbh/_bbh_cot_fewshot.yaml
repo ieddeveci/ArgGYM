@@ -1,0 +1,36 @@
+group: arggym_bbh_cot_fewshot_pinned
+task:
+  - arggym_bbh_pinned_boolean_expressions
+  - arggym_bbh_pinned_causal_judgement
+  - arggym_bbh_pinned_date_understanding
+  - arggym_bbh_pinned_disambiguation_qa
+  - arggym_bbh_pinned_dyck_languages
+  - arggym_bbh_pinned_formal_fallacies
+  - arggym_bbh_pinned_geometric_shapes
+  - arggym_bbh_pinned_hyperbaton
+  - arggym_bbh_pinned_logical_deduction_five_objects
+  - arggym_bbh_pinned_logical_deduction_seven_objects
+  - arggym_bbh_pinned_logical_deduction_three_objects
+  - arggym_bbh_pinned_movie_recommendation
+  - arggym_bbh_pinned_multistep_arithmetic_two
+  - arggym_bbh_pinned_navigate
+  - arggym_bbh_pinned_object_counting
+  - arggym_bbh_pinned_penguins_in_a_table
+  - arggym_bbh_pinned_reasoning_about_colored_objects
+  - arggym_bbh_pinned_ruin_names
+  - arggym_bbh_pinned_salient_translation_error_detection
+  - arggym_bbh_pinned_snarks
+  - arggym_bbh_pinned_sports_understanding
+  - arggym_bbh_pinned_temporal_sequences
+  - arggym_bbh_pinned_tracking_shuffled_objects_five_objects
+  - arggym_bbh_pinned_tracking_shuffled_objects_seven_objects
+  - arggym_bbh_pinned_tracking_shuffled_objects_three_objects
+  - arggym_bbh_pinned_web_of_lies
+  - arggym_bbh_pinned_word_sorting
+aggregate_metric_list:
+  - metric: exact_match
+    aggregation: mean
+    weight_by_size: true
+    filter_list: flexible-extract
+metadata:
+  version: 3.0

@@ -1,0 +1,20 @@
+name: hf-qwen3-1.7b-arggym-40k
+model: Qwen/Qwen3-1.7B
+
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+
+sampling:
+  max_tokens: 32768
+  temperature: 0.6
+  top_p: 0.95
+  seed: 0
+
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  chat_template_kwargs:
+    enable_thinking: true
+
+timeout_s: 5400
+retries: 2

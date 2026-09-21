@@ -1,0 +1,13 @@
+name: hf-llama4-scout-17b-16e-instruct
+model: meta-llama/Llama-4-Scout-17B-16E-Instruct
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+
+sampling:
+  max_tokens: 32768
+  temperature: 0.6
+  top_p: 0.9
+  seed: 0
+
+timeout_s: 5400
+retries: 2

@@ -1,0 +1,32 @@
+data rows: 20
+data sha256: d1215d163587181b496cd1b5b546c48a8978950c42c80bee616a551b45c54148
+level counts: {'c6': 10, 'c7': 10}
+preflight structure: PASS
+ZEBRA CHARS20 VLLM READY port=30209
+{
+  "benchmark": "zebra_chars20_v1",
+  "by_level": {
+    "c6": {
+      "accuracy": 0.6,
+      "correct": 6,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 12669.8,
+      "mean_latency_s": 113.46404778957367,
+      "n": 10,
+      "truncated": 4
+    },
+    "c7": {
+      "accuracy": 0.4,
+      "correct": 4,
+      "max_completion_tokens": 16384,
+      "mean_completion_tokens": 14293.2,
+      "mean_latency_s": 127.31054615974426,
+      "n": 10,
+      "truncated": 5
+    }
+  },
+  "completed": 20,
+  "parser_version": "rg4_parser_v4",
+  "rows": 20
+}
+ZEBRA CHARS20 COMPLETE

@@ -1,0 +1,81 @@
+rows=30 existing=0
+[1/30] course_cal30_v1::course_schedule::easy::000
+[2/30] course_cal30_v1::course_schedule::easy::001
+[3/30] course_cal30_v1::course_schedule::easy::002
+[4/30] course_cal30_v1::course_schedule::easy::003
+[5/30] course_cal30_v1::course_schedule::easy::004
+[6/30] course_cal30_v1::course_schedule::easy::005
+[7/30] course_cal30_v1::course_schedule::easy::006
+[8/30] course_cal30_v1::course_schedule::easy::007
+[9/30] course_cal30_v1::course_schedule::easy::008
+[10/30] course_cal30_v1::course_schedule::easy::009
+[11/30] course_cal30_v1::course_schedule::medium::000
+[12/30] course_cal30_v1::course_schedule::medium::001
+[13/30] course_cal30_v1::course_schedule::medium::002
+[14/30] course_cal30_v1::course_schedule::medium::003
+[15/30] course_cal30_v1::course_schedule::medium::004
+[16/30] course_cal30_v1::course_schedule::medium::005
+[17/30] course_cal30_v1::course_schedule::medium::006
+[18/30] course_cal30_v1::course_schedule::medium::007
+[19/30] course_cal30_v1::course_schedule::medium::008
+[20/30] course_cal30_v1::course_schedule::medium::009
+[21/30] course_cal30_v1::course_schedule::hard::000
+[22/30] course_cal30_v1::course_schedule::hard::001
+[23/30] course_cal30_v1::course_schedule::hard::002
+[24/30] course_cal30_v1::course_schedule::hard::003
+[25/30] course_cal30_v1::course_schedule::hard::004
+[26/30] course_cal30_v1::course_schedule::hard::005
+[27/30] course_cal30_v1::course_schedule::hard::006
+[28/30] course_cal30_v1::course_schedule::hard::007
+[29/30] course_cal30_v1::course_schedule::hard::008
+[30/30] course_cal30_v1::course_schedule::hard::009
+{
+  "benchmark": "course_cal30_v1",
+  "by_difficulty_gold": {
+    "easy::False": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 5428.4,
+      "mean_latency_s": 47.90201563835144,
+      "n": 5,
+      "truncated": 0
+    },
+    "easy::True": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 3576.6,
+      "mean_latency_s": 31.6344295501709,
+      "n": 5,
+      "truncated": 0
+    },
+    "hard::False": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 10172.8,
+      "mean_latency_s": 89.6784842967987,
+      "n": 5,
+      "truncated": 0
+    },
+    "hard::True": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 12714.8,
+      "mean_latency_s": 113.96247172355652,
+      "n": 5,
+      "truncated": 0
+    },
+    "medium::False": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 6846.0,
+      "mean_latency_s": 60.59749064445496,
+      "n": 5,
+      "truncated": 0
+    },
+    "medium::True": {
+      "accuracy": 1.0,
+      "mean_completion_tokens": 5898.8,
+      "mean_latency_s": 52.09759440422058,
+      "n": 5,
+      "truncated": 0
+    }
+  },
+  "completed": 30,
+  "parser_version": "rg4_parser_v4",
+  "rows": 30
+}
