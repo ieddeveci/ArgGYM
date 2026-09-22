@@ -63,7 +63,10 @@ class CellReport:
     seeds_skipped: List[Dict[str, Any]] = field(default_factory=list)
     scan_end: int = 0
     #: Candidates `build` was asked for across every seed scanned, the accepted
-    #: ones included, and why it discarded the ones it did.
+    #: ones included, and why each one that did not become a row was refused.
+    #: Most reasons are `build`'s own; `minimality_unproven` is the freeze
+    #: refusing a candidate `build` returned (#124). Both sit in one histogram, so
+    #: a reader asking what the cell threw away reads one number.
     build_calls: int = 0
     build_rejections: Dict[str, int] = field(default_factory=dict)
 

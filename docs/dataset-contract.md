@@ -435,7 +435,10 @@ be an input.
 **This is also the determinism check, and a better one than "export twice, same
 hash".** Compare `seeds_skipped` first: if the skip lists match and the hash
 differs, a renderer or a scorer changed; if the skip lists differ, a generator
-changed. The hash alone cannot tell you which.
+changed. The hash alone cannot tell you which. Since #124 there is a third case:
+a skip list also differs when the freeze's own acceptance policy changes, because
+`minimality_unproven` refuses a candidate after `build` has returned it. Read the
+skip reasons before reaching for the generator.
 
 **The build counts, not just the seed counts.** `seeds_skipped` records a seed
 that exhausted its retry budget, and the grid barely uses it: across the 96
@@ -466,7 +469,13 @@ into the row's statistics, and a row whose minimum search ran out of budget
 carries an upper bound under the name of a minimum -- on the one such row of the
 standard grid it said 55 where 10 suffice, so its bloat gate admitted five times
 what it should (#124). The freeze skips that seed and names it, the way it names
-a seed that built nothing.
+a seed that built nothing, and the skip carries the candidate rejections that
+seed had already recorded. It is counted in `build_rejections`, and so in
+`n_rejected`, beside `build`'s own refusals: one histogram answers what the cell
+threw away and why, where two would make every reader add them up. The cost is
+that neither field is `build`'s alone any more -- of the 107 candidates
+`n_rejected` counts on the standard grid, 1 is a row `build` returned and the
+freeze refused.
 
 ### `profile` is recorded, and refused
 
