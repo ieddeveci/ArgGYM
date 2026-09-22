@@ -96,10 +96,14 @@ def quiet_http() -> None:
 def build_solver(cfg: DictConfig) -> ChatSolver:
     m = cfg.model
     endpoint = Endpoint(
-        model=m.model, base_url=m.get("base_url"),
+        model=m.model,
+        base_url=m.get("base_url"),
         api_key_env=m.get("api_key_env", "OPENAI_API_KEY"),
-        sampling=_plain(m.get("sampling")), extra_body=_plain(m.get("extra_body")),
-        timeout_s=cfg.endpoint.timeout_s, retries=cfg.endpoint.retries)
+        sampling=_plain(m.get("sampling")),
+        extra_body=_plain(m.get("extra_body")),
+        timeout_s=cfg.endpoint.timeout_s,
+        retries=cfg.endpoint.retries,
+    )
     elicit = Elicitation(**_plain(cfg.elicitation))
     return ChatSolver(endpoint, template=cfg.template.name, elicitation=elicit)
 

@@ -1,0 +1,15 @@
+endpoint_config: hf-gemma4-31b-it
+hf_model: google/gemma-4-31B-it
+params_b: 31
+tier: large
+dtype: bfloat16
+tensor_parallel_size: 2
+max_model_len: 65536
+gpu_memory_utilization: 0.9
+reasoning_parser: gemma4
+trust_remote_code: false
+extra_args:
+- --limit-mm-per-prompt
+- '{"image":0,"audio":0}'
+tensor_parallel_size_h100: 2
+tensor_parallel_size_h200: 1

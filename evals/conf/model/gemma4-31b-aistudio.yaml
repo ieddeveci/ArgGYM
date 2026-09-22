@@ -1,0 +1,35 @@
+# Gemma 4 31B IT through the Gemini API's OpenAI-compatible endpoint.
+#
+# Gemma 4 31B is hosted by Google AI Studio under the model identifier
+# gemma-4-31b-it.
+#
+# Unlike Gemini 3.8 Flash, Gemma 4 does not expose medium reasoning.
+# Its hosted API supports thinking as either enabled ("high") or effectively
+# disabled ("minimal"). We enable thinking because ArgGYM evaluates reasoning.
+#
+# Google recommends Gemma 4's native sampling configuration:
+#   temperature = 1.0
+#   top_p      = 0.95
+#   top_k      = 64
+# We leave sampling controls at the provider/model defaults rather than forcing
+# Gemini-specific settings through the OpenAI compatibility layer.
+#
+# Gemma 4 31B has a 32,768-token maximum output allowance, so max_tokens is
+# set to the full model limit.
+name: gemma4-31b-aistudio
+model: gemma-4-31b-it
+base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
+api_key_env: GEMINI_API_KEY
+
+timeout_s: 30
+retries: 2
+
+sampling:
+  max_tokens: 32768
+
+extra_body:
+  extra_body:
+    google:
+      thinking_config:
+        thinking_level: minimal
+        include_thoughts: false

@@ -1,0 +1,17 @@
+name: hf-gemma4-26b-a4b-it
+model: google/gemma-4-26B-A4B-it
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 32768
+  temperature: 1.0
+  top_p: 0.95
+  seed: 0
+  reasoning_effort: medium
+extra_body:
+  top_k: 64
+  chat_template_kwargs:
+    enable_thinking: true
+  skip_special_tokens: false
+timeout_s: 5400
+retries: 2

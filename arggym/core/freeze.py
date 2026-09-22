@@ -51,7 +51,7 @@ PROMPT_VERSION = 8
 #: way the bloat factor does (`docs/dataset-contract.md`): the prompt hash records
 #: that the question changed, and this records that an unchanged question is now
 #: scored differently. #89's name-collision rule is such a rule.
-SCORING_VERSION = 4
+SCORING_VERSION = 5
 
 
 @dataclass
