@@ -71,6 +71,14 @@ ENUMERATION = {
 
 TOP_LEVEL = max(sq.SEMANTICS_BY_LEVEL)
 
+#: The curriculum range, not the schedule's keys. Parametrising on
+#: `sorted(sq.SEMANTICS_BY_LEVEL)` made the coverage a function of a dict the generator
+#: is free to edit: merging the level-3 entry into level 1 dropped an exported level from
+#: this file's sweep and nothing went red (#108). `SCHEDULE` in
+#: tests/test_semantics_query_is_not_status_query.py and `GRID` in
+#: tests/test_junction_budget_tracks_attackers.py name the same range for the same reason.
+SCHEDULE = tuple(range(1, 16))
+
 
 def test_top_level_enumerates_each_requested_semantics_once(counts):
     item, seen = first_built_item(TOP_LEVEL, counts)
@@ -82,7 +90,7 @@ def test_top_level_enumerates_each_requested_semantics_once(counts):
     assert seen["verifier"] <= 2
 
 
-@pytest.mark.parametrize("level", sorted(sq.SEMANTICS_BY_LEVEL))
+@pytest.mark.parametrize("level", SCHEDULE)
 def test_unrequested_semantics_are_never_enumerated(level, counts):
     _item, seen = first_built_item(level, counts)
     wanted = {ENUMERATION[s] for s in sq.semantics_for(level)}
@@ -91,7 +99,7 @@ def test_unrequested_semantics_are_never_enumerated(level, counts):
             assert seen[name] == 0, f"{name} enumerated at level {level}, which does not ask for it"
 
 
-@pytest.mark.parametrize("level", [1, 4, 8, 12])
+@pytest.mark.parametrize("level", SCHEDULE)
 def test_enumeration_is_flat_in_the_claim_count(level, counts):
     """A build enumerates at most once per requested semantics, never once per claim."""
     _item, seen = first_built_item(level, counts)
