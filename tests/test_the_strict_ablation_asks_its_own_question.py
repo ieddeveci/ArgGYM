@@ -106,6 +106,23 @@ BLOATED_ON_THE_STRICT_ITEM = frozenset({
     (12, "weakest_link_democratic", 1),
     (15, "weakest_link_democratic", 0),
 })
+#: The same measurement on the two off-grid decoy levels, kept in its own set because the
+#: card counts the one above: its length is the card's "the other 10", and a cell added
+#: here would move a number the card makes about the exported grid alone.
+#:
+#: Weakest-link-democratic is zeroed at every level from 9 to 12. At 10 and 11 the plain
+#: arm costs 10 directives against a strict minimum of 3, and the other three orderings
+#: cost 4 or 5 and score in band. Level 10 read this way before #109; level 11 did not,
+#: because the two arms cost 4 each there and shipped one answer between them, which is
+#: the collapse #109 is about. The `n_chain - 2` cap leaves the plain arm a second
+#: defeasible chain, the preference that keeps costs it directives the strict minimum no
+#: longer needs, and the pair now splits like every other decoy level.
+BLOATED_OFF_GRID = frozenset({
+    (10, "weakest_link_democratic", 0),
+    (10, "weakest_link_democratic", 1),
+    (11, "weakest_link_democratic", 0),
+    (11, "weakest_link_democratic", 1),
+})
 #: The cells that reach the top of the band, and the only ones allowed to: the plain
 #: reference costs 6 there against a strict minimum of 5, so 0.5 + 0.5 * 5/6. Every other
 #: scored cell is held strictly below, which together with these four makes the grid's
@@ -172,7 +189,7 @@ def _the_ablation_holds(level: int, ordering: str, seed: int) -> None:
         return
 
     cross = score_item(plain.reference, ca.as_score_input(strict))
-    if cell in BLOATED_ON_THE_STRICT_ITEM:
+    if cell in BLOATED_ON_THE_STRICT_ITEM or cell in BLOATED_OFF_GRID:
         assert cross.score == 0.0 and cross.reason.startswith("bloated:"), (
             f"{where}: the plain reference used to be zeroed for bloat on the strict "
             f"item and now scores {cross.score} ({cross.reason}), so the card's split "
