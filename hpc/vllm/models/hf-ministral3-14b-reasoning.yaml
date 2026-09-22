@@ -1,0 +1,23 @@
+endpoint_config: hf-ministral3-14b-reasoning
+hf_model: mistralai/Ministral-3-14B-Reasoning-2512
+params_b: 14
+tier: mid
+
+dtype: bfloat16
+tensor_parallel_size: 1
+max_model_len: 65536
+gpu_memory_utilization: 0.9
+reasoning_parser: mistral
+trust_remote_code: false
+
+extra_args:
+- --tokenizer-mode
+- mistral
+- --config-format
+- hf
+- --load-format
+- hf
+- --language-model-only
+
+tensor_parallel_size_h100: 1
+tensor_parallel_size_h200: 1

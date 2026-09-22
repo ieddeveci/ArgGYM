@@ -348,22 +348,49 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
 def _render_prompt(theory: str, claim: str, ordering: str, want_survival: bool) -> str:
     on = _ordering_phrase(ordering)
+
     extra = "\n   ...; survives_because: <rule>" if want_survival else ""
-    return (f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
-            f"with {on}.\n\n{theory}\n\n"
-            f"The claim {claim} is not justified.\n"
-            f"State its status, and identify every point at which its support fails.\n\n"
-            # Two whole-answer rules, both after the whole format block so that "those
-            # three words" and "these lines" each point back at all of it. `answer_format`
-            # used to rstrip a trailing newline off this clause, so `extra` now leads with
-            # one instead of trailing one and the block above is byte-identical.
-            + answer_format("Answer format:\n"
-                            "   first line: `status: overruled` or `status: undecided`\n"
-                            "   then one line per failure point, as\n"
-                            "   `defeated_at: <target>; defeater: <defeater>; "
-                            "kind: undermine|undercut|rebut`" + extra
-                            + "\n" + KIND_RULE
-                            + "\n" + STRAY_TEXT))
+
+    field_help = (
+        "Interpret the diagnosis fields as follows. "
+        "For `defeated_at`, write the attacked ordinary-premise literal for an "
+        "undermine, the attacked defeasible rule name for an undercut, and the "
+        "attacked conclusion literal for a rebut. "
+        "For `defeater`, write the attacking premise literal for an undermine; "
+        "for an undercut or rebut, write the name of the defeasible rule whose "
+        "conclusion performs the attack."
+    )
+
+    if want_survival:
+        field_help += (
+            " Append `survives_because: <rule>` only for a failure point where "
+            "the listed defeater is itself attacked but remains effective because "
+            "that attack is defeated. The value names the rule that attacks the "
+            "listed defeater and is itself defeated. For example, if rule d defeats "
+            "the target, rule a attacks d, and the attack by a is itself defeated, "
+            "write `survives_because: a`. Omit `survives_because` for failure points "
+            "where no such surviving-defeater pattern occurs."
+        )
+
+    return (
+        f"The following is a defeasible argumentation theory, evaluated under grounded semantics "
+        f"with {on}.\n\n{theory}\n\n"
+        f"The claim {claim} is not justified.\n"
+        f"State its status, and identify every point at which its support fails.\n"
+        f"{field_help}\n\n"
+        + answer_format(
+            "Answer format:\n"
+            "   first line: `status: overruled` or `status: undecided`\n"
+            "   then one line per failure point, as\n"
+            "   `defeated_at: <target>; defeater: <defeater>; "
+            "kind: undermine|undercut|rebut`"
+            + extra
+            + "\n"
+            + KIND_RULE
+            + "\n"
+            + STRAY_TEXT
+        )
+    )
 
 
 _STATUS = re.compile(r"status\s*[:=]\s*(justified|overruled|undecided)", re.I)
@@ -386,9 +413,18 @@ _RECORD_START = re.compile(r"(?=defeated_at\s*[:=])")
 
 def _blank_diagnostics(item: DDItem) -> Dict:
     """The keys every result carries, so a zero and a one have the same shape."""
-    return {"n_quoted": 0, "n_gold": len(item.diagnoses),
-            "status_correct": False, "status_contradicted": False,
-            "kind_contradicted": False, "extra": [], "missing": []}
+    return {
+    "n_quoted": 0,
+    "n_gold": len(item.diagnoses),
+    "status_correct": False,
+    "status_contradicted": False,
+    "kind_contradicted": False,
+    "survival_contradicted": False,
+    "extra": [],
+    "missing": [],
+    "survives_because_extra": [],
+    "survives_because_missing": [],
+}
 
 
 def parse(text: str, item: DDItem) -> DefeatDiagnosisAnswer:
@@ -442,7 +478,7 @@ def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
     diag: Dict = _blank_diagnostics(item)
     statuses = {str(s).upper() for s in value.get("status") or ()}
     pred: Dict[Tuple[str, str], set] = {}
-    pred_surv: Dict[Tuple[str, str], str] = {}
+    pred_surv: Dict[Tuple[str, str], set] = {}
     for rec in value.get("records") or ():
         # A record that names no defeater names no failure point, so it is not one
         # of the answer's claims and nothing is scored against it.
@@ -450,8 +486,10 @@ def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
             continue
         key = (rec["defeated_at"], rec["defeater"])
         pred.setdefault(key, set()).add(str(rec.get("kind", "")).lower())
-        if "survives_because" in rec:
-            pred_surv[key] = rec["survives_because"]
+        if rec.get("survives_because"):
+            pred_surv.setdefault(key, set()).add(
+                str(rec["survives_because"])
+            )
     diag["n_quoted"] = len(pred)
     if not statuses and not pred:
         # An empty submission lands here too. It is an answer with nothing in it, not
@@ -462,6 +500,10 @@ def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
     status_ok = statuses == {item.claim_status}
     diag["status_correct"] = status_ok
     diag["kind_contradicted"] = any(len(kinds) > 1 for kinds in pred.values())
+    diag["survival_contradicted"] = any(
+    len(reasons) > 1
+    for reasons in pred_surv.values()
+    )   
     gold = {(d["defeated_at"], d["defeater"]): d["kind"] for d in item.diagnoses}
     matched = {k for k, kinds in pred.items() if kinds == {gold.get(k)}}
     tp = len(matched)
@@ -473,13 +515,72 @@ def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
     diag["missing"] = sorted(str((a, b, k)) for (a, b), k in gold.items()
                              if (a, b) not in matched)[:4]
 
-    gold_surv = {(d["defeated_at"], d["defeater"]): d["survives_because"]
-                 for d in item.diagnoses if d.get("survives_because")}
-    if gold_surv:
-        hit = sum(1 for k, v in gold_surv.items() if k in matched and pred_surv.get(k) == v)
-        surv_score = hit / len(gold_surv)
-        diag["survives_because_correct"] = hit
-        diag["survives_because_total"] = len(gold_surv)
+    gold_surv_pairs = {
+        (
+            d["defeated_at"],
+            d["defeater"],
+            d["survives_because"],
+        )
+        for d in item.diagnoses
+        if d.get("survives_because")
+    }
+
+    pred_surv_pairs = {
+        (defeated_at, defeater, reason)
+        for (defeated_at, defeater), reasons in pred_surv.items()
+        for reason in reasons
+    }
+
+    if not gold_surv_pairs and pred_surv_pairs:
+        diag["survives_because_extra"] = sorted(
+            str(x) for x in pred_surv_pairs
+        )[:4]
+        return ScoreResult(
+            0.0,
+            False,
+            "unexpected_survival_reason",
+            diag,
+        )
+
+    # A survival explanation receives credit only when the corresponding
+    # failure point itself was correctly identified, including its kind.
+    surv_tp = sum(
+        1
+        for defeated_at, defeater, reason in (
+            gold_surv_pairs & pred_surv_pairs
+        )
+        if (defeated_at, defeater) in matched
+    )
+
+    survival_exact = pred_surv_pairs == gold_surv_pairs
+
+    diag["survives_because_extra"] = sorted(
+        str(x)
+        for x in (pred_surv_pairs - gold_surv_pairs)
+    )[:4]
+
+    diag["survives_because_missing"] = sorted(
+        str(x)
+        for x in (gold_surv_pairs - pred_surv_pairs)
+    )[:4]
+
+    if gold_surv_pairs:
+        surv_precision = surv_tp / max(len(pred_surv_pairs), 1)
+        surv_recall = surv_tp / len(gold_surv_pairs)
+
+        surv_score = (
+            0.0
+            if surv_precision + surv_recall == 0
+            else
+            2 * surv_precision * surv_recall
+            / (surv_precision + surv_recall)
+        )
+
+        diag["survives_because_correct"] = surv_tp
+        diag["survives_because_total"] = len(gold_surv_pairs)
+        diag["survives_because_precision"] = round(surv_precision, 4)
+        diag["survives_because_recall"] = round(surv_recall, 4)
+
     else:
         surv_score = None
 
@@ -487,8 +588,11 @@ def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
         score_val = 0.85 * f1 + 0.15 * (1.0 if status_ok else 0.0)
     else:
         score_val = 0.60 * f1 + 0.15 * (1.0 if status_ok else 0.0) + 0.25 * surv_score
-    exact_match = (tp == len(gold) == len(pred) and status_ok
-                   and (surv_score is None or surv_score >= 0.999))
+    exact_match = (
+        tp == len(gold) == len(pred)
+        and status_ok
+        and survival_exact
+    )
     diag.update(f1=round(f1, 4), precision=round(precision, 4), recall=round(recall, 4),
                 status_correct=status_ok,
                 survives_because_score=None if surv_score is None else round(surv_score, 4),

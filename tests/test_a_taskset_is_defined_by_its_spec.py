@@ -96,9 +96,9 @@ def test_the_checked_in_spec_describes_todays_grid():
 
     s = load(str(Path(__file__).resolve().parent.parent / "tasksets" / "standard.yaml"))
     assert len(s.tasks) == 12
-    assert s.levels == (3, 6, 9, 12, 15)
+    assert s.levels == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
     assert len(s.orderings) == 4
-    assert len(s.cells) * s.seeds.take == 480
+    assert len(s.cells) * s.seeds.take == 1440
     # The guard thresholds describe the grid too, and nothing else here reads
     # them: set min_build_acceptance to 0.9 and every test in the suite still
     # passes while the next `make freeze` dies on the first cell it reaches that

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import hashlib
 import random
 import re
@@ -443,6 +444,92 @@ def score(answer_text: str, item: FItem) -> ScoreResult:
         return ScoreResult(0.0, False, e.reason, diag)
     return score_value(ops, item)
 
+def _alpha_shape_keys(ops: Sequence[Operation]):
+    """Return structural keys invariant to model-chosen rule names.
+
+    Rule names are local identifiers in formalization. Structural scoring
+    therefore compares the rules they denote, including rule-name references
+    in undercuts and rule preferences, rather than comparing identifier text.
+    """
+    rules = {
+        o.name: o
+        for o in ops
+        if o.kind in ("defeasible", "strict") and o.name
+    }
+    cache = {}
+
+    def rule_key(name: str, stack=()):
+        if name not in rules:
+            return ("unknown_rule", name)
+
+        if name in cache:
+            return cache[name]
+
+        if name in stack:
+            # Generated formalization theories should not contain recursive
+            # rule-name references. Keep malformed submitted structures finite.
+            return ("rule_ref_cycle",)
+
+        o = rules[name]
+        nxt = stack + (name,)
+
+        k = (
+            o.kind,
+            tuple(
+                sorted(
+                    literal_key(a, nxt)
+                    for a in (o.antecedents or ())
+                )
+            ),
+            literal_key(o.consequent, nxt),
+        )
+        cache[name] = k
+        return k
+
+    def literal_key(lit, stack=()):
+        if lit is None:
+            return ("literal", None)
+
+        text = str(lit)
+        negated = text.startswith("-")
+        bare = text[1:] if negated else text
+
+        if bare in rules:
+            return (
+                "rule_ref",
+                negated,
+                rule_key(bare, stack),
+            )
+
+        return ("literal", text)
+
+    def op_key(o: Operation):
+        if o.kind in ("premise", "axiom"):
+            return (
+                o.kind,
+                ("literal", o.content),
+            )
+
+        if o.kind in ("defeasible", "strict"):
+            return rule_key(o.name)
+
+        if o.kind == "prefer_rule":
+            return (
+                o.kind,
+                rule_key(o.stronger),
+                rule_key(o.weaker),
+            )
+
+        if o.kind == "prefer_premise":
+            return (
+                o.kind,
+                ("literal", o.stronger),
+                ("literal", o.weaker),
+            )
+
+        return (o.kind,)
+
+    return [op_key(o) for o in ops]
 
 def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
     ops = list(ops)
@@ -467,18 +554,10 @@ def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
     diag["behavioural_precision"] = round(b_prec, 4)
     diag["behavioural_recall"] = round(b_rec, 4)
     diag["got_status"] = got
-
-    def key(o):
-        if o.kind in ("premise", "axiom"):
-            return (o.kind, o.content)
-        if o.kind in ("defeasible", "strict"):
-            return (o.kind, tuple(sorted(o.antecedents or ())), o.consequent)
-        if o.kind in ("prefer_rule", "prefer_premise"):
-            return (o.kind, o.stronger, o.weaker)
-        return (o.kind,)
-    import collections
-    gset = collections.Counter(key(o) for o in item.reference_ops)
-    pset = collections.Counter(key(o) for o in ordered)
+    gold_shape_keys = _alpha_shape_keys(item.reference_ops)
+    pred_shape_keys = _alpha_shape_keys(ordered)
+    gset = collections.Counter(gold_shape_keys)
+    pset = collections.Counter(pred_shape_keys)
     inter = sum(min(gset[k], pset[k]) for k in set(gset) | set(pset))
     prec = inter / max(sum(pset.values()), 1)
     rec = inter / max(sum(gset.values()), 1)
@@ -487,12 +566,23 @@ def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
     diag["missed_directives"] = [str(k) for k in (gset - pset)][:5]
     diag["extra_directives"] = [str(k) for k in (pset - gset)][:5]
 
-    contested = [o for o in item.reference_ops if o.kind in ("axiom", "strict")]
-    if contested:
-        pk_keys = collections.Counter(key(o) for o in ordered)
-        got_types = sum(1 for o in contested if pk_keys[key(o)] > 0)
-        type_score = got_types / len(contested)
-        diag["type_decisions_total"] = len(contested)
+    contested_keys = [
+        k
+        for o, k in zip(item.reference_ops, gold_shape_keys)
+        if o.kind in ("axiom", "strict")
+    ]
+
+    if contested_keys:
+        typed_gold = collections.Counter(contested_keys)
+
+        got_types = sum(
+            min(n, pset[k])
+            for k, n in typed_gold.items()
+        )
+
+        type_score = got_types / len(contested_keys)
+
+        diag["type_decisions_total"] = len(contested_keys)
         diag["type_decisions_correct"] = got_types
     else:
         type_score = None

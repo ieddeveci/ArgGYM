@@ -1,0 +1,13 @@
+endpoint_config: hf-qwen3-32b
+hf_model: Qwen/Qwen3-32B
+params_b: 32
+tier: large
+dtype: bfloat16
+tensor_parallel_size: 2
+max_model_len: 40960
+gpu_memory_utilization: 0.9
+reasoning_parser: qwen3
+trust_remote_code: false
+extra_args: []
+tensor_parallel_size_h100: 2
+tensor_parallel_size_h200: 1

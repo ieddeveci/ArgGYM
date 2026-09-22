@@ -1,0 +1,12 @@
+name: gemini-3.6-flash-api
+model: gemini-3.6-flash
+
+base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
+api_key_env: GEMINI_API_KEY
+
+sampling:
+  max_tokens: 65536
+  reasoning_effort: medium
+
+timeout_s: 5400
+retries: 2

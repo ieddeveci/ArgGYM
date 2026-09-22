@@ -1,0 +1,23 @@
+endpoint_config: hf-llama4-scout-17b-16e-instruct
+hf_model: meta-llama/Llama-4-Scout-17B-16E-Instruct
+
+# ArgGYM's existing <=40B gate uses the activated parameter count.
+# Meta reports Llama 4 Scout as 17B activated / 109B total.
+params_b: 17
+tier: large-moe
+
+dtype: bfloat16
+tensor_parallel_size: 4
+max_model_len: 65536
+gpu_memory_utilization: 0.9
+trust_remote_code: false
+
+# ArgGYM is text-only. vLLM 0.29.0 supports language-model-only mode for
+# hybrid multimodal models such as Llama 4, avoiding the vision encoder.
+extra_args:
+- --language-model-only
+
+# Full-BF16 Scout requires substantial memory. Use 2x H200 for the benchmark.
+# H100 is kept conservative at 4 GPUs.
+tensor_parallel_size_h100: 4
+tensor_parallel_size_h200: 4

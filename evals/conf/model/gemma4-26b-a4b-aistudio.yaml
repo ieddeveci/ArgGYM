@@ -1,0 +1,31 @@
+# Gemma 4 26B A4B IT through the Gemini API's OpenAI-compatible endpoint.
+#
+# This is the mixture-of-experts Gemma 4 variant exposed by Google AI Studio
+# under the model identifier gemma-4-26b-a4b-it.
+#
+# We use minimal native thinking while retaining ArgGYM's explicit CoT
+# elicitation. This matches the practical evaluation condition used for the
+# Gemma 4 31B run.
+#
+# Sampling parameters are left at the provider/model defaults.
+#
+# Keep concurrency conservative because the Google AI Studio quota can be
+# constrained by both requests per minute and input tokens per minute.
+
+name: gemma4-26b-a4b-aistudio
+model: gemma-4-26b-a4b-it
+base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
+api_key_env: GEMINI_API_KEY
+
+timeout_s: 300
+retries: 2
+
+sampling:
+  max_tokens: 32768
+
+extra_body:
+  extra_body:
+    google:
+      thinking_config:
+        thinking_level: minimal
+        include_thoughts: false

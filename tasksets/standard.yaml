@@ -28,8 +28,8 @@ tasks:
   - defeat_diagnosis
 
 # Five levels, spaced to give the curriculum room to separate them. Level 1 is
-# omitted: several generators treat it as a degenerate case rather than a rung.
-levels: [3, 6, 9, 12, 15]
+# omitted: several generators treat it as a degenerate casğoe rather than a rung.
+levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 # All four set orderings. Elitist and democratic differ only where a preference
 # decides between sets with more than one element, and the theories rarely hold

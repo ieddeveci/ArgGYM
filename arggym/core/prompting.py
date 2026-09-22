@@ -228,7 +228,7 @@ def formalization_notation() -> str:
     """
     return ("Notation: [premise: x], [axiom: x], [defeasible name: a => b], "
             "[strict name: a -> b], "
-            "[prefer_rule: r1 > r2], [prefer_premise: x > y]. Negation is written -x. "
+            "[prefer_rule: r1 > r2], [prefer_premise: x > y]. Negation is written -x. For a rule with multiple antecedents, join the antecedents with the uppercase word AND, for example [defeasible r1: a AND b => c] or [strict s1: a AND b -> c]. "
             "Rule names are yours to choose: a " + _NAME_GRAMMAR + ", "
             "and is separated from the kind by a space. "
             + PREFERENCE_OPERANDS
