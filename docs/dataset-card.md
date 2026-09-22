@@ -158,18 +158,16 @@ efficiency is clamped at 1.0, so it earns full credit rather than extra. The
 manifest records the caveat with the taskset.
 
 **`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
-set of theories.** The two arms publish the same theory -- byte for byte on 106
-of their 120 cells -- and vary one thing, whether the answer may add a strict
+set of theories.** The two arms publish the same theory -- byte for byte on all
+120 of their cells -- and vary one thing, whether the answer may add a strict
 rule. Permitting one buys a cheaper minimum on every cell, so the pair is one
 comparison rather than two independent measurements. The plain arm's own
-reference, submitted to the strict item, earns full credit on none of those 106:
-on 74 of them it scores between 0.75 and 0.92, docked on economy for directives
-the cheaper minimum no longer needs, and on the other 32 it runs past twice the
-strict minimum and scores zero for bloat. The 14 cells that differ are all at
-levels 3 to 5, where the strict arm may draw no strict rules at all and builds a
-theory of its own. So 106 rows of a release carry no theory the plain arm has
-not already published, and a model evaluated on both arms reads each of those
-theories twice.
+reference, submitted to the strict item, earns full credit on none of them: on
+89 of them it scores between 0.75 and 0.92, docked on economy for directives the
+cheaper minimum no longer needs, and on the other 31 it runs past twice the
+strict minimum and scores zero for bloat. So the strict arm's rows carry no
+theory the plain arm has not already published, and a model evaluated on both
+arms reads each theory twice.
 
 **Preference direction is arbitrary, deliberately.** ASPIC+ takes the ordering
 as a parameter and derives nothing; Modgil and Prakken define the set orderings

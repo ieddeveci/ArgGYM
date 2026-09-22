@@ -43,13 +43,14 @@ efficiency is at least 0.5 and the score at least 0.75 -- which holds while
 bloat rule on `if minimum` and `:347` returns a flat 0.5 as `success_but_minimum_unknown`
 without one. And the plain reference always costs more than the strict minimum, so it
 never reaches 1.0 -- which needs the reference to cost exactly its own `min_directives`,
-true by construction at `counter_argument.py:505`, where the item takes
+true by construction at `counter_argument.py:531`, where the item takes
 `min_directives=len(lines)` from the lines it also ships as `reference`.
 
 The other two claims are measurements, and they are what go stale. They already did twice:
 #101 wrote the paragraph at 22 bloated of 35, #117 raised the strict minimum from 1 to
 1 + `n_strict_final` and every bloat budget with it, 22 became 10, and the prose stayed
-(#133); then the grid went from five levels to fifteen and 35 of 40 became 106 of 120. So
+(#133); then the grid went from five levels to fifteen and 35 of 40 became 106 of 120;
+then the entry-level draw went and every cell shared a theory (#167). So
 the split and the top of the band are pinned cell by cell below -- the top by equality on
 the cells that reach it, not by an upper bound, or the real maximum could fall to the floor
 with the card still printing 0.92.
@@ -80,66 +81,33 @@ GRID = [(lv, o, s) for lv in LEVELS for o in ALL_ORDERINGS for s in SEEDS]
 #: Every other ordering builds both arms in under 5 seconds at every level, so splitting on
 #: the ordering puts 90 of the 120 cells in the default run for 30 seconds -- including all
 #: four cells that reach the top of the band, which the old level-based split left to
-#: `make test-all`. The 30 dear cells carry 26 of the 32 that bloat (#111).
+#: `make test-all`. The 30 dear cells carry 29 of the 31 that bloat (#111).
 DEAR_ORDERING = "weakest_link_democratic"
 CHEAP = [c for c in GRID if c[1] != DEAR_ORDERING]
 DEAR = [c for c in GRID if c[1] == DEAR_ORDERING]
-#: Where the draw may zero `n_strict` for the strict arm alone (#32), which is the only
-#: place the two arms are allowed to build different theories.
-DRAWN = (3, 4, 5)
-
-#: The cells where that draw actually fell, so the two arms publish different theories and
-#: there is no cross-arm answer to score. Fourteen of the 120, which is what leaves the
-#: card's "byte for byte on 106 of their 120 cells". Level 3 alone used to be exported out
-#: of this band and the count was 5 of 40; levels 4 and 5 ship now and draw the same way.
-DRAWN_APART = frozenset({
-    (3, "last_link_elitist", 0),
-    (3, "last_link_elitist", 1),
-    (3, "last_link_democratic", 1),
-    (3, "weakest_link_elitist", 1),
-    (3, "weakest_link_democratic", 1),
-    (4, "last_link_democratic", 1),
-    (4, "weakest_link_elitist", 1),
-    (4, "weakest_link_democratic", 1),
-    (5, "last_link_elitist", 0),
-    (5, "last_link_elitist", 1),
-    (5, "last_link_democratic", 1),
-    (5, "weakest_link_elitist", 0),
-    (5, "weakest_link_elitist", 1),
-    (5, "weakest_link_democratic", 0),
-})
-#: Of the 106 cells that do share a theory, the 32 where the plain arm's reference runs
-#: past twice the strict minimum and is zeroed for bloat. The split reads off the ordering
-#: almost entirely.
+#: The 31 cells where the plain arm's reference runs past twice the strict minimum and is
+#: zeroed for bloat. The split reads off the ordering almost entirely.
 #:
-#: Weakest-link-democratic carries 26 of them: it is the family whose theories hold the
-#: most junctions, so its plain answers are the longest -- 7 to 14 directives against a
-#: strict minimum of 1 to 5 -- and every one of its cells that shares a theory bloats
+#: Weakest-link-democratic carries 29 of them: it is the family whose theories hold the
+#: most junctions, so its plain answers are the longest, and every one of its cells bloats
 #: except (15, .., 1), which spends 8 against a budget of 10 and is docked to 0.8125.
 #:
-#: The other 6 are weakest-link-elitist, where the plain answer costs one or two more than
-#: the strict minimum and so bloats only while that minimum is small enough for twice it
-#: to be smaller still: 3 against a budget of 2 at levels 1 and 2, and 6 against 4 at level
-#: 6. From level 7 the minimum is 3 or more and the same one-or-two-directive gap lands
-#: inside the budget.
+#: The other 2 are weakest-link-elitist at level 6, where the plain answer costs 6 against
+#: a strict minimum of 2. Below that it costs 4 against 2 and lands exactly on the budget;
+#: from level 7 the minimum is 3 or more and the gap fits inside twice it.
 #:
-#: No last-link cell bloats at any level. There the plain reference costs exactly one
-#: directive more than the strict minimum, which is inside twice it from level 1 up.
-#:
-#: Levels 10 and 11 were off the old grid and kept in a set of their own so that a cell
-#: added there could not move a number the card made about the exported grid. They are
-#: exported now, so the set is gone and its four cells are here.
+#: No last-link cell bloats at any level. There the plain reference costs one or two
+#: directives more than the strict minimum, and the minimum is never below 2.
 BLOATED_ON_THE_STRICT_ITEM = frozenset({
-    (1, "weakest_link_elitist", 0),
-    (1, "weakest_link_elitist", 1),
     (1, "weakest_link_democratic", 0),
     (1, "weakest_link_democratic", 1),
-    (2, "weakest_link_elitist", 0),
-    (2, "weakest_link_elitist", 1),
     (2, "weakest_link_democratic", 0),
     (2, "weakest_link_democratic", 1),
     (3, "weakest_link_democratic", 0),
+    (3, "weakest_link_democratic", 1),
     (4, "weakest_link_democratic", 0),
+    (4, "weakest_link_democratic", 1),
+    (5, "weakest_link_democratic", 0),
     (5, "weakest_link_democratic", 1),
     (6, "weakest_link_elitist", 0),
     (6, "weakest_link_elitist", 1),
@@ -191,16 +159,10 @@ def _the_ablation_holds(level: int, ordering: str, seed: int) -> None:
     where = f"L{level} {ordering} seed {seed}"
     assert plain is not None and strict is not None, where
 
-    # The control. One theory, or the entry-level draw and nothing else.
-    if strict.metadata["n_strict_final"] == plain.metadata["n_strict_final"]:
-        assert strict.theory_text == plain.theory_text, (
-            f"{where}: the two arms build different theories, so a score gap between "
-            f"them cannot be read as an effect of permitting strict rules")
-    else:
-        assert level in DRAWN and strict.metadata["n_strict_final"] == 0, (
-            f"{where}: the theories differ for something other than the entry-level "
-            f"draw -- plain has {plain.metadata['n_strict_final']} strict-final chains "
-            f"and strict has {strict.metadata['n_strict_final']}")
+    # The control. One theory, at every cell.
+    assert strict.theory_text == plain.theory_text, (
+        f"{where}: the two arms build different theories, so a score gap between them "
+        f"cannot be read as an effect of permitting strict rules")
 
     # The treatment, and the law that says what it costs.
     assert strict.min_directives < plain.min_directives, (
@@ -219,18 +181,10 @@ def _the_ablation_holds(level: int, ordering: str, seed: int) -> None:
     assert got.score == pytest.approx(1.0), (
         f"{where}: gold regrades at {got.score}: {got.reason}")
 
-    # The overlap, which is what docs/dataset-card.md reports over the grid. The three
+    # The overlap, which is what docs/dataset-card.md reports over the grid. The two
     # tables above are the card's claims written as cells; the paragraph itself is checked
     # against them in test_the_card_prints_the_split_this_file_measures.
     cell = (level, ordering, seed)
-    shares_a_theory = strict.theory_text == plain.theory_text
-    assert shares_a_theory == (cell not in DRAWN_APART), (
-        f"{where}: the arms {'share' if shares_a_theory else 'do not share'} a theory and "
-        f"DRAWN_APART says otherwise, so the card's count of cells that publish one "
-        f"theory has moved off {len(GRID) - len(DRAWN_APART)}")
-    if not shares_a_theory:
-        return
-
     cross = score_item(plain.reference, ca.as_score_input(strict))
     if cell in BLOATED_ON_THE_STRICT_ITEM:
         assert cross.score == 0.0 and cross.reason.startswith("bloated:"), (
@@ -264,27 +218,21 @@ def test_the_tables_cover_the_grid_and_nothing_else():
     the same cells with only one of them counted on the card.
     """
     grid = set(GRID)
-    for name, table in (("DRAWN_APART", DRAWN_APART),
-                        ("BLOATED_ON_THE_STRICT_ITEM", BLOATED_ON_THE_STRICT_ITEM),
+    for name, table in (("BLOATED_ON_THE_STRICT_ITEM", BLOATED_ON_THE_STRICT_ITEM),
                         ("AT_THE_TOP_OF_THE_BAND", AT_THE_TOP_OF_THE_BAND)):
         stray = sorted(table - grid)
         assert not stray, (
             f"{name} names {stray}, which the grid does not export, so the sweep never "
             f"checks those rows and the card counts them anyway")
-    overlap = sorted(DRAWN_APART & BLOATED_ON_THE_STRICT_ITEM)
-    assert not overlap, (
-        f"{overlap} is both drawn apart and bloated; a cell with no shared theory has no "
-        f"cross-arm score to bloat")
-    assert not AT_THE_TOP_OF_THE_BAND & (DRAWN_APART | BLOATED_ON_THE_STRICT_ITEM)
-    assert all(lv in DRAWN for lv, _, _ in DRAWN_APART), sorted(DRAWN_APART)
+    assert not AT_THE_TOP_OF_THE_BAND & BLOATED_ON_THE_STRICT_ITEM
 
 
 def test_the_card_prints_the_split_this_file_measures():
     """`docs/dataset-card.md` is the only place these measurements are written as numbers.
 
-    The card's ablation paragraph makes three of them -- 106 of the 120 cells publish one
-    theory, 74 of those score the plain reference between 0.75 and 0.92, the other 32 zero
-    it for bloat -- and every one can move under the prose when the generator changes, or
+    The card's ablation paragraph makes three of them -- all 120 cells publish one theory,
+    89 of them score the plain reference between 0.75 and 0.92, the other 31 zero it for
+    bloat -- and every one can move under the prose when the generator changes, or
     when the grid does. All three already have, twice: here and in #94's visible-gap count
     when #117 changed the minimum, and again when the grid went to fifteen levels. Nothing
     failed either time.
@@ -308,8 +256,8 @@ def test_the_card_prints_the_split_this_file_measures():
 
     What this does not catch: the sweep filling the tables is `slow` on one ordering, and
     nothing automated runs `slow`. CI runs `uv run pytest -q -n auto` and `pyproject.toml`
-    sets `addopts = "-m 'not slow'"`, so the 30 `weakest_link_democratic` cells -- 26 of
-    the 32 that bloat -- are checked only when someone runs `make test-all` by hand.
+    sets `addopts = "-m 'not slow'"`, so the 30 `weakest_link_democratic` cells -- 29 of
+    the 31 that bloat -- are checked only when someone runs `make test-all` by hand.
     Running them by default costs 328 seconds of build, 63 of them in one cell.
     """
     text = CARD.read_text()
@@ -322,11 +270,11 @@ def test_the_card_prints_the_split_this_file_measures():
     # The card hard-wraps, so a clause spans lines and rewrapping moves where.
     unwrapped = re.sub(r"\s+", " ", paragraph)
 
-    shared = len(GRID) - len(DRAWN_APART)
+    shared = len(GRID)
     bloated = len(BLOATED_ON_THE_STRICT_ITEM)
     required = {
-        f"{shared} of {len(GRID)} cells publish one theory":
-            rf"byte for byte on {shared} of their {len(GRID)} cells",
+        f"all {shared} cells publish one theory":
+            rf"byte for byte on all {shared} of their cells",
         f"{shared - bloated} of those score between {BAND_FLOOR:.2f} and "
         f"{BEST_CROSS_SCORE:.2f}":
             rf"on {shared - bloated} of them it scores between {BAND_FLOOR:.2f} and "

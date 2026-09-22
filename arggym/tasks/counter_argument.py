@@ -129,23 +129,35 @@ class CAItem:
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           allow_strict: bool = False) -> Union[CAItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "ca"))
-    n_chain = max(1, min(1 + (level * 5) // 15, 6))
+    # Two chains at every level, not one. With `n` chains reaching the target and `k` of
+    # them ending strictly, the strict answer costs `1 + k`: the strict counter-argument
+    # plus one undercut per strict chain. The plain answer also has to beat the `n - k`
+    # defeasible chains, which the strict rule rebuts for free. So the arm is
+    # template-proof only while `k >= 1` -- at `k = 0` no chain reaches the target
+    # strictly, nothing has to be broken first, and the whole strict answer is the fixed
+    # line `[strict cs: <seed_lit> -> -<target>]` -- and the ablation has a contrast only
+    # while some chain stays defeasible, `k <= n - 1` (`n - 2` at the decoy levels, below).
+    # A one-chain theory can satisfy one or the other and never both: at `k = 0` both
+    # arms are answerable from the question line and one grep, and at `k = 1` the two
+    # arms cost the same and ship the same reference (#37). Levels 1 and 2 built one
+    # chain, so they could not host the experiment they were published as part of: their
+    # 16 strict rows took the fixed line, as did 14 more where the draw below fell, and 8
+    # plain rows took a rebuttal-plus-grep template (#167).
+    n_chain = max(2, min(1 + (level * 5) // 15, 6))
     depth = max(2, min(2 + (level * 3) // 15, 5))
-    # Below level 6 this floors at one while there are only two or three chains, so a
-    # strict-final chain always reached the target. A strict counter-argument then
-    # contradicts it instead of winning, and the strict ablation had no cheap answer to
-    # find at its own entry level: the cheapest item cost three directives where level 6
-    # cost one (#32). Drawn here, so about half of those items admit the shortcut, which
-    # is the same split levels 6 and up get from the mid-chain target.
+    # `n_chain - 1` keeps `k <= n - 1` in the code rather than in this comment. It is a
+    # no-op on today's curriculum -- after the level-9 cap below, k runs
+    # 1,1,1,1,1,1,2,2,2,2,2,3,3,3,4 against n of
+    # 2,2,2,2,2,3,3,3,4,4,4,5,5,5,6 -- and it is what fails first if the chain schedule
+    # is ever lowered under the strict one.
     #
-    # Only for the ablation. The plain variant asks a different question and the draw has
-    # nothing to say about it, so gating keeps its items exactly as they were. It is the
-    # one thing that still makes the two variants build different theories, and it stays
-    # because deleting it puts the level-3 floor at two directives while level 6 keeps
-    # one, which is the inversion #32 was closed on.
-    n_strict = 0 if level < 3 else min(n_chain, 1 + (level - 3) // 4)
-    if allow_strict and 3 <= level < 6 and stable_seed(seed, level, ordering, "cas") % 2 == 0:
-        n_strict = 0
+    # There was a draw here that zeroed `n_strict` for the strict arm alone at levels 3
+    # to 5, added because the entry level cost three directives where level 6 cost one
+    # (#32). #117 raised the strict minimum to `1 + n_strict_final` and took level 6's
+    # floor to two, so the inversion it was closed on stopped existing; what the draw
+    # still did was ship 14 more one-directive cells and make the two arms build
+    # different theories, which is the one thing an ablation may not do.
+    n_strict = min(n_chain - 1, 1 + max(0, level - 3) // 4)
     # From level 9 the decoy path answers the plain arm with one undercut per strict
     # chain and none for the defeasible chain that carries the killer rule, so with one
     # defeasible chain the plain arm costs 1 + k -- exactly the strict arm's 1 + k, and
@@ -449,9 +461,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         #
         # So break those chains first, one undercut of the chain's first rule each -- the
         # same move the plain path already makes for a strict-final chain. The answer then
-        # costs one directive where nothing blocks and 1 + k where k chains do, and it is
-        # the ablation's own question either way: what the strict rule buys is the k
-        # defeasible chains it rebuts without a preference apiece.
+        # costs 1 + k, and `k >= 1` on every item since #167. What the strict rule buys
+        # is the defeasible chains it rebuts without a preference apiece.
         strict_ops = [Operation(kind="strict", name="cs", antecedents=(seed_lit,),
                                 consequent="-" + target)]
         strict_lines = [f"[strict cs: {seed_lit} -> -{target}]"]

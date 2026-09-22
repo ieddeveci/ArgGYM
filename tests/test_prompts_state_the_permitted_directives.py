@@ -34,8 +34,8 @@ CHEAP = [(lv, o, s) for lv in (3, 6) for o in ALL_ORDERINGS for s in SEEDS]
 # Byte-identity, the defect in #37, held only from level 8 up when this was written:
 # below it `contested` was True for the strict arm alone, so the two variants built
 # different theories and their prompts differed for a reason that has nothing to do with
-# this change. The theories are shared from level 6 up now, and at level 3 wherever the
-# entry-level draw leaves `n_strict` alone; level 9 stays the cell these cases use.
+# this change. The theories are shared at every level now (#167); level 9 stays the cell
+# these cases use.
 IDENTICAL_BEFORE = [(lv, o, s) for lv in GRID if lv >= 8 for o in ALL_ORDERINGS for s in SEEDS]
 CHEAPEST_IDENTICAL = [c for c in IDENTICAL_BEFORE if c[0] == 9]
 

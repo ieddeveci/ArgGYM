@@ -97,7 +97,7 @@ def test_the_junction_count_is_the_same_whatever_the_strict_schedule_does(level)
     """The regression itself: strict chains skipped the splice and shipped thinner.
 
     Both seeds and both arms, because the strict flags are shuffled per build seed and
-    `n_strict` differs between the arms only at the entry-level draw -- so a count that
+    `n_strict` is shared between the arms (#167) -- so a count that
     tracked the flags fans out across exactly these sixteen items, which is how the
     defect looked: seed 0 kept `0 2 3 5 6` across the grid while seed 1 read `0 1 2 2 6`.
     """

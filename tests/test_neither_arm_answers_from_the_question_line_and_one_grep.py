@@ -33,14 +33,14 @@ economy is the same defect wearing a smaller number: on `main` the plain sibling
 0.90 to 0.9286 on six of the eight cells it succeeded, so a `< 1.0` assertion would have
 passed on six of the cells this file exists to name.
 
-Five level-3 cells still take the one-liner. They are named in `DRAWN_EXEMPT` rather than
-skipped, because they are the #32 draw and not this geometry: below level 6 the draw
-zeroes `n_strict` for the strict arm alone so that the entry level has a one-directive
-item at all, and every cell it reaches is a cell where the fixed line is the whole answer.
-While they stand, #93's first acceptance criterion -- below 1.0 on *every* strict cell --
-is not met. Deleting the draw meets it and reopens #32's inversion, which is why this file
-asserts the exemption instead of hiding it: the day the draw goes, these five assertions
-fail and say so.
+No cell takes the one-liner now, so there is no exemption list. `DRAWN_EXEMPT` named five
+level-3 cells while the #32 draw zeroed `n_strict` for the strict arm alone, and this file
+asserted the exemption rather than hiding it so that the day the draw went those five
+assertions would fail and say so. They did. Every level builds at least two
+target-reaching chains, at least one strict and at least one defeasible (#167), so the strict minimum is `1 + k` with
+`k >= 1` everywhere and #93's first acceptance criterion -- the fixed line below 1.0 on
+*every* strict cell -- is met for the first time. The sweep asserts it flat, on all 120
+cells, with nothing carved out.
 
 One test per cell rather than one per template, so a cell that starts answering is named
 once with both templates' verdicts in hand.
@@ -58,15 +58,6 @@ from arggym.tasks import counter_argument as ca
 CHEAP = [(lv, o, s) for lv in (3, 6) for o in ALL_ORDERINGS for s in SEEDS]
 GRID = [(lv, o, s) for lv in LEVELS for o in ALL_ORDERINGS for s in SEEDS]
 DEAR = [c for c in GRID if c not in CHEAP]
-
-#: The strict cells where the entry-level draw leaves the one-liner winning (#32, #93).
-DRAWN_EXEMPT = {
-    (3, "last_link_elitist", 0),
-    (3, "last_link_elitist", 1),
-    (3, "last_link_democratic", 1),
-    (3, "weakest_link_elitist", 1),
-    (3, "weakest_link_democratic", 1),
-}
 
 
 def _plain_sibling(item) -> List[str]:
@@ -87,30 +78,19 @@ def _no_template_answers_this_cell(level: int, ordering: str, seed: int) -> None
     where = f"L{level} {ordering} seed {seed}"
     assert strict is not None and plain is not None, where
 
-    exempt = (level, ordering, seed) in DRAWN_EXEMPT
     one_liner = f"[strict cs: {strict.seed_lit} -> -{strict.target}]"
     got = score_item(one_liner, ca.as_score_input(strict))
 
     # The bank offers the one-liner and keeps it only where it holds, so "the template
     # answers" and "the minimum is one directive" are one fact. Asserting both makes a
     # cell that starts taking the shortcut fail here rather than only in the cost law.
-    assert (strict.min_directives == 1) is exempt, (
-        f"{where}: min_directives {strict.min_directives} against exempt={exempt}; "
-        f"the exemption list has gone stale")
-
-    if exempt:
-        assert got.success and got.score == pytest.approx(1.0), (
-            f"{where}: listed as an entry-level draw cell, but the one-liner no longer "
-            f"answers it -- {got.score}, {got.reason}. If the draw at "
-            f"counter_argument.py went, drop this cell from DRAWN_EXEMPT and close #93's "
-            f"first criterion.")
-        assert strict.metadata["n_strict_final"] == 0, (
-            f"{where}: exempt without the draw -- {strict.metadata['n_strict_final']} "
-            f"chains reach the target strictly, so the one-liner should not answer")
-    else:
-        assert not got.success, (
-            f"{where}: {one_liner} reaches both goals reading nothing but the question "
-            f"line, scoring {got.score}")
+    assert strict.min_directives > 1, (
+        f"{where}: min_directives {strict.min_directives}, so one directive is the whole "
+        f"answer and no chain reaches the target strictly. Every level builds at least "
+        f"one strict chain (#167); this cell lost that.")
+    assert not got.success, (
+        f"{where}: {one_liner} reaches both goals reading nothing but the question "
+        f"line, scoring {got.score}")
 
     sibling = _plain_sibling(plain)
     got = score_item("\n".join(sibling), ca.as_score_input(plain))
