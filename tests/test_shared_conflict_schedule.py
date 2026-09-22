@@ -2,10 +2,16 @@
 
 `preference_construction` can point two claims at one conflict, so a single preference
 directive settles both goals. The schedule that turned it on read `level % 3 == 2`. The
-export grid steps by 3, so `level % 3` is the constant 0 on that grid: the branch ran at
-levels 5, 8, 11 and 14, which the grid never evaluates, and so never reached an exported
+export grid stepped by 3 then, so `level % 3` was the constant 0 on it: the branch ran at
+levels 5, 8, 11 and 14, which the grid never evaluated, and so never reached an exported
 item. These tests pin the property rather than the arithmetic. Whatever the schedule is,
 it has to vary across the evaluated levels, and both shapes have to generate.
+
+The grid exports all fifteen levels now, which retires the miss itself -- a branch keyed
+on the level fires somewhere the grid looks or it fires nowhere at all. What is left is
+the damage the branch does when it fires in the wrong place, and that is what the goal
+count below is about: the extra claim has to land where the base ramp is flat, or two
+neighbouring levels ask for the same width and the rung between them is lost.
 
 The grid comes from `arggym.core.spec`. Restating it here would reintroduce exactly the
 disagreement between curriculum and grid that #30 was.
@@ -22,8 +28,9 @@ from arggym.tasks import preference_construction as pc
 # both what these tests assert and how long they take.
 LAST_LINK = "last_link_elitist"
 
-# The schedule is read off a built item, so this file cannot be swept for free. What can
-# be asked of every level is asked of every level; the rest names the grid on purpose.
+# The curriculum range, which the grid currently equals. Written apart from LEVELS
+# because these are two different claims -- what the schedule does, and what the export
+# samples of it -- and only the second moves if the grid is ever narrowed again.
 SCHEDULE = tuple(range(1, 16))
 
 
@@ -45,24 +52,43 @@ def test_schedule_is_not_constant_on_the_grid():
     assert False in seen.values(), f"shared conflict occurs at every grid level: {seen}"
 
 
-def test_goal_count_does_not_fall_and_steps_on_the_grid():
+def test_goal_count_climbs_one_rung_at_a_time():
     """The shared branch adds a claim, so it must not land where the base ramp steps up.
 
-    Monotonicity is asked of every level, because the branch fires at 9, 10, 11 and 15
-    and 10 and 11 are the two the grid never evaluates. Distinct counts are asked of the
-    grid alone: the ramp is flat between exported levels by construction, so 10 and 11
-    share a count and that is the curriculum working.
+    `n_claims` is `1 + (level * 8) // 15` capped at 8, so it steps at every even level and
+    is flat at every odd one, and the shared branch adds one claim on top. Land the branch
+    on a level where the base ramp also steps and that level jumps two claims at once,
+    which means the width between them is a rung the curriculum defines and no level
+    builds. `preference_construction.py:131` says exactly this, and it is why the branch
+    sits at 9 rather than at 6 or 12.
+
+    So the property is monotone with unit steps: no level asks for fewer goals than the
+    level below it, and none asks for more than one extra. Over levels 1-15 the count runs
+    1 2 2 3 3 4 4 5 6 7 7 7 7 8 8, and every step in it is a step of one.
+
+    This used to read "no two exported levels have the same goal count", which held only
+    because the grid sampled one level in three -- far enough apart that the ramp had
+    always moved between them. On a grid that exports every level neighbours share a count
+    by construction, and asking for distinctness would ask the ramp to climb 15 rungs it
+    does not have. The unit-step form is what that distinctness was standing in for, and
+    it is the sharper of the two: it catches the branch landing on a stepping level, which
+    distinctness on a sparse grid could miss entirely.
     """
     goals = {}
     for level in SCHEDULE:
         item = pc.make_item(level, 0, LAST_LINK)
         assert item is not None, f"L{level} generated nothing"
         goals[level] = len(item.goals)
-    counts = [goals[l] for l in SCHEDULE]
-    assert counts == sorted(counts), f"goal count is not monotonic across levels: {goals}"
-    on_grid = [goals[l] for l in LEVELS]
-    assert len(set(on_grid)) == len(on_grid), \
-        f"two exported levels have the same goal count: {goals}"
+    steps = [(a, b, goals[b] - goals[a]) for a, b in zip(SCHEDULE, SCHEDULE[1:])]
+    fell = [f"L{a} to L{b}" for a, b, d in steps if d < 0]
+    assert not fell, f"goal count falls at {', '.join(fell)}: {goals}"
+    jumped = [f"L{a} to L{b} by {d}" for a, b, d in steps if d > 1]
+    assert not jumped, (
+        f"goal count jumps more than one claim at {', '.join(jumped)}, so a branch lands "
+        f"where the base ramp already steps and the width in between is a rung no level "
+        f"builds: {goals}")
+    assert goals[SCHEDULE[-1]] > goals[SCHEDULE[0]], (
+        f"the goal count never rises across the curriculum: {goals}")
 
 
 def test_a_shared_item_settles_two_goals_with_one_directive():

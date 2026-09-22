@@ -8,14 +8,14 @@ import json
 
 import pytest
 
-from arggym.core.spec import SeedPolicy, TasksetSpec, from_dict, load
+from arggym.core.spec import LEVELS, SeedPolicy, TasksetSpec, from_dict, load
 
 
 def test_a_minimal_spec_gets_the_evaluated_grid():
     s = TasksetSpec(tasks=("status_query",))
-    assert s.levels == (3, 6, 9, 12, 15)
+    assert s.levels == LEVELS == tuple(range(1, 16))
     assert len(s.orderings) == 4
-    assert len(s.cells) == 1 * 5 * 4
+    assert len(s.cells) == 1 * 15 * 4
 
 
 def test_a_cell_asks_for_items_and_bounds_the_search():
@@ -91,7 +91,7 @@ def test_a_spec_round_trips_through_a_file(tmp_path):
 
 def test_the_checked_in_spec_describes_todays_grid():
     # The standard spec replaces the function defaults in core/export.py, so it
-    # has to name the same grid: 12 tasks x 5 levels x 4 orderings x 2 seeds.
+    # has to name the same grid: 12 tasks x 15 levels x 4 orderings x 2 seeds.
     from pathlib import Path
 
     s = load(str(Path(__file__).resolve().parent.parent / "tasksets" / "standard.yaml"))

@@ -26,8 +26,8 @@ What this does NOT catch:
   `all_directives_illegal`, `engine_rejected` and `goal_not_met`.
 - It reaches the six engine-scored tasks and no others. The six `MODULE`-scored tasks
   score their own answers, and each of them zeroes the whole answer on a single stray
-  word: appending `therefore` to a shipped reference scores 0.0 on all 40 rows of each,
-  and on all 480 rows of the taskset. All six now state it, `formalization` through
+  word: appending `therefore` to a shipped reference scores 0.0 on every row of each,
+  and so on every row of the taskset. All six now state it, `formalization` through
   `prompting.UNREADABLE` because its answer is the same DSL, and the other five through
   `prompting.STRAY_TEXT`, whose noun is their own answer-format clause instead (#125).
   Those five are guarded in `tests/test_query_tasks_score_a_bare_answer.py` and in
@@ -36,7 +36,7 @@ What this does NOT catch:
   `test_a_rule_a_question_cannot_reach_is_left_out_of_it` asserts absence.
   `claim_chain` is the one to read carefully, on a *prose-only* answer rather than on a
   stray word: with no brackets anywhere its parser falls back to whole lines, so such an
-  answer reports `ok` rather than raising, and scores 0.0 on all 40 rows anyway because
+  answer reports `ok` rather than raising, and scores 0.0 on every row anyway because
   gold comes from `render_op`, which brackets every line. So the sentence states an
   outcome and promises no reason string. Its behavioural guard covers the refusal the
   other case takes, not that bracketing.

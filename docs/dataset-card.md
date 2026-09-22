@@ -57,10 +57,10 @@ on fresh seeds from the same spec. A fixed dataset cannot offer that.
 | | |
 |---|---|
 | Tasks | 12 |
-| Levels | 3, 6, 9, 12, 15 |
+| Levels | 1 through 15 |
 | Strength orderings | last-link and weakest-link, each elitist and democratic |
 | Seeds per cell | 2 |
-| Items | 480 |
+| Items | 1440 |
 | Engine | `python-argumentation==2.0.2`, pinned |
 | Semantics | grounded, except `semantics_query`, which asks about five |
 | License | MIT |
@@ -158,16 +158,18 @@ efficiency is clamped at 1.0, so it earns full credit rather than extra. The
 manifest records the caveat with the taskset.
 
 **`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
-set of theories.** The two arms publish the same theory -- byte for byte on 35
-of their 40 cells -- and vary one thing, whether the answer may add a strict
+set of theories.** The two arms publish the same theory -- byte for byte on 106
+of their 120 cells -- and vary one thing, whether the answer may add a strict
 rule. Permitting one buys a cheaper minimum on every cell, so the pair is one
 comparison rather than two independent measurements. The plain arm's own
-reference, submitted to the strict item, earns full credit on none of those 35:
-on 25 of them it scores between 0.75 and 0.92, docked on economy for directives
-the cheaper minimum no longer needs, and on the other 10 it runs past twice the
-strict minimum and scores zero for bloat. Forty rows of a release therefore
-carry no theory the other arm has not already published, and a model evaluated
-on both arms reads each of those theories twice.
+reference, submitted to the strict item, earns full credit on none of those 106:
+on 74 of them it scores between 0.75 and 0.92, docked on economy for directives
+the cheaper minimum no longer needs, and on the other 32 it runs past twice the
+strict minimum and scores zero for bloat. The 14 cells that differ are all at
+levels 3 to 5, where the strict arm may draw no strict rules at all and builds a
+theory of its own. So 106 rows of a release carry no theory the plain arm has
+not already published, and a model evaluated on both arms reads each of those
+theories twice.
 
 **Preference direction is arbitrary, deliberately.** ASPIC+ takes the ordering
 as a parameter and derives nothing; Modgil and Prakken define the set orderings
@@ -177,9 +179,10 @@ answer from priors and the verified oracle would be decorative.
 
 **Elitist and democratic diverge only where a preference decides between sets
 with more than one element**, and the published theories almost never hold one.
-Over 720 theories -- every task at five levels, four orderings, three seeds --
-the two orderings of a family give the same defeat relation and the same status
-map everywhere except `status_query`, which carries an argument with two last
+Over 720 theories -- every task at levels 3, 6, 9, 12 and 15, four orderings,
+three seeds, measured while those five levels were the whole grid -- the two
+orderings of a family give the same defeat relation and the same status map
+everywhere except `status_query`, which carries an argument with two last
 defeasible rules on 24 of its 30 last-link theories, enough to split the defeat
 relation on 12 of them and a queried literal's gold label on 5 of its 60. The
 axis reaches an answer on two tasks, and only under weakest-link: a

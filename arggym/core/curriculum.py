@@ -16,12 +16,13 @@ that never bind at or below level 15; `defence` and `mixed` never called it; and
 `satisfied_by` had no caller anywhere.
 
 Turning it on instead of removing it was the alternative, and the measurement
-rules it out. Against 32 items per mode per exported level, the required-move
-floor keeps 0 of 32 `defence` items at all five levels and 0 of 32
-`attack_defense` items at levels 9, 12 and 15; adding the dead-end floor drops
-`attack` at levels 3 and 6 as well, and `attack` is the mode whose minimum the
-required floor reproduces digit for digit at all five. Enforcing the floor
-empties twelve of the fifteen (mode, level) cells rather than levelling them.
+rules it out. It was taken against 32 items per mode at levels 3, 6, 9, 12 and
+15, which was the whole grid at the time. The required-move floor keeps 0 of 32
+`defence` items at all five of them and 0 of 32 `attack_defense` items at levels
+9, 12 and 15; adding the dead-end floor drops `attack` at levels 3 and 6 as
+well, and `attack` is the mode whose minimum the required floor reproduces digit
+for digit at all five. Enforcing the floor empties twelve of those fifteen
+(mode, level) cells rather than levelling them.
 A floor no builder can meet is one mode's numbers kept somewhere central, so it
 is gone and each builder states its own shape where a reader of that builder can
 see it (#31).

@@ -24,7 +24,7 @@
 #
 # That prompt figure carries over from 3.8 unchanged: the two tokenizers are
 # identical for text, differing only by seven audio and TTS special tokens that
-# no prompt contains, so all 480 rows tokenize to the same length under both.
+# no prompt contains, so every row tokenizes to the same length under both.
 #
 # The cap clears every completion length observed for either checkpoint. The
 # longest that ran to a stop is 56316 tokens, and that one was at level 3. The

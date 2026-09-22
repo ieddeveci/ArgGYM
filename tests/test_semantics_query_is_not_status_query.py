@@ -24,7 +24,8 @@ CELLS = [(lv, o, s) for lv in SCHEDULE for o in ALL_ORDERINGS for s in SEEDS]
 IMPLEMENTED = (sq.GROUNDED, sq.SCEPT_PREF, sq.CRED_PREF, sq.STABLE, sq.EAGER)
 
 #: Four tests walk these cells, so one build per cell serves all four. Widening the sweep
-#: from the exported five levels to all fifteen took the file from 21.53s to 44.07s;
+#: from the five levels the grid exported then to all fifteen took the file from 21.53s
+#: to 44.07s;
 #: sharing the build takes it back under the original. Under xdist the cells scatter
 #: across workers and each rebuilds the ones it draws, which is what the suite actually
 #: runs -- the cache is what keeps a serial run cheap.

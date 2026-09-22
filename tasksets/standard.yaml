@@ -27,16 +27,22 @@ tasks:
   - claim_chain
   - defeat_diagnosis
 
-# Five levels, spaced to give the curriculum room to separate them. Level 1 is
-# omitted: several generators treat it as a degenerate casğoe rather than a rung.
+# Every level the curriculum defines. Sampling it -- five levels spaced by three --
+# left a switch on the level free to fire only where the grid did not look, which
+# is how #30 and #69 shipped branches no exported item ever reached. A grid that
+# skips nothing cannot hide one. Level 1 is in: several generators treat it as a
+# degenerate case rather than a rung, and that floor is now measured rather than
+# assumed.
 levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 # All four set orderings. Elitist and democratic differ only where a preference
 # decides between sets with more than one element, and the theories rarely hold
-# one: over 720 measured, only status_query separates the two. It separates them
-# in the gold and not just in the defeat relation -- on 5 of its 60 theories a
-# queried literal's label differs between the two members of a family, each row
-# still correct under the ordering it was built with. Where the axis changes an
+# one: over 720 measured -- every task at levels 3, 6, 9, 12 and 15, four
+# orderings, three seeds, taken while those five levels were the whole grid --
+# only status_query separates the two. It separates them in the gold and not
+# just in the defeat relation -- on 5 of its 60 theories a queried literal's
+# label differs between the two members of a family, each row still correct
+# under the ordering it was built with. Where the axis changes an
 # answer is under weakest-link, on preference_construction and counter_argument,
 # whose reference directives put several defeasible rules into an argument (#72).
 # Both halves stay in the grid because the audit that measures that is only
