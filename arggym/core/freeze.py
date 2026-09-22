@@ -38,7 +38,12 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: without moving a single question; versions 6 and 7 each state rules the scorer
 #: was already enforcing, and so move questions and no metadata at all -- the 280
 #: engine-scored and `formalization` questions at 6, the remaining 200 at 7.
-PROMPT_VERSION = 7
+#: Version 8 is the narrowest kind: #121 stopped `formalization` writing a second
+#: route to a single queried claim, which moves three of its 40 rows and leaves the
+#: other 37 exactly as they were. "The rendered question for any reason" covers a
+#: generator that writes a different theory as much as a renderer that words the
+#: same one differently.
+PROMPT_VERSION = 8
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:
