@@ -38,12 +38,24 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: without moving a single question; versions 6 and 7 each state rules the scorer
 #: was already enforcing, and so move questions and no metadata at all -- the 280
 #: engine-scored and `formalization` questions at 6, the remaining 200 at 7.
-#: Version 8 is the narrowest kind: #121 stopped `formalization` writing a second
-#: route to a single queried claim, which moves three of its 40 rows and leaves the
-#: other 37 exactly as they were. "The rendered question for any reason" covers a
-#: generator that writes a different theory as much as a renderer that words the
-#: same one differently.
-PROMPT_VERSION = 8
+#: "The rendered question for any reason" covers a generator that writes a different
+#: theory as much as a renderer that words the same one differently.
+#:
+#: Version 8 was set twice, for two disjoint sets of questions, which is the drift
+#: this constant exists to prevent (#161). #149 set it for #121, which stopped
+#: `formalization` writing a second route to a single queried claim and moved three
+#: of its 40 rows. #166 then moved 80 more -- all 40 `formalization` and all 40
+#: `defeat_diagnosis`, the first gaining an AND-conjunction clause in
+#: `formalization_notation` and the second a paragraph naming what each diagnosis
+#: field holds -- and left the number at 8. A run recorded as `prompt_version: 8`
+#: does not say which of the two it saw.
+#:
+#: Version 9 moves `semantics_query`: the share cap at `semantics_query.py:650`
+#: compared the largest status in the row rather than the candidate's own, so rows
+#: stalled at five queries (#171), and the coverage pass now spends its slot on a
+#: claim that splits where one is available (#138). Both change which claims a row
+#: asks, on all 120 of its rows. No other task moves.
+PROMPT_VERSION = 9
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:

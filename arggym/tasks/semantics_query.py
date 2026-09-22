@@ -624,11 +624,25 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         if _s in sems and (_c, _s) in gold and (_c, _s) not in _required:
             _required.append((_c, _s))
     # Every semantics the level schedules is asked at least once, whatever the trim does.
+    #
+    # Which query covers it is free, and spending it on a claim already required under a
+    # different status buys a diverging claim for nothing. The coverage set asked one
+    # query per semantics on mostly distinct claims, so it contained no claim answered
+    # twice and therefore no divergence by construction -- which is what left ten rows
+    # asking nothing two semantics disagree about (#138). Divergence and balance are
+    # allies here rather than rivals: a diverging claim's two halves carry two different
+    # statuses, so admitting them together helps the share cap above rather than
+    # straining it. Preference, not a requirement -- where no required claim splits, the
+    # first query covering the semantics is taken as before.
     _covered = {q[1] for q in _required}
     for q in queries:
-        if q[1] not in _covered:
-            _covered.add(q[1])
-            _required.append(q)
+        if q[1] in _covered:
+            continue
+        _here = [x for x in queries if x[1] == q[1] and x not in _required]
+        _splits = [x for x in _here
+                   if any(rc == x[0] and gold[(rc, rs)] != gold[x] for (rc, rs) in _required)]
+        _covered.add(q[1])
+        _required.append(_splits[0] if _splits else q)
     queries = _required + [q for q in queries if q not in _required]
 
     _pool_n = len(queries)
@@ -652,7 +666,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         cand = counts.copy()
         cand[gold[q]] += 1
         n = sum(cand.values())
-        if q not in _required and n >= 6 and max(cand.values()) / n > MAX_STATUS_SHARE:
+        # `cand[gold[q]]`, not `max(cand.values())`. The largest status in the row is
+        # not the status this query carries, so comparing it refused every candidate
+        # while any answer was over its share -- including one whose status appeared
+        # zero times and would have pulled the row toward balance. Rows stalled at five
+        # queries against a target of twelve, 68 of 120 of them, and five is one under
+        # the `len(gold) >= 6` floor on the final check below, so the stalled rows
+        # shipped exempt from the guard entirely: 62 of 120 rows sat over this share
+        # (#171).
+        if q not in _required and n >= 6 and cand[gold[q]] / n > MAX_STATUS_SHARE:
             continue
         kept.append(q)
         counts[gold[q]] += 1
@@ -665,6 +687,18 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         return Rejected("fewer_than_two_gold_statuses")
     if len(gold) >= 6 and max(counts.values()) / len(gold) > MAX_STATUS_SHARE:
         return Rejected("one_status_over_its_share")
+    # Over the queries the row ships, not the ones it considered. The coverage preference
+    # above is the mechanism; this is the assertion, and it fires on no cell of the grid.
+    # Kept because the mechanism is a preference: a curriculum where no required claim
+    # ever splits would fall back to the old behaviour silently, and a row no two
+    # semantics disagree about is `status_query` with a longer answer format (#138, #36).
+    _kept_by_claim: Dict[str, List[str]] = {}
+    for (c, s) in gold:
+        _kept_by_claim.setdefault(c, []).append(s)
+    kept_diverging = [c for c in _kept_by_claim
+                      if len({gold[(c, s)] for s in _kept_by_claim[c]}) > 1]
+    if not kept_diverging:
+        return Rejected("no_diverging_claim_kept")
     rng.shuffle(queries)
     lines = [f"{c} under {s}: {gold[(c, s)].lower().replace('_', ' ')}" for c, s in queries]
 
@@ -675,7 +709,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         reference="\n".join(lines),
         metadata={"n_items": len(base), "n_queries": len(queries),
                   "n_clusters": _n_cluster, "semantics": list(sems),
-                  "n_diverging_claims": len(diverging),
+                  "n_diverging_claims": len(kept_diverging),
                   "odd_cycle": bool(_required_claims),
                   "odd_cycle_claims": list(_required_claims),
                   "unshielded_ring": _unshielded,
