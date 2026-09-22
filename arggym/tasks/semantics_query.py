@@ -426,9 +426,14 @@ def _negated_premise(it, ridx):
 def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Rejected]:
     rng = random.Random(stable_seed(seed, level, ordering, "sem"))
     sems = semantics_for(level)
-    n_cluster = 2
+    # The name pool's size, not the theory's cluster count -- that is `_n_cluster` below,
+    # drawn per level from the curriculum. The two were a character apart and the metadata
+    # shipped this one, so `n_clusters` was the constant 2 on every row of the grid, a
+    # value the draw cannot produce at any level (#141).
+    _NAME_POOL_CLUSTERS = 2
 
-    it = iter(_names(stable_seed(seed, level, ordering, "nm"), 40 + n_cluster * 12))
+    it = iter(_names(stable_seed(seed, level, ordering, "nm"),
+                     40 + _NAME_POOL_CLUSTERS * 12))
     ops: List[Operation] = []
     ridx = [0]
     candidates: List[str] = []
@@ -669,7 +674,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         ordering=ordering, level=level,
         reference="\n".join(lines),
         metadata={"n_items": len(base), "n_queries": len(queries),
-                  "n_clusters": n_cluster, "semantics": list(sems),
+                  "n_clusters": _n_cluster, "semantics": list(sems),
                   "n_diverging_claims": len(diverging),
                   "odd_cycle": bool(_required_claims),
                   "odd_cycle_claims": list(_required_claims),
