@@ -20,19 +20,25 @@ from evals.solver import ChatSolver
 
 
 def a_run(tmp_path, url, rows, taskset_file, template="xml_tags", timeout_s=10,
-          retries=0, concurrency=2):
-    """One run on disk, manifest included.
+          retries=0, concurrency=2, sampling=None):
+    """One finished run directory, manifest included.
 
     `timeout_s`, `retries` and `concurrency` are parameters because the latency
     headroom in `metrics.json` is measured against the first and only exists as
     a question because of the second: a request that expires is retried, and
     what that does to the numbers is the thing worth testing.
+
+    `sampling` reaches the manifest through the endpoint. A caller that needs
+    the token cap in `_meta.endpoint` -- `evals/figures.py` draws a line at it --
+    has to put it there that way, because editing `run.json` afterwards would
+    test a file this harness never writes.
     """
     run_dir = os.fspath(tmp_path / "run")
     os.makedirs(run_dir)
     manifest, _ = taskset.load(taskset_file)
     solver = ChatSolver(
-        Endpoint(model="stub", base_url=url, timeout_s=timeout_s, retries=retries),
+        Endpoint(model="stub", base_url=url, timeout_s=timeout_s, retries=retries,
+                 sampling=dict(sampling or {})),
         template=template)
     artifacts.write_json(os.path.join(run_dir, artifacts.RUN), {
         "status": "completed", "taskset": taskset_file,
