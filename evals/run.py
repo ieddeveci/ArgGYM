@@ -27,7 +27,7 @@ from evals import artifacts, taskset, values
 from evals.client import Endpoint
 from evals.prompt import Elicitation
 from evals.solver import ChatSolver
-from evals.types import Attempt, Solver
+from evals.types import SOLVER_RAISED, SOLVER_VALUE_NOT_JSON, Attempt, Solver
 
 
 def _plain(node: Any) -> Dict[str, Any]:
@@ -159,7 +159,8 @@ def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
             except Exception as e:  # noqa: BLE001
                 # A solver that raises is still infrastructure. One bad row must
                 # not cost the rows already paid for.
-                attempt = Attempt(error=f"solver raised: {type(e).__name__}: {e}")
+                attempt = Attempt(error=f"solver raised: {type(e).__name__}: {e}",
+                                  error_kind=SOLVER_RAISED)
             if attempt.value is not None:
                 try:
                     values.check_json(attempt.value, row["id"])
@@ -170,7 +171,9 @@ def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
                     # carries an error, so the item is unmeasured rather than
                     # zero, and `max_error_rate` ends a sweep whose solver does
                     # this on every row.
-                    attempt = dataclasses.replace(attempt, value=None, error=str(e))
+                    attempt = dataclasses.replace(
+                        attempt, value=None, error=str(e),
+                        error_kind=SOLVER_VALUE_NOT_JSON)
             out.write({"id": row["id"], "task": row["task"],
                        "level": row["metadata"]["level"],
                        "ordering": row["metadata"]["ordering"],

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, List, Optional
 
 import pytest
@@ -72,13 +72,25 @@ class StubProvider:
                 reply = handler(body)
                 status = reply.pop("__status__", 200)
                 data = json.dumps(reply).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (BrokenPipeError, ConnectionResetError):
+                    # The client gave up and went away, which is what a handler
+                    # deliberately slower than the timeout is arranged to make
+                    # happen. Answering nobody is the expected end of that
+                    # request, not a failure worth a stack trace per item.
+                    pass
 
-        self._srv = HTTPServer(("127.0.0.1", 0), H)
+        # Threading, so a handler that is deliberately slow does not hold the
+        # next request behind it. A client that gives up on a slow request and
+        # retries is exactly what the timeout tests exercise, and on a
+        # single-threaded server the retry queues behind the sleep it was
+        # trying to escape and times out too.
+        self._srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
         threading.Thread(target=self._srv.serve_forever, daemon=True).start()
 
     @property
