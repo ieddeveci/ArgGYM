@@ -99,6 +99,13 @@ def test_the_checked_in_spec_describes_todays_grid():
     assert s.levels == (3, 6, 9, 12, 15)
     assert len(s.orderings) == 4
     assert len(s.cells) * s.seeds.take == 480
+    # The guard thresholds describe the grid too, and nothing else here reads
+    # them: set min_build_acceptance to 0.9 and every test in the suite still
+    # passes while the next `make freeze` dies on the first cell it reaches that
+    # falls under. The 0.1 is set against the thinnest cell of the grid,
+    # semantics_query at L12 under last-link democratic, which keeps 2
+    # candidates of 14 (#114).
+    assert s.min_build_acceptance == 0.1
 
 
 def test_the_checked_in_spec_matches_this_tree():
