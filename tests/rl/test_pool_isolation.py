@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import importlib.metadata as md
 
-import arggym
 import pytest
 
+import arggym
 from rl.generate import _build_quota_pool, _frozen_index
 
 

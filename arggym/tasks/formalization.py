@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import collections
 import hashlib
 import random
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple, Union
-import collections
-
 
 from arggym.aspic.api import ASPICVerifier
 from arggym.aspic.engine import Operation

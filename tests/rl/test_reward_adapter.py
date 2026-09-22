@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import arggym
-
 from evals import taskset
 from rl.generate import TEMPLATE, prompt_messages
 from rl.reward import arggym_reward
