@@ -16,8 +16,6 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
-import re
-
 
 from evals.types import Attempt
 
@@ -87,25 +85,6 @@ class Endpoint:
                 "retries": self.retries}
 
 
-_THOUGHT_RE = re.compile(
-    r"<thought>(.*?)</thought>",
-    flags=re.IGNORECASE | re.DOTALL,
-)
-
-
-def split_gemini_thought(content: str) -> tuple[str, str]:
-    """Separate Gemini's returned thought summary from the visible completion."""
-    matches = [
-        match.group(1).strip()
-        for match in _THOUGHT_RE.finditer(content)
-        if match.group(1).strip()
-    ]
-
-    reasoning = "\n\n".join(matches)
-    completion = _THOUGHT_RE.sub("", content).strip()
-
-    return completion, reasoning
-
 def reasoning_of(message: Any) -> str:
     """Return reasoning from vLLM/OpenAI-compatible response variants."""
 
@@ -129,19 +108,6 @@ def reasoning_of(message: Any) -> str:
         or extra.get("reasoning_content")
         or ""
     )
-def gemini_thought_summaries_enabled(endpoint: "Endpoint") -> bool:
-    """Whether this endpoint explicitly requested Gemini thought summaries."""
-    try:
-        return (
-            endpoint.extra_body
-            .get("extra_body", {})
-            .get("google", {})
-            .get("thinking_config", {})
-            .get("include_thoughts")
-            is True
-        )
-    except AttributeError:
-        return False
 
 
 class ChatClient:
@@ -230,20 +196,9 @@ class ChatClient:
                     request=recorded,
                 )
 
-            completion = choice.message.content or ""
-            reasoning = reasoning_of(choice.message)
-
-            if (
-                not reasoning
-                and gemini_thought_summaries_enabled(self.endpoint)
-            ):
-                completion, thought_summary = split_gemini_thought(completion)
-                if thought_summary:
-                    reasoning = thought_summary
-
             return Attempt(
-                completion=completion,
-                reasoning=reasoning,
+                completion=choice.message.content or "",
+                reasoning=reasoning_of(choice.message),
                 truncated=reason == "length",
                 finish_reason=reason,
                 usage=(resp.usage.model_dump() if resp.usage else {}),

@@ -35,7 +35,7 @@ class AnswerTemplate:
 
     @property
     def instruction(self) -> str:
-        return f"First, state your reasoning between <thought> and </thought>. Then, give your final answer between {self.open} and {self.close}."
+        return f"Give your final answer between {self.open} and {self.close}."
 
     def wrap(self, body: str) -> str:
         return f"{self.open}\n{body}\n{self.close}"
