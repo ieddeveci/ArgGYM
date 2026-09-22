@@ -184,9 +184,14 @@ class ChatClient:
             refusal = getattr(choice.message, "refusal", None) or ""
 
             if reason not in _ANSWERED or refusal:
-                # Not an answer, so not a score.
+                # Not an answer, so not a score. A refusal recorded as an empty
+                # completion is a zero on every task, which reports the
+                # provider's policy as the model's reasoning. `last` is not that
+                # error: it holds "no attempt made" whenever the first call came
+                # back, which is the usual case here.
                 return Attempt(
-                    error=last,
+                    error=f"provider did not answer: finish_reason={reason!r}"
+                          + (f" refusal={refusal!r}" if refusal else ""),
                     completion=choice.message.content or "",
                     refusal=refusal,
                     finish_reason=reason,
@@ -206,6 +211,10 @@ class ChatClient:
                 attempts=attempt,
                 request=recorded,
             )
+        # The loop `break`s on an API error, so without this the method falls off
+        # the end and hands `None` back to the solver.
+        return Attempt(error=last, latency_s=time.monotonic() - started,
+                       attempts=attempt, request=recorded)
 
 
 def _retryable(exc: Exception) -> bool:
