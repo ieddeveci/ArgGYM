@@ -1,8 +1,22 @@
 """A level-indexed switch has to take both values on the levels we actually export.
 
-Twice now a condition on the level has been constant across the whole exported grid, so
-the branch behind it was written, reviewed and never reached an item: #30 and #69. Both
-were invisible, because a switch that never fires still generates valid items.
+Twice a condition on the level was constant across the whole exported grid, so the branch
+behind it was written, reviewed and never reached an item: #30 and #69. Both were
+invisible, because a switch that never fires still generates valid items.
+
+Both were sampling failures. The grid stepped by 3, so `level % 3` was the constant 0 on
+it and `level % 3 != 0` picked out ten levels the export never asked for. The grid exports
+all fifteen levels now, and that retires the sampling failure outright: a switch keyed on
+the level either fires somewhere the export looks or fires at no level at all. The
+conditions those two issues shipped all vary over the grid today, and
+`test_the_switches_that_shipped_broken_now_reach_an_item` holds the grid to it -- narrow
+the grid back to a step that hides them and that test goes red rather than this bug class
+coming back unannounced.
+
+What the check catches on a grid this wide is the other half of the same defect: a guard
+that fires at no level the curriculum defines, or at every one. `level % 4 == 5` and
+`level >= 20 and level % 3 == 0` are dead branches, `level % 1 == 0` is a guard that
+guards nothing, and none of them is visible in a generated item either.
 
 The check evaluates the condition rather than pattern-matching it, and it evaluates the
 whole guard rather than the innermost comparison, because `level >= 4 and level % 5 == 3`
@@ -10,9 +24,9 @@ varies in isolation and fires at no level the branch can be reached at. Two hole
 both requiring the level to leave the expression: aliasing it through an intermediate
 variable, and offsetting it by a named constant.
 
-GRID is the exported grid and has to stay it. Every condition #30 and #69 shipped varies
-over levels 1-15 and collapses only on the grid -- `level % 3 != 0` is the case -- so
-sweeping the check over every level would retire the bug class it was written for.
+GRID is the exported grid and has to stay it: it is what makes the two readings above one
+test. Today the grid is the whole curriculum, so "constant on the grid" means "dead";
+narrow it and the same line means "never sampled" again.
 """
 from __future__ import annotations
 
@@ -84,24 +98,82 @@ def test_no_condition_on_the_level_is_constant_across_the_grid():
                 collapsed.append(f"{path.name}:{node.lineno}  {ast.unparse(node)} "
                                  f"is {values.pop()} at every exported level")
     assert not collapsed, ("a level switch takes one value on the whole grid, so the branch "
-                           "behind it never ships:\n  " + "\n  ".join(collapsed))
+                           "behind it never ships. The grid exports every level, so this "
+                           "is a guard that fires at no level at all rather than one the "
+                           "export happens not to sample:\n  " + "\n  ".join(collapsed))
 
 
-@pytest.mark.parametrize("src,collapses", [
-    ("shared = level >= 5 and (level % 3 == 2)", True),      # #30 as written
-    ("want_split = (level % 3 != 0)", True),                 # #69 as written
-    ("want_split = (lv % 3 != 0)", True),                    # the same, renamed
-    ("want_split = ((level - 0) % 6 == 1)", True),           # varies in residue, never true
-    ("x = level >= 4 and level % 5 == 3", True),             # only true at an excluded level
-    ("shared = level >= 9 and (level // 3) % 2 == 1", False),  # the #30 fix
-    ("want_split = level % 2 == 0", False),
-])
-def test_the_check_agrees_with_the_cases_it_exists_for(src, collapses):
-    """A guard nobody has seen fail is a guard nobody has tested."""
+#: The conditions #30 and #69 shipped, as they were written. Every one of them fires at
+#: some level between 1 and 15 -- that was never the defect -- and the defect was that the
+#: five-level grid sampled none of those levels.
+SHIPPED_BROKEN = [
+    "shared = level >= 5 and (level % 3 == 2)",       # #30 as written: 5, 8, 11, 14
+    "want_split = (level % 3 != 0)",                  # #69 as written: all but 3, 6, 9, 12, 15
+    "want_split = (lv % 3 != 0)",                     # the same, renamed
+    "want_split = ((level - 0) % 6 == 1)",            # 7 and 13
+    "x = level >= 4 and level % 5 == 3",              # 8 and 13
+]
+
+#: Guards that reach no item on any grid, because they reach no level. These are what the
+#: check still catches now that the grid samples nothing away, and they are the cases that
+#: keep `_constant_over_the_grid` under test.
+DEAD = [
+    "want_split = level % 4 == 5",                    # no residue mod 4 is 5
+    "x = level >= 20 and level % 3 == 0",             # no level is 20
+    "want_split = level % 5 == 0 and level % 5 == 1", # cannot be both
+    "want_split = level % 1 == 0",                    # true everywhere, guards nothing
+]
+
+#: Guards that fire on part of the grid and not the rest, which is all that is asked.
+LIVE = [
+    "shared = level >= 9 and (level // 3) % 2 == 1",  # the #30 fix
+    "want_split = level % 2 == 0",
+]
+
+
+@pytest.mark.parametrize("src", SHIPPED_BROKEN + DEAD + LIVE)
+def test_the_check_reads_the_whole_guard_and_not_a_piece_of_it(src):
+    """A guard nobody has seen fail is a guard nobody has tested.
+
+    This half of the meta-test is about `level_conditions`, which is where the subtlety
+    is: it has to take `level >= 4 and level % 5 == 3` whole rather than the comparison
+    inside it, follow the level through a rename, and see the modulo in `(level // 3) % 2`.
+    None of that depends on which levels the grid exports.
+    """
     found = level_conditions(ast.parse(src))
     assert len(found) == 1, ast.dump(ast.parse(src))
-    node, names = found[0]
-    assert (len(_constant_over_the_grid(node, names)) == 1) is collapses, src
+
+
+@pytest.mark.parametrize("src", DEAD)
+def test_a_guard_that_reaches_no_level_is_flagged(src):
+    node, names = level_conditions(ast.parse(src))[0]
+    assert len(_constant_over_the_grid(node, names)) == 1, (
+        f"{src} takes one value at every level of the grid and the check missed it")
+
+
+@pytest.mark.parametrize("src", LIVE)
+def test_a_guard_that_fires_on_part_of_the_grid_is_not_flagged(src):
+    node, names = level_conditions(ast.parse(src))[0]
+    assert len(_constant_over_the_grid(node, names)) == 2, src
+
+
+@pytest.mark.parametrize("src", SHIPPED_BROKEN)
+def test_the_switches_that_shipped_broken_now_reach_an_item(src):
+    """The grid's receipt for #30 and #69, and the reason this file no longer owns them.
+
+    These five conditions are why the check above exists, and not one of them collapses on
+    today's grid: each fires at some level between 1 and 15, and the grid exports every
+    level between 1 and 15. That is the bug class retired rather than guarded -- the miss
+    took a grid that skipped levels, and there is no longer one.
+
+    Which is why it is asserted here. Narrowing the grid is the one change that could put
+    these back, and it would show up as this test going red on the condition it reopens,
+    naming the issue, instead of as a branch someone notices was never reached.
+    """
+    node, names = level_conditions(ast.parse(src))[0]
+    assert len(_constant_over_the_grid(node, names)) == 2, (
+        f"{src} is constant on the grid {GRID} again; this is how #30 and #69 shipped "
+        f"branches no exported item reached")
 
 
 def test_a_comparison_with_no_level_modulo_is_not_flagged():

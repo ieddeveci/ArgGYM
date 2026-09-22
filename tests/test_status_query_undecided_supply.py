@@ -24,12 +24,12 @@ from arggym.core.curriculum import JUNCTION_START
 from arggym.core.spec import ALL_ORDERINGS, SEEDS
 from arggym.tasks import status_query as sq
 
-#: The curriculum range, not the five exported levels. Every assertion below is a
+#: The curriculum range, which the grid now equals. Every assertion below is a
 #: property of the item the cell built, and `TasksetSpec` accepts any level the
-#: curriculum spans, so the invariant has to cover the range rather than the export.
-#: `status_query` is cheap on every ordering: all 120 cells build in under two
-#: seconds, so the cache pays for the widening and the file ends up faster than it
-#: was on the five levels.
+#: curriculum spans, so the invariant is written against the range rather than the
+#: export and would still hold if the grid narrowed. `status_query` is cheap on every
+#: ordering: all 120 cells build in under two seconds, so the cache pays for the
+#: widening and the file is faster than it was on the five levels it swept before.
 GRID = tuple(range(1, 16))
 CELLS = [(lv, o, s) for lv in GRID for o in ALL_ORDERINGS for s in SEEDS]
 

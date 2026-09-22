@@ -120,11 +120,16 @@ def wants_unshielded_ring(level: int, ordering: str) -> bool:
     first two that build, so which seeds a cell ships is not fixed and a seed-keyed rule
     would realise an uncontrolled fraction.
 
-    One ordering per level and one level per ordering, so the rows carrying a ring come
-    out balanced on both marginals a report breaks out: each ordering carries 2 of its 10
-    rows, each stable-asking level 2 of its 8. Only the level-by-ordering cell is
-    confounded, and nothing reports that cell. The exported levels step by 3, which is
-    what makes `level // 3` a bijection onto the four orderings across them.
+    One ordering per stable-asking level, so a ring is on a quarter of the rows that ask
+    about stable and no more. `level // 3` was written when the grid stepped by 3 and was
+    a bijection from the five exported levels onto the four orderings, which balanced the
+    ordering marginal exactly. The grid exports all fifteen levels now, so the same
+    expression walks each ordering for three levels running and the ten stable-asking
+    levels split 3/3/3/1: every ordering still carries a ring, `last_link_democratic`
+    carries one where the others carry three. Only the level-by-ordering cell is
+    confounded, and nothing reports that cell. Rebalancing the rotation would move
+    theories and gold, so it is a curriculum decision rather than a fix;
+    tests/test_stable_says_what_sceptical_preferred_cannot.py pins the table as it stands.
     """
     if STABLE not in semantics_for(level):
         return False
@@ -319,8 +324,8 @@ def _odd_cycle(it, ridx, rng, unshielded: bool) -> Tuple[List[Operation], List[s
     This is the cluster that makes `stable` a different question from `sceptical
     preferred`. The two names read the same all/any/none formula off their own extension
     family, so they answer differently only where the families differ, and nothing the
-    generator built made them differ: preferred equalled stable on 40 of 40 exported cells
-    and 360 of 360 in a wider sweep (#77).
+    generator built made them differ: preferred equalled stable on all 40 cells the grid
+    exported then, and 360 of 360 in a wider sweep (#77).
 
     Odd cycles are the whole of the difference. Dung's coherence result says an argument
     graph with no odd-length cycle has its preferred and stable extensions equal, so

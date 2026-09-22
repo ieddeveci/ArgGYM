@@ -16,6 +16,7 @@ from typing import Any, Dict, NamedTuple, Optional
 import pytest
 
 from arggym.core.curriculum import LAST_LINK, WEAKEST_LINK
+from arggym.core.spec import LEVELS
 
 from .registry import MODES
 
@@ -34,7 +35,11 @@ class Cell(NamedTuple):
 
 
 FAST_GRID = [(level, ordering, 0) for level in (3, 6, 9) for ordering in ORDERINGS]
-FULL_GRID = [(level, ordering, seed) for level in (3, 6, 9, 12, 15)
+# The level axis comes from the spec; restating it here is how a grid and a suite drift
+# apart, which is #30. The ordering axis is sampled on purpose -- the elitist member of
+# each family -- because these tests are about the item a builder produces and the
+# democratic readings are covered where they change an answer.
+FULL_GRID = [(level, ordering, seed) for level in LEVELS
              for ordering in ORDERINGS for seed in (0, 1)]
 
 # Cells whose generator is known to return None. A listed cell that does generate fails

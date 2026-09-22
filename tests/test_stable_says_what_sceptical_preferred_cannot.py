@@ -2,10 +2,10 @@
 
 Both names read the same all/any/none formula off their own extension family
 (`semantics_query.status_under`), so they answer differently only where the families
-differ. No cluster built anything that made them differ: preferred equalled stable on 40
-of 40 exported cells and 360 of 360 in a wider sweep, `no stable extension` never
-occurred, and over every queried claim the two names disagreed zero times -- `stable` was
-`sceptical preferred` under a second name (#77).
+differ. No cluster built anything that made them differ: preferred equalled stable on all
+40 cells the grid exported then and 360 of 360 in a wider sweep, `no stable extension`
+never occurred, and over every queried claim the two names disagreed zero times --
+`stable` was `sceptical preferred` under a second name (#77).
 
 Odd defeat cycles are the whole of the difference. Dung's coherence result says a graph
 with no odd-length cycle has its preferred and stable extensions equal, so a generator
@@ -94,7 +94,7 @@ def test_a_ring_over_both_branches_leaves_no_stable_extension(ordering, seed):
 
 
 def test_the_two_extension_families_differ_wherever_stable_is_asked(grid):
-    """The measurement #77 opened on, read off the theory: equal on 40 of 40."""
+    """The measurement #77 opened on, read off the theory: equal on all 40 cells then."""
     for cell in ASKS_STABLE:
         verifier = ASPICVerifier.from_operations(list(grid[cell].base_ops), ordering=cell[1])
         preferred = {frozenset(e) for e in verifier.preferred_conclusions()}
@@ -225,26 +225,79 @@ def test_every_cluster_kind_reaches_a_builder_of_its_own(monkeypatch):
         f"{1 / len(MENU):.0%}, so it is absorbing a kind the dispatch forgot")
 
 
-def test_the_unattacked_ring_is_balanced_over_levels_and_orderings():
-    """One ordering per level and one level per ordering, over the levels asking stable.
+#: Which ordering carries the unattacked ring at each level that asks about stable, read
+#: off `wants_unshielded_ring`. Ten levels ask (6 and up), and `ALL_ORDERINGS[(level // 3)
+#: % 4]` walks the four of them in blocks of three, so the tenth level starts a fourth
+#: block that the curriculum ends before it fills. Pinned as a table because the shape of
+#: it is the thing under test and no formula states it more clearly than the rows do.
+RING = {
+    6: "weakest_link_elitist", 7: "weakest_link_elitist", 8: "weakest_link_elitist",
+    9: "weakest_link_democratic", 10: "weakest_link_democratic",
+    11: "weakest_link_democratic",
+    12: "last_link_elitist", 13: "last_link_elitist", 14: "last_link_elitist",
+    15: "last_link_democratic",
+}
 
-    Balanced on both marginals a report breaks out: each ordering carries 2 of its 10 grid
-    rows, each stable-asking level 2 of its 8. Only the level-by-ordering cell is
-    confounded and nothing reports that. Not keyed on the seed, because
-    `tasksets/standard.yaml` scans up to 40 seeds a cell and keeps the first two that
-    build, so a seed-keyed rule realises an uncontrolled fraction.
+
+def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
+    """One ordering per stable-asking level, and no ordering left out or left alone.
+
+    The ring answers `no stable extension` for every claim in its item, so it has to be
+    rare enough that the answer stays unguessable and spread enough that it does not land
+    on one column of a report. One ordering per level is the rarity: three of the four
+    orderings at every stable-asking level build an ordinary shielded ring, which caps the
+    ring at a quarter of the stable rows. Reaching all four orderings is the spread: an
+    ordering that carried none would have its `stable` column built from a different
+    population than the rest, and a per-ordering mean would read that as an ordering effect.
+
+    Not keyed on the seed, because `tasksets/standard.yaml` scans up to 40 seeds a cell and
+    keeps the first two that build, so a seed-keyed rule realises an uncontrolled fraction.
+
+    The spread is no longer even, and that is a real cost of exporting every level. The
+    rotation is `ALL_ORDERINGS[(level // 3) % 4]`, which was a bijection from the five
+    exported levels onto the four orderings back when the grid stepped by 3. Level by
+    level it instead walks each ordering for three levels running, and the ten
+    stable-asking levels split 3/3/3/1 rather than the 3/3/2/2 that ten rows allow. So
+    `last_link_democratic` carries the ring on one level where the others carry it on
+    three, and the level-by-ordering cell is confounded in blocks rather than scattered.
+    Nothing reports that cell, and the marginals are still non-empty, so the ring stays
+    readable -- but rebalancing the rotation for a fifteen-level grid is a curriculum
+    change, it would move theories and gold, and it belongs in its own issue.
     """
-    levels = [lv for lv in LEVELS if sq.STABLE in sq.semantics_for(lv)]
+    asks = [lv for lv in range(1, 16) if sq.STABLE in sq.semantics_for(lv)]
     chosen = {lv: [o for o in ALL_ORDERINGS if sq.wants_unshielded_ring(lv, o)]
-              for lv in levels}
-    assert all(len(v) == 1 for v in chosen.values()), chosen
-    flat = [v[0] for v in chosen.values()]
-    assert len(set(flat)) == len(flat), f"an ordering carries the ring twice: {chosen}"
+              for lv in asks}
+    more_than_one = {lv: v for lv, v in chosen.items() if len(v) != 1}
+    assert not more_than_one, (
+        f"a stable-asking level does not carry the ring on exactly one ordering: "
+        f"{more_than_one}")
+    assert {lv: v[0] for lv, v in chosen.items()} == RING, chosen
+    carried = collections.Counter(v[0] for v in chosen.values())
+    missing = [o for o in ALL_ORDERINGS if not carried[o]]
+    assert not missing, (
+        f"{missing} carries the ring at no level, so its `stable` column is built from a "
+        f"different population than the other orderings': {chosen}")
+    assert max(carried.values()) * 2 <= len(asks), (
+        f"one ordering carries {max(carried.values())} of the {len(asks)} rings, so most "
+        f"of what `stable` answers under it comes from ring items and its column is a "
+        f"measurement of the ring rather than of the ordering: {dict(carried)}")
     for level in range(1, 16):
-        if sq.STABLE in sq.semantics_for(level):
+        if level in chosen:
             continue
         assert not any(sq.wants_unshielded_ring(level, o) for o in ALL_ORDERINGS), (
             f"level {level} never asks about stable, so a ring there asks nothing")
+
+
+def test_the_grid_exports_every_level_that_carries_a_ring():
+    """A ring at a level the grid skips is a ring no row carries.
+
+    The table above is over the curriculum and the rows a report reads are the exported
+    ones, so the balance argument holds only while the two agree. That is the same #30
+    dependency the rest of this suite carries: a schedule keyed on the level and a grid
+    that skips levels can disagree without either of them looking wrong.
+    """
+    assert set(RING) <= set(LEVELS), (
+        f"levels {sorted(set(RING) - set(LEVELS))} carry a ring the grid never exports")
 
 
 def test_no_stable_extension_is_answered_without_becoming_the_answer(grid):

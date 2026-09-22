@@ -24,7 +24,7 @@ def load(path: str, verify: bool = True) -> Tuple[Dict[str, Any], List[Dict[str,
     strings match", not "are these the questions that hash names": a file
     truncated to eight lines loads seven rows, passes a string comparison, and
     gets a full taskset's hash printed beside numbers measured on seven items.
-    Blake2b over 480 rows costs milliseconds.
+    Blake2b over 1440 rows costs milliseconds.
 
     A file with no manifest line is refused, because a taskset with no hash
     disables every check downstream at once and does it quietly: `score.py`

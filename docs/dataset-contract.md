@@ -394,7 +394,7 @@ arggym: "2.0.0"
 pyarg: "2.0.2"
 theory_schema: 1
 tasks: [preference_construction, counter_argument, ...]
-levels: [3, 6, 9, 12, 15]
+levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 orderings: [last_link_elitist, last_link_democratic,
             weakest_link_elitist, weakest_link_democratic]
 seeds:

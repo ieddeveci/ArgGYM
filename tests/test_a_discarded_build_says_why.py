@@ -5,7 +5,8 @@ refuses at five distinct sites and the manifest recorded all five as
 `build_returned_none`.
 
 The count that matters is per build call, not per failed seed. A sweep of 720
-grid seeds found `make_item` returning `None` for none of them, so recording
+grid seeds -- every task at levels 3, 6, 9, 12 and 15, four orderings, three
+seeds -- found `make_item` returning `None` for none of them, so recording
 failed seeds alone would ship a feature that prints nothing, while
 `semantics_query` at level 12 quietly spends 30 candidates on 4 items. That gap
 is what `test_the_export_counts_what_a_filled_cell_discarded` pins: a cell at
@@ -61,8 +62,10 @@ def test_make_item_still_answers_none_rather_than_a_sentinel(monkeypatch):
 def test_the_export_counts_what_a_filled_cell_discarded(monkeypatch, tmp_path):
     """Every seed succeeds, and two candidates in three are still thrown away.
 
-    Seed acceptance reads 1.00 here, which is what it reads on all 240 cells of
-    the standard grid. The build-level numbers are the ones carrying a signal.
+    Seed acceptance reads 1.00 here, which is what it read on all 240 cells of
+    the standard grid when the grid was five levels wide. The build-level numbers
+    are the ones carrying a signal, and they are the ones the widened grid can
+    move: it is 720 cells now and the guard thresholds were set against 240.
     """
     real, seen = cc.build, {"n": 0}
 

@@ -22,10 +22,12 @@ from typing import Any, Dict, Optional, Tuple
 
 ALL_ORDERINGS = ("last_link_elitist", "last_link_democratic",
                  "weakest_link_elitist", "weakest_link_democratic")
-# The evaluated grid. A generator whose curriculum disagrees with these levels has a
-# feature nothing exercises, which is how #30 stayed hidden, so read it from here
-# rather than restating it.
-LEVELS = (3, 6, 9, 12, 15)
+# The evaluated grid: every level the curriculum defines. A generator whose curriculum
+# disagrees with these levels has a feature nothing exercises, which is how #30 stayed
+# hidden, so read it from here rather than restating it. Exporting all fifteen is what
+# closed that gap -- a level-indexed switch can no longer fire only at levels the grid
+# skips, because the grid skips none.
+LEVELS = tuple(range(1, 16))
 SEEDS = (0, 1)
 
 
@@ -49,7 +51,7 @@ class SeedPolicy:
 @dataclass(frozen=True)
 class TasksetSpec:
     tasks: Tuple[str, ...]
-    levels: Tuple[int, ...] = (3, 6, 9, 12, 15)
+    levels: Tuple[int, ...] = LEVELS
     orderings: Tuple[str, ...] = ALL_ORDERINGS
     seeds: SeedPolicy = field(default_factory=SeedPolicy)
     profile: str = "FULL"
