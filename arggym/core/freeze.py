@@ -63,6 +63,24 @@ PROMPT_VERSION = 9
 #: way the bloat factor does (`docs/dataset-contract.md`): the prompt hash records
 #: that the question changed, and this records that an unchanged question is now
 #: scored differently. #89's name-collision rule is such a rule.
+#:
+#: Version 5 is #166, and it moves two scorers in opposite directions.
+#:
+#: `formalization.score_value` compares structural keys from `_alpha_shape_keys`
+#: rather than identifier text, so an answer's rule names no longer have to match
+#: the reference's -- including where a name is referenced, in an undercut or a rule
+#: preference. That admits answers version 4 refused.
+#:
+#: `defeat_diagnosis` tightens. A survival explanation earns credit only where its
+#: failure point was matched including kind (`defeat_diagnosis.py:546-553`);
+#: `exact_match` now requires set equality of the `(defeated_at, defeater,
+#: survives_because)` triples rather than a survival score above a threshold
+#: (`:591-595`); and supplying `survives_because` where the gold carries none is a
+#: hard zero, `unexpected_survival_reason` (`:534-542`). That refuses answers
+#: version 4 scored. The prompt gained a paragraph naming what each field holds in
+#: the same change, which is `PROMPT_VERSION` 8's second meaning -- so a row scored
+#: under 5 was also asked differently, and the two constants have to be read
+#: together for anything measured before 2026-09-22.
 SCORING_VERSION = 5
 
 
