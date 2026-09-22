@@ -55,7 +55,13 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: stalled at five queries (#171), and the coverage pass now spends its slot on a
 #: claim that splits where one is available (#138). Both change which claims a row
 #: asks, on all 120 of its rows. No other task moves.
-PROMPT_VERSION = 9
+#:
+#: Version 10 moves `counter_argument` and its strict arm: every item now builds at
+#: least two target-reaching chains, and the strict arm no longer draws zero strict
+#: rules at levels 3 to 5 (#167). That rewrites the theory of both arms at levels 1 and
+#: 2 and the strict arm's theory on the 14 cells at levels 3 to 5 where the draw fell,
+#: 46 rows in all.
+PROMPT_VERSION = 10
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:
