@@ -68,8 +68,8 @@ on fresh seeds from the same spec. A fixed dataset cannot offer that.
 | License | MIT |
 
 The grid is `tasksets/standard.yaml`. Ten seeds give each (task, level) 30
-items, which is what a per-task level curve needs; at two, a cell mean moves in
-steps of 0.17. `tasksets/lite.yaml` is the same grid at two seeds, for a model
+items, which is what a per-task level curve needs; at two, a (task, level) mean
+over 6 items moves in steps of 0.17. `tasksets/lite.yaml` is the same grid at two seeds, for a model
 ranking at a fifth of the cost. Its rows are the first two of every standard
 cell, so a lite score is a score on a subset of the standard release rather than
 on another draw.
@@ -97,14 +97,14 @@ task, and on four of them it is worth a lot. Measured at level 3:
 | `claim_chain` | 0.190 | hand the theory back |
 | `perturbation` | 0.153 | "overruled" for every claim of the original theory |
 | `defeat_diagnosis` | 0.131 | the line `status: overruled`, and no failure points |
-| the six engine-checked tasks | 0.000 | no fixed answer reaches a goal |
+| the five engine-checked tasks | 0.000 | no fixed answer reaches a goal |
 
 The floor is the best of what the search tried, so it is a lower bound on what
 an uninformed answer gets, and every one is printed with the strategy that
 reached it. That is what makes a zero readable: `formalization` reported
 `0.000 empty` while an answer shaped like a theory was worth 0.22, and only the
 strategy name said the search had found nothing fitting the answer format rather
-than nothing that pays (#103). On the six above, everything the search tries
+than nothing that pays (#103). On the five above, everything the search tries
 scores zero, and the tie goes to `empty` because it is listed first.
 
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report

@@ -298,7 +298,7 @@ def _retryable(exc: Exception) -> bool:
     Narrow on purpose. Anything without a status code used to be retried, which
     swept in `ImportError` from a missing dependency and `TypeError` from a bad
     sampling value: every row then burned three attempts and fifteen seconds of
-    backoff on a fault no retry can fix, and 1440 of those look like a provider
+    backoff on a fault no retry can fix, and a taskset's worth of those look like a provider
     outage rather than a typo.
     """
     status = getattr(exc, "status_code", None)

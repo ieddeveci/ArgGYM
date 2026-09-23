@@ -122,8 +122,8 @@ class CellReport:
         """Items per candidate built, which is the rate a thin cell shows up in.
 
         Seed acceptance hides the retry loop: every cell of the grid fills, and
-        `semantics_query` at level 12 under `last_link_democratic` still reaches
-        it by discarding 26 candidates out of 30.
+        `perturbation` at level 6 under `last_link_elitist` still reaches it by
+        discarding 34 candidates out of 44 at `take: 10`.
         """
         return len(self.seeds_used) / self.build_calls if self.build_calls else 0.0
 

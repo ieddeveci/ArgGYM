@@ -473,7 +473,8 @@ said 55 where 10 suffice, so its bloat gate admitted five times what it should.
 The freeze skips that seed and names it, the way it names a seed that built
 nothing, and the skip carries the candidate rejections that seed had already
 recorded. The standard grid skips five, all `preference_construction` under
-weakest-link democratic at levels 9, 12, 14 and 15. It is counted in `build_rejections`, and so in
+weakest-link democratic at levels 9, 12, 14 and 15. A `minimality_unproven` skip is counted in
+`build_rejections`, and so in
 `n_rejected`, beside `build`'s own refusals: one histogram answers what the cell
 threw away and why, where two would make every reader add them up. The cost is
 that neither field is `build`'s alone any more -- of the 998 candidates

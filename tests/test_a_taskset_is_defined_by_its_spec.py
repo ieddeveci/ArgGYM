@@ -127,7 +127,7 @@ def test_lite_is_standard_at_two_seeds():
 
 @pytest.mark.parametrize("task,level,ordering", [
     # Two cells whose retry loop discards candidates, which is where a scan could
-    # stop agreeing with itself: 34 of 44 at take 10 on the first, 30 of 41 on the
+    # stop agreeing with itself: 34 of 44 at take 10 on the first, 31 of 41 on the
     # second.
     ("perturbation", 6, "last_link_elitist"),
     ("semantics_query", 13, "weakest_link_democratic"),
@@ -136,7 +136,8 @@ def test_a_lite_cell_is_the_first_two_rows_of_its_standard_cell(task, level, ord
     # A cell takes the first seeds that build, scanning from `start`, and an item
     # is a function of (task, level, ordering, seed) alone. So lite's rows are a
     # prefix of standard's -- same ids, same content. Checked here on two cells;
-    # the full grid was checked by freezing both files.
+    # the full grid was checked once by filling every cell at both takes and
+    # comparing, which is too slow to run here.
     from arggym.core.freeze import fill_cell
 
     standard = load(str(TASKSETS / "standard.yaml"))

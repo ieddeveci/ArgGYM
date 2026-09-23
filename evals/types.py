@@ -112,8 +112,8 @@ class Attempt:
     #: cost in wall time.
     #:
     #: `None`, not `0.0`, when nothing timed it. A solver is free to be a
-    #: symbolic procedure with no clock in it, and a run of 1440 such rows
-    #: publishing a 95th-percentile latency of zero seconds would report 1440
+    #: symbolic procedure with no clock in it, and a run of thousands of such rows
+    #: publishing a 95th-percentile latency of zero seconds would report that many
     #: measurements that were never taken as the healthiest endpoint on record.
     latency_s: Optional[float] = None
     #: The slowest single request made for this row, which is the quantity

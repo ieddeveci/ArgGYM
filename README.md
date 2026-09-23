@@ -4,7 +4,7 @@ A procedural benchmark and RL environment for defeasible reasoning, over ASPIC+ 
 semantics. Every item is built by construction and checked against the engine, so the gold answer is
 never asserted, it is verified.
 
-Twelve tasks, five evaluated levels, four strength orderings. The generator is the product; a frozen
+Eleven released tasks, fifteen levels, three strength orderings. The generator is the product; a frozen
 taskset is one dump of it.
 
 ```
@@ -210,7 +210,7 @@ prompt, curriculum and gold construction. They share `core/` but not each other.
 | `semantics_query.py` | State the status of each claim under the semantics named beside it: grounded, sceptical or credulous preferred, stable, or eager. The same theory yields different answers under different semantics, so a model that knows only the grounded extension cannot score by default. |
 | `attack_defense.py` | Three modes. **attack**: make a justified claim overruled. **defence**: make an attacked claim justified. **attack_defense**: both at once on a shared structure, where the naive attack sabotages the defence. |
 | `perturbation.py` | Given a theory and a set of additions, predict which claims change status and to what. Tests prediction rather than action, and requires distinguishing a cascade from a survivor. |
-| `counter_argument.py` | Make a claim's *contrary* justified -- which destroying its support does not achieve. Also provides the strict-permitted ablation, where a strict rule wins unconditionally and the question becomes whether the model finds the cheapest answer. |
+| `counter_argument.py` | Make a claim's *contrary* justified -- which destroying its support does not achieve. Also provides the strict-permitted ablation, where a strict rule wins unconditionally. It is built and tested but not released: its gold is a fixed two-step recipe (see `docs/dataset-card.md`). |
 | `preference_construction.py` | Move claims to required statuses using **only** preference directives. Isolates the preference machinery: no undercut, no new argument, only re-weighting. |
 | `claim_chain.py` | Write all and only the directives forming the line that justifies a claim. Decoys reach the same claim but are defeated; the true line may itself be attacked yet reinstated, so neither "the unattacked line" nor "any path" works. |
 | `defeat_diagnosis.py` | A claim is not justified -- say why. Names every failure point, its defeater, the kind of attack, and why that defeater survives. The complement to `claim_chain`: extraction has a partner in diagnosis. |

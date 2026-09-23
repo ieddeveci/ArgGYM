@@ -73,8 +73,8 @@ seeds:
   #
   # Ten gives each (task, level) 30 items, one per seed and ordering, so the grid
   # is sized for a per-task level curve and not only for a ranking: at two seeds a
-  # cell mean moves in steps of 0.17, and on near-binary scores a difference
-  # between adjacent levels is one flipped item (#132).
+  # (task, level) mean over 6 items moves in steps of 0.17, and on near-binary
+  # scores a difference between adjacent levels is one flipped item (#132).
   take: 10
   # How far the export may look for those items. The deepest scan any cell needs
   # is twelve seeds, so 40 is a generous bound; a cell that needs it is a cell
