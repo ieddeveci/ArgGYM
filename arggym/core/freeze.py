@@ -99,7 +99,21 @@ PROMPT_VERSION = 12
 #: the same change, which is `PROMPT_VERSION` 8's second meaning -- so a row scored
 #: under 5 was also asked differently, and the two constants have to be read
 #: together for anything measured before 2026-09-22.
-SCORING_VERSION = 5
+#:
+#: Version 6 moves `formalization.score_value` twice.
+#:
+#: `success` requires the answer's theory to give the same status as the reference to
+#: every atom the reference names, in both polarities, `UNSATISFIABLE` included
+#: (#190). It used to check only the queried literals, whose statuses the question
+#: prints, so an answer built from those printed statuses succeeded on every row
+#: without formalising the text, and an undercut written as a rebuttal usually
+#: succeeded too. Scores do not move for this half.
+#:
+#: `type_score` is the F1 of the axiom and strict decisions, where it used to be their
+#: recall (#191). An axiom or strict directive the gold does not have now costs
+#: precision, so promoting every premise to an axiom no longer keeps a type score of
+#: 1.0. Rows whose gold has no axiom and no strict rule still carry no type term.
+SCORING_VERSION = 6
 
 
 @dataclass

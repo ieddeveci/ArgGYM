@@ -142,7 +142,10 @@ shipped grid against 0.461 for the best single constant (#95).
 **`success` and `mean_score` are not the same question.** For the construction
 tasks `success` means every goal met with the theory consistent; economy is a
 separate multiplier on top. A model can succeed at every item and still score
-0.6 by being wasteful.
+0.6 by being wasteful. For `formalization`, `success` means the theory gives
+every literal the reference names the status the reference gives it, not only
+the literals the question asks about; the score adds the directive shape and the
+axiom and strict decisions, graded for both promotion and demotion.
 
 **Format failures are reported separately from reasoning failures.** An answer
 that could not be read and an answer that was wrong are different events, and

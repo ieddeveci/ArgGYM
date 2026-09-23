@@ -531,6 +531,22 @@ def _alpha_shape_keys(ops: Sequence[Operation]):
 
     return [op_key(o) for o in ops]
 
+def _named_literals(ops: Sequence[Operation]) -> List[str]:
+    """Every atom a theory names, in both polarities: premise and axiom contents and
+    rule antecedents and consequents. Rule names are not atoms, so the `-r` of an
+    undercut contributes nothing."""
+    names = {o.name for o in ops if o.kind in ("defeasible", "strict")}
+    atoms = set()
+    for o in ops:
+        if o.kind in ("premise", "axiom"):
+            atoms.add(o.content.lstrip("-"))
+        elif o.kind in ("defeasible", "strict"):
+            for lit in (*o.antecedents, o.consequent):
+                if lit.lstrip("-") not in names:
+                    atoms.add(lit.lstrip("-"))
+    return sorted(atoms) + sorted("-" + a for a in atoms)
+
+
 def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
     ops = list(ops)
     diag: Dict = {"n_parsed": len(ops), "n_unparseable": 0, "behavioural": None,
@@ -580,10 +596,19 @@ def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
             for k, n in typed_gold.items()
         )
 
-        type_score = got_types / len(contested_keys)
+        # F1 over the axiom and strict decisions: recall against the gold's, precision
+        # against every axiom and strict directive the answer wrote. Recall alone let an
+        # answer promote every premise to an axiom at no cost here (#191).
+        written = sum(1 for o in ordered if o.kind in ("axiom", "strict"))
+        t_rec = got_types / len(contested_keys)
+        t_prec = got_types / written if written else 0.0
+        type_score = 0.0 if got_types == 0 else 2 * t_prec * t_rec / (t_prec + t_rec)
 
         diag["type_decisions_total"] = len(contested_keys)
         diag["type_decisions_correct"] = got_types
+        diag["type_decisions_written"] = written
+        diag["type_precision"] = round(t_prec, 4)
+        diag["type_recall"] = round(t_rec, 4)
     else:
         type_score = None
 
@@ -591,17 +616,27 @@ def score_value(ops: Sequence[Operation], item: FItem) -> ScoreResult:
         total = round(0.4 * behavioural + 0.6 * shape, 4)
     else:
         total = round(0.25 * behavioural + 0.35 * shape + 0.40 * type_score, 4)
-    # Success is behavioural equivalence alone. The prompt states its own success
-    # condition behaviourally ("Under a correct formalization: ..."), so a theory that
-    # reproduces every queried status is what was asked for, whatever names and groupings
-    # it used; requiring shape_f1 == 1.0 would demand the reference's exact directive
-    # multiset (docs/dataset-contract.md, section 5).
+    # Success is behavioural equivalence with the reference on every literal it names,
+    # both polarities, UNSATISFIABLE included. The queried literals alone are not enough:
+    # the question prints their statuses, so one or two directives per printed status
+    # reproduce them without formalising anything, and a rebuttal written for an
+    # undercut agrees on them too (#190). Names and groupings stay free; requiring
+    # shape_f1 == 1.0 would demand the reference's exact directive multiset
+    # (docs/dataset-contract.md, section 5).
     exact_behaviour = behavioural >= 0.999
+    named = _named_literals(item.reference_ops)
+    gold_named = status_map(item.reference_ops, named, item.ordering)
+    got_named = status_map(ordered, named, item.ordering)
+    mismatched = [l for l in named if gold_named.get(l) != got_named.get(l)]
+    behaves_like_reference = exact_behaviour and bool(gold_named) and not mismatched
+    diag["behaves_like_reference"] = behaves_like_reference
+    diag["mismatched_literals"] = [
+        f"{l}: {got_named.get(l)} (reference {gold_named.get(l)})" for l in mismatched][:6]
     diag.update(directives_f1=round(shape, 4), directives_correct=inter,
                 directives_gold=sum(gset.values()), directives_written=sum(pset.values()),
                 type_score=None if type_score is None else round(type_score, 4),
                 shape_f1=round(shape, 4), exact_behaviour=exact_behaviour)
-    return ScoreResult(total, exact_behaviour, "ok", diag)
+    return ScoreResult(total, behaves_like_reference, "ok", diag)
 
 
 def make_item_report(level: int, seed: int, ordering: str = LAST_LINK,

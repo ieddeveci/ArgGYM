@@ -48,3 +48,65 @@ def test_one_flipped_preference_lowers_shape_f1(item, kind):
     result = formalization.score(render(ops), item)
     assert result.diagnostics["shape_f1"] < 1.0, f"flipping {formalization.render_op(o)} went unnoticed"
     assert result.diagnostics["directives_f1"] < 1.0
+
+
+# `type_score` is an F1 over the axiom and strict decisions (#191). Recall alone let an
+# answer promote every premise to an axiom and keep a type_score of 1.0. The cell has a
+# gold axiom and four premises and no premise preference, so promoting a premise changes
+# no preference's meaning.
+@pytest.fixture(scope="module")
+def typed_item():
+    it = formalization.make_item(3, 0, formalization.LAST_LINK)
+    assert it is not None, "no item generated"
+    kinds = [o.kind for o in it.reference_ops]
+    assert "axiom" in kinds and kinds.count("premise") >= 2 and "prefer_premise" not in kinds
+    return it
+
+
+def test_reference_keeps_a_type_score_of_one(typed_item):
+    result = formalization.score(render(typed_item.reference_ops), typed_item)
+    assert result.score == pytest.approx(1.0)
+    assert result.diagnostics["type_score"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("how_many", ["one", "all"])
+def test_promoting_premises_to_axioms_lowers_type_score(typed_item, how_many):
+    ops = list(typed_item.reference_ops)
+    premises = [i for i, o in enumerate(ops) if o.kind == "premise"]
+    for i in premises[:1] if how_many == "one" else premises:
+        ops[i] = Operation(kind="axiom", content=ops[i].content)
+
+    result = formalization.score(render(ops), typed_item)
+    assert result.diagnostics["type_score"] < 1.0, \
+        f"promoting {how_many} premise(s) to axioms cost nothing in type_score"
+    assert result.diagnostics["type_precision"] < 1.0
+    assert result.diagnostics["type_recall"] == pytest.approx(1.0)
+
+
+def _demote(o):
+    if o.kind == "axiom":
+        return Operation(kind="premise", content=o.content)
+    return Operation(kind="defeasible", name=o.name, antecedents=o.antecedents,
+                     consequent=o.consequent)
+
+
+def test_demoting_an_axiom_lowers_type_recall(typed_item):
+    ops = list(typed_item.reference_ops)
+    i = next(j for j, o in enumerate(ops) if o.kind == "axiom")
+    ops[i] = _demote(ops[i])
+
+    result = formalization.score(render(ops), typed_item)
+    assert result.diagnostics["type_recall"] < 1.0
+    assert result.diagnostics["type_precision"] == pytest.approx(1.0)
+    assert result.diagnostics["type_score"] < 1.0
+
+
+def test_an_answer_with_no_axiom_or_strict_rule_scores_zero_type(typed_item):
+    ops = [_demote(o) if o.kind in ("axiom", "strict") else o for o in typed_item.reference_ops]
+
+    result = formalization.score(render(ops), typed_item)
+    assert result.reason == "ok"
+    assert result.diagnostics["type_decisions_written"] == 0
+    assert result.diagnostics["type_score"] == 0.0
+    assert result.diagnostics["type_precision"] == 0.0
+    assert result.diagnostics["type_recall"] == 0.0
