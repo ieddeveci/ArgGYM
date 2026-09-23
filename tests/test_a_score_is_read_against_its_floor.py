@@ -53,8 +53,8 @@ def rows(tmp_path_factory):
     # Four orderings, for eight rows a task. A fitted map is admitted only while
     # it stays far smaller than the coordinates it answers, and two rows cannot
     # pay for one constant per semantics. The margin is thin on purpose and
-    # worth knowing when this fixture is edited: 44 asked coordinates over two
-    # semantics is 22.0 per entry against a threshold of 20. Drop an ordering
+    # worth knowing when this fixture is edited: 49 asked coordinates over two
+    # semantics is 24.5 per entry against a threshold of 20. Drop an ordering
     # and three tests below stop measuring a fitted floor -- loudly, since they
     # assert the strategy by name.
     spec = TasksetSpec(tasks=TASKS, levels=(3,), orderings=ALL_ORDERINGS,
@@ -153,9 +153,9 @@ def test_answering_justified_to_everything_pays_on_the_query_tasks(rows):
     got = floors(rows)
     # `semantics_query` asks under several semantics at once, and the status
     # that pays differs between them: over the shipped grid one constant scores
-    # 0.459 and one constant per semantics 0.671, so a floor from one constant
-    # reported 0.54 of room above chance where there is 0.33 (#95).
-    assert got["semantics_query"]["floor"] > 0.7, got["semantics_query"]
+    # 0.461 and one constant per semantics 0.657, so a floor from one constant
+    # would report 0.54 of room above chance where there is 0.34 (#95).
+    assert got["semantics_query"]["floor"] > 0.6, got["semantics_query"]
     assert got["status_query"]["floor"] > 0.2, got["status_query"]
 
 

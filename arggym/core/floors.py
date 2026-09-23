@@ -20,8 +20,8 @@ past it there is no stopping point short of a full solver.
 One constant for the whole item is not the widest fixed map that line allows.
 Where the answer key carries a component the task holds fixed -- `semantics_query`
 asks its claims under as many as five semantics at once -- the answer a reader
-would reach for is one constant per semantics, and searching one constant per
-item put that floor at 0.459 where it is 0.671 (#95).
+would reach for is one constant per semantics. Over the shipped grid, searching
+one constant per item puts that floor at 0.461 where it is 0.657 (#95).
 """
 from __future__ import annotations
 

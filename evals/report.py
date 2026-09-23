@@ -5,9 +5,9 @@
 Two rules and a definition, all from `docs/dataset-contract.md` section 10.
 
 Chance floors are printed beside the scores, because a score means nothing
-without the number an uninformed answer gets: at level 3 `semantics_query` sits
-at 0.806 and `status_query` at 0.375, so a model scoring 0.45 on the first is
-doing worse than answering the same thing every time.
+without the number an uninformed answer gets: on the level-3 rows of the lite grid
+`semantics_query` sits at 0.727 and `status_query` at 0.375, so a model scoring 0.45
+on the first is doing worse than answering the same thing every time.
 
 There is no overall mean. Metrics of four kinds, one per task, with floors spanning half
 the range, do not average into a quantity; the number that comes out moves mostly

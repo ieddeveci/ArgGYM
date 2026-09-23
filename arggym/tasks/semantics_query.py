@@ -42,7 +42,22 @@ def _is_last(ordering: str) -> bool:
 MAX_DIRECTIVES = 26
 
 MAX_EAGER_ARGUMENTS = 32
-MAX_STATUS_SHARE = 0.45
+# The most of one semantics' queries in an item that one status may take, wherever the
+# item asks that semantics `MIN_ASKS_FOR_SHARE` times or more. The trim below enforces it
+# and the row it ships is checked again. It is counted per semantics because a count over
+# the whole item can balance while each semantics answers one word: counted that way, one
+# constant per semantics, reading no theory, scored 0.70 on the release grid (#104).
+#
+# The count starts at four asks because a cap that binds on two or three decides them: at
+# two, the second answer has to differ from the first; at three, the answers have to be a
+# permutation of the three statuses. A reader who solves one query of such a set is handed
+# its partners. From four up the cap leaves several patterns open.
+#
+# There is no second cap over the item's pooled answers. With this one binding only from
+# four asks, a pooled cap at the same share refuses so many candidates that a cell on each
+# grid falls under `min_build_acceptance`.
+MAX_STATUS_SHARE = 0.5
+MIN_ASKS_FOR_SHARE = 4
 
 MIN_QUERIES = 4
 MAX_QUERIES_BY_LEVEL = 12
@@ -602,14 +617,12 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
     # construction. A claim from another cluster carries the pairing when the coin below
     # says so and a decoy is available.
     #
-    # The coin is fair and the realised split is not: the cluster's own literal carries the
-    # pairing on 174 of 213 items, 82%. Two causes, both measured. A decoy pairing adds a
-    # query, which raises `_target` and leaves the MAX_STATUS_SHARE gate below harder to
-    # pass, so the retry loop accepts cluster-paired items more often -- 47% of attempts
-    # draw a decoy against 57% of accepted items keeping the cluster. And on a decoy item
-    # the cluster's literal often survives the trim under both names anyway. So this
-    # mitigates the pattern rather than removing it, and the sceptical-preferred column
-    # should be read with that in mind.
+    # The coin is fair and the realised split is not, because on a decoy item the
+    # cluster's literal often survives the trim under both names anyway. Over the 280 rows
+    # of the release grid that ask both names, 264 pair a claim; the cluster's own literal
+    # is one of the paired claims on 202 of them and the only one on 77. So this mitigates
+    # the pattern rather than removing it, and the sceptical-preferred column should be
+    # read with that in mind.
     _forced: List[Tuple[str, str]] = [(c, STABLE) for c in _required_claims]
     if _required_claims:
         _decoys = [c for c in candidates if c not in _required_claims]
@@ -626,11 +639,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
     # different status buys a diverging claim for nothing. The coverage set asked one
     # query per semantics on mostly distinct claims, so it contained no claim answered
     # twice and therefore no divergence by construction -- which is what left ten rows
-    # asking nothing two semantics disagree about (#138). Divergence and balance are
-    # allies here rather than rivals: a diverging claim's two halves carry two different
-    # statuses, so admitting them together helps the share cap above rather than
-    # straining it. Preference, not a requirement -- where no required claim splits, the
-    # first query covering the semantics is taken as before.
+    # asking nothing two semantics disagree about (#138). Preference, not a requirement:
+    # where no required claim splits, the first query covering the semantics is taken.
     _covered = {q[1] for q in _required}
     for q in queries:
         if q[1] in _covered:
@@ -647,7 +657,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
     _target = max(MIN_QUERIES, len(_required),
                   min(MAX_QUERIES_BY_LEVEL, _pool_n, int(round(_pool_n * _frac))))
     kept = []
-    counts = collections.Counter()
+    counts: Dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     _n_stable = 0
     for q in queries:
         if len(kept) >= _target:
@@ -660,21 +670,19 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
         # its stable one -- no loss, since that answer would have been the same word again.
         if _unshielded and q[1] == STABLE and _n_stable >= 1:
             continue
-        cand = counts.copy()
+        # The share is counted within the query's own semantics, and it is the
+        # candidate's own status that is compared, `cand[gold[q]]` rather than
+        # `max(cand.values())`: a query whose status is under its share pulls the
+        # semantics toward balance and is kept even while another status is over it
+        # (#171). Required queries are exempt here and answer to the check after the loop.
+        cand = counts[q[1]].copy()
         cand[gold[q]] += 1
         n = sum(cand.values())
-        # `cand[gold[q]]`, not `max(cand.values())`. The largest status in the row is
-        # not the status this query carries, so comparing it refused every candidate
-        # while any answer was over its share -- including one whose status appeared
-        # zero times and would have pulled the row toward balance. Rows stalled at five
-        # queries against a target of twelve, 68 of 120 of them, and five is one under
-        # the `len(gold) >= 6` floor on the final check below, so the stalled rows
-        # shipped exempt from the guard entirely: 62 of 120 rows sat over this share
-        # (#171).
-        if q not in _required and n >= 6 and cand[gold[q]] / n > MAX_STATUS_SHARE:
+        if (q not in _required and n >= MIN_ASKS_FOR_SHARE
+                and cand[gold[q]] / n > MAX_STATUS_SHARE):
             continue
         kept.append(q)
-        counts[gold[q]] += 1
+        counts[q[1]][gold[q]] += 1
         _n_stable += q[1] == STABLE
     if len(kept) < MIN_QUERIES:
         return Rejected("too_few_queries_kept")
@@ -682,13 +690,15 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
     gold = {q: gold[q] for q in queries}
     if len(set(gold.values())) < 2:
         return Rejected("fewer_than_two_gold_statuses")
-    if len(gold) >= 6 and max(counts.values()) / len(gold) > MAX_STATUS_SHARE:
-        return Rejected("one_status_over_its_share")
+    for c in counts.values():
+        n = sum(c.values())
+        if n >= MIN_ASKS_FOR_SHARE and max(c.values()) / n > MAX_STATUS_SHARE:
+            return Rejected("one_status_over_its_share_within_semantics")
     # Over the queries the row ships, not the ones it considered. The coverage preference
-    # above is the mechanism; this is the assertion, and it fires on no cell of the grid.
-    # Kept because the mechanism is a preference: a curriculum where no required claim
-    # ever splits would fall back to the old behaviour silently, and a row no two
-    # semantics disagree about is `status_query` with a longer answer format (#138, #36).
+    # above is the mechanism and this is the assertion: the preference can find no claim
+    # that splits, the trim can drop the ones it found, and a row no two semantics disagree
+    # about is `status_query` with a longer answer format (#138, #36). It refuses 6 of the
+    # 1256 candidates the release grid builds.
     _kept_by_claim: Dict[str, List[str]] = {}
     for (c, s) in gold:
         _kept_by_claim.setdefault(c, []).append(s)
