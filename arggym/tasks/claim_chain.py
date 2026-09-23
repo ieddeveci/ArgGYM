@@ -72,6 +72,8 @@ def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> Li
         rng = random.Random(shuffle_seed)
         rng.shuffle(facts)
         rng.shuffle(rules)
+        # In build order the line's root preference is listed first (#185).
+        rng.shuffle(prefs)
     return facts + rules + prefs
 
 
@@ -176,19 +178,37 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL") -> Union[CCItem, Rejected]:
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
-    tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)
     n_filler = max(0, min(4 + level * 3, 60))
     branch_decoys = level >= 11
     j_budget = min(3, junction_budget(level, JUNCTION_CAPS["claim_chain"]))
+    use_neg_root = level >= 4
+
+    # From level 4 every derivation of the claim is attacked by one tower: a rule
+    # rebutting one of its trunk literals, and rules above it each undercutting the one
+    # below. The line's tower has even height, so its bottom rule ends up defeated and
+    # the line stands. A decoy's has odd height of at least 3, so its bottom rule is
+    # undercut too, yet stands, and the decoy falls: only walking the whole tower
+    # decides (#185). How many decoy towers are shorter than the line's is uniform over
+    # 0..n_decoy, and every tower's target is drawn the same way, so neither length nor
+    # place tells them apart.
+    tw = random.Random(stable_seed(seed, level, ordering, "tw"))
+    tower_true, decoy_towers = 0, [0] * n_decoy
+    if use_neg_root:
+        extra = 0 if level < 12 else 2
+        n_short = tw.randrange(n_decoy + 1)
+        tower_true = (2 if n_short == 0 else 4) + extra
+        short = set(tw.sample(range(n_decoy), n_short))
+        decoy_towers = [tower_true - 1 if k in short else tower_true + 1
+                        for k in range(n_decoy)]
 
     names = _names(stable_seed(seed, level, ordering, "nm"),
-                   ((60 + depth * 3 + n_decoy * (depth + 6) * 4) + 6 * j_budget) + n_filler * 2 + tower_true * 3)
+                   ((60 + depth * 3 + n_decoy * (depth + 6) * 4) + 6 * j_budget) + n_filler * 2
+                   + tower_true + sum(decoy_towers))
     it = iter(names)
     claim = next(it)
     ops: List[Operation] = []
     ridx = [0]
 
-    use_neg_root = level >= 4
     j_points = set()
     if j_budget and depth >= 3:
         step = max(1, depth // (j_budget + 1))
@@ -197,26 +217,25 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     root = _root(ops, it, use_neg_root)
     line_ops, _, true_lits = _chain(ops, it, ridx, root, claim, depth, j_points, level)
     if tower_true:
-        _tower(ops, it, ridx, true_lits[depth // 2], tower_true)
+        _tower(ops, it, ridx, true_lits[tw.randrange(depth - 1)], tower_true)
 
     # A decoy is built exactly like the true line -- same root sign and root preference,
     # same junctions, same branch signs -- so nothing but the attacks tells them apart
-    # (#185). Where the root carries the surviving preference, a decoy cannot fail at its
-    # root, so it fails at its first step instead. Mode 0 only occurs from level 4.
+    # (#185). Below level 4 the line is unattacked and each decoy fails to one attack.
     decoy_info = []
     for k in range(n_decoy):
         droot = _root(ops, it, use_neg_root)
         _, drules, dlits = _chain(ops, it, ridx, droot, claim, depth, j_points, level)
         mode = (k + level) % 4
-        if mode == 3:
-            target = dlits[0] if use_neg_root else droot
+        if decoy_towers[k]:
+            step = tw.randrange(depth - 1)
+            _tower(ops, it, ridx, dlits[step], decoy_towers[k])
+            where = f"tower of {decoy_towers[k]} at step {step + 1}"
+        elif mode == 3:
             ops.append(Operation(
                 kind="axiom" if PROFILES[profile].permits("axiom") else "premise",
-                content="-" + target))
-            where = "impossible-first-step" if use_neg_root else "impossible-root"
-        elif mode == 0:
-            _tower(ops, it, ridx, dlits[0], 1)
-            where = "first-step"
+                content="-" + droot))
+            where = "impossible-root"
         elif mode == 1:
             _tower(ops, it, ridx, dlits[len(dlits) // 2], 1)
             where = "mid"
