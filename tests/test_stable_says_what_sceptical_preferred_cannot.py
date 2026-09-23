@@ -288,13 +288,10 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
             f"level {level} never asks about stable, so a ring there asks nothing")
 
 
-def test_every_released_ordering_carries_the_ring():
-    """The release ships three of the four orderings, so the ring's spread is re-read there.
-
-    `tasksets/standard.yaml` leaves out `last_link_democratic`, so the rings at levels 9
-    and 13 are never exported and the release carries 8 ring levels of 10. What the test
-    above guards still has to hold on what ships: every released ordering carries the ring
-    somewhere, and none carries most of it.
+def test_the_release_ships_every_ordering_the_ring_is_balanced_over():
+    """The balance above is over `ALL_ORDERINGS`, so it holds for the release only while
+    the release ships all four. Drop one and its ring levels export no ring at all, which
+    moves the ring's share of the `stable` rows without failing anything above.
     """
     from pathlib import Path
 
@@ -302,12 +299,10 @@ def test_every_released_ordering_carries_the_ring():
 
     shipped = load(str(Path(__file__).resolve().parent.parent / "tasksets"
                        / "standard.yaml")).orderings
-    carried = collections.Counter(RING[lv] for lv in RING if RING[lv] in shipped)
-    assert set(carried) == set(shipped), (
-        f"released orderings {sorted(set(shipped) - set(carried))} carry the ring at no "
-        f"level, so their `stable` column is built from a different population: "
-        f"{dict(carried)}")
-    assert max(carried.values()) - min(carried.values()) <= 1, dict(carried)
+    assert set(shipped) == set(ALL_ORDERINGS), (
+        f"tasksets/standard.yaml ships {shipped}, so the rings at levels "
+        f"{sorted(lv for lv, o in RING.items() if o not in shipped)} are never exported; "
+        f"re-read the ring's share of the stable rows on the release")
 
 
 def test_the_grid_exports_every_level_that_carries_a_ring():

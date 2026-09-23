@@ -120,10 +120,8 @@ def wants_unshielded_ring(level: int, ordering: str) -> bool:
     first `take` that build, so which seeds a cell ships is not fixed and a seed-keyed rule
     would realise an uncontrolled fraction.
 
-    One ordering per stable-asking level, so a ring is on at most one ordering's rows at
-    any level -- a quarter of the stable rows over all four orderings, and 8 of every 30
-    on the three the release ships, where levels 9 and 13 give the ring to the ordering
-    it leaves out. The rotation walks the four orderings one level at a time,
+    One ordering per stable-asking level, so a ring is on a quarter of the rows that ask
+    about stable and no more. The rotation walks the four orderings one level at a time,
     so each ordering's ring levels are four apart rather than sitting in one block, where a per-ordering `stable` mean would read level difficulty
     as an ordering effect (#168). The stable-asking levels are a contiguous run --
     `semantics_for` only ever adds semantics as the level rises -- and any contiguous run

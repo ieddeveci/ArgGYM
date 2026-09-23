@@ -12,7 +12,7 @@ moved; different skips mean a generator moved. A hash alone cannot tell you
 which.
 
 Under the skip list sits the retry loop, and it is where the interesting number
-lives. On the standard grid five seeds of 4955 are skipped, while `perturbation`
+lives. On the standard grid five seeds of 7205 are skipped, while `perturbation`
 at level 6 reaches its ten items by discarding 34 candidates of 44. So
 the cell also records how many candidates `build` was asked for and why it
 refused them (#72), counted over every seed rather than only the failed ones.
@@ -345,7 +345,7 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
         "n_skipped": sum(len(c["seeds_skipped"]) for c in cells.values()),
         # Candidates `build` discarded, over every seed including the ones that
         # produced an item. `n_skipped` counts only seeds that ran out of tries,
-        # and on the standard grid that number is 5 while this one is 998.
+        # and on the standard grid that number is 5 while this one is 1339.
         "n_rejected": sum(sum(c["build_rejections"].values()) for c in cells.values()),
         # Travels with the rows because rows get separated from manifests the
         # moment anyone loads the JSONL.

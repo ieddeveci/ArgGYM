@@ -1,5 +1,5 @@
-# The standard grid at two seeds a cell: 11 tasks x 15 levels x 3 orderings x
-# 2 seeds = 990 rows, a fifth of the eval cost.
+# The standard grid at two seeds a cell: 12 tasks x 15 levels x 4 orderings x
+# 2 seeds = 1440 rows, a fifth of the eval cost.
 #
 #   uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
 #
@@ -11,9 +11,9 @@
 # another draw. Only `metadata.source_index`, a row's position in its file,
 # differs.
 #
-# Two seeds size the grid for a per-task model ranking (90 items a task) and a
+# Two seeds size the grid for a per-task model ranking (120 items a task) and a
 # level trend read as a slope or over bands of levels. A (task, level) mean over
-# 6 items moves in steps of 0.17, so read level curves off standard.yaml.
+# 8 items moves in steps of 0.125, so read level curves off standard.yaml.
 
 arggym: "2.0.0"
 pyarg: "2.0.2"
@@ -22,6 +22,7 @@ theory_schema: 1
 tasks:
   - preference_construction
   - counter_argument
+  - counter_argument_strict
   - attack
   - defence
   - attack_defense
@@ -36,6 +37,7 @@ levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 orderings:
   - last_link_elitist
+  - last_link_democratic
   - weakest_link_elitist
   - weakest_link_democratic
 
@@ -47,6 +49,6 @@ seeds:
 min_acceptance: 0.5
 
 # Shared with standard.yaml, which names the thinnest cell at each take.
-min_build_acceptance: 0.15
+min_build_acceptance: 0.13
 
 profile: FULL

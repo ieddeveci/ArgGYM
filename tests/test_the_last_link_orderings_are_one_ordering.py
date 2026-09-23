@@ -13,8 +13,8 @@ tasks", which was wrong on the count and on the dimension -- the split is by
 family, not by task. This test is what keeps the corrected claim honest: a
 generator change that gives arguments two last defeasible rules turns
 `last_link_democratic` into a cell worth evaluating, and this fails and says so.
-That is also the release's reason to leave `last_link_democratic` out of
-`tasksets/standard.yaml`: this test measures the duplicate without shipping it.
+The release ships both last-link orderings, so this is also what tells a reader
+that the two last-link columns are one question on every task but `status_query`.
 
 Measured on the theory rather than by diffing items. Every generator mixes the
 ordering into its RNG seed, so two orderings at one (task, level, seed) build two
@@ -67,9 +67,7 @@ def test_both_last_link_orderings_defeat_the_same_arguments(task, level, built_w
     assert not extra, (
         f"{task} L{level} built under {built_with} defeats differently under the two "
         f"last-link orderings ({len(extra)} pairs). If that is intended, the axis "
-        f"is live on one more task: docs/dataset-card.md has to say so, and "
-        f"tasksets/standard.yaml, which leaves last_link_democratic out as a "
-        f"duplicate, has to reconsider it.")
+        f"is live on one more task and docs/dataset-card.md has to say so.")
 
 
 @pytest.mark.parametrize("built_with", LAST_LINK)

@@ -45,9 +45,8 @@ import matplotlib.pyplot as plt  # noqa: E402 - must follow the Agg backend choi
 
 from evals import artifacts, report  # noqa: E402 - same
 
-#: The tasks answered with directives -- the ones that ask the model to *build*
-#: something rather than read off a status. `counter_argument_strict` left the
-#: release and stays here so runs made before that still plot.
+#: Six tasks answered with directives -- the ones that ask the model to *build*
+#: something rather than read off a status.
 CONSTRUCTION = ("attack", "defence", "attack_defense", "counter_argument",
                 "counter_argument_strict", "preference_construction")
 

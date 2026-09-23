@@ -95,24 +95,25 @@ TASKSETS = Path(__file__).resolve().parent.parent / "tasksets"
 
 
 def test_the_checked_in_spec_describes_todays_grid():
-    # 11 tasks x 15 levels x 3 orderings x 10 seeds. counter_argument_strict and
-    # last_link_democratic are built and tested but not released; the reasons are
-    # in the file.
+    # 12 tasks x 15 levels x 4 orderings x 10 seeds: every registered task and
+    # every ordering the engine knows.
+    from arggym.core import registry
+    from arggym.core.spec import ALL_ORDERINGS
+
     s = load(str(TASKSETS / "standard.yaml"))
-    assert len(s.tasks) == 11
-    assert "counter_argument_strict" not in s.tasks
+    assert sorted(s.tasks) == sorted(registry.task_names())
+    assert len(s.tasks) == 12
     assert s.levels == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-    assert s.orderings == ("last_link_elitist", "weakest_link_elitist",
-                           "weakest_link_democratic")
+    assert s.orderings == ALL_ORDERINGS
     assert s.seeds.take == 10
-    assert len(s.cells) * s.seeds.take == 4950
+    assert len(s.cells) * s.seeds.take == 7200
     # The guard thresholds describe the grid too, and nothing else here reads
     # them: set min_build_acceptance to 0.9 and every test in the suite still
     # passes while the next `make freeze` dies on the first cell it reaches that
-    # falls under. The 0.15 is set under the thinnest cell of either release:
-    # semantics_query at L13 under weakest-link democratic keeps 2 candidates of
-    # 12 at lite's take of 2.
-    assert s.min_build_acceptance == 0.15
+    # falls under. The 0.13 is set under the thinnest cell at either take:
+    # semantics_query at L12 under last-link democratic keeps 2 candidates of 14
+    # at lite's take of 2.
+    assert s.min_build_acceptance == 0.13
 
 
 def test_lite_is_standard_at_two_seeds():
@@ -122,20 +123,21 @@ def test_lite_is_standard_at_two_seeds():
     lite = load(str(TASKSETS / "lite.yaml"))
     assert lite.seeds.take == 2
     assert replace(lite, seeds=replace(lite.seeds, take=standard.seeds.take)) == standard
-    assert len(lite.cells) * lite.seeds.take == 990
+    assert len(lite.cells) * lite.seeds.take == 1440
 
 
 @pytest.mark.parametrize("task,level,ordering", [
-    # Two cells whose retry loop discards candidates, which is where a scan could
+    # Cells whose retry loop discards candidates, which is where a scan could
     # stop agreeing with itself: 34 of 44 at take 10 on the first, 31 of 41 on the
-    # second.
+    # second, 32 of 42 on the third.
     ("perturbation", 6, "last_link_elitist"),
     ("semantics_query", 13, "weakest_link_democratic"),
+    ("semantics_query", 12, "last_link_democratic"),
 ])
 def test_a_lite_cell_is_the_first_two_rows_of_its_standard_cell(task, level, ordering):
     # A cell takes the first seeds that build, scanning from `start`, and an item
     # is a function of (task, level, ordering, seed) alone. So lite's rows are a
-    # prefix of standard's -- same ids, same content. Checked here on two cells;
+    # prefix of standard's -- same ids, same content. Checked here on three cells;
     # the full grid was checked once by filling every cell at both takes and
     # comparing, which is too slow to run here.
     from arggym.core.freeze import fill_cell

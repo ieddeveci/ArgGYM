@@ -15,19 +15,17 @@ Defeasible reasoning in ASPIC+ under grounded semantics: whether a model can
 work out what a structured argumentation theory entails, and construct
 directives that change what it entails.
 
-Eleven tasks fall into two families.
+Twelve tasks fall into two families.
 
 **Six ask what a theory says.** `status_query`, `semantics_query`,
 `claim_chain`, `defeat_diagnosis`, `perturbation`, `formalization`. The answer
 is a reading of the theory: the status of a claim, the line that justifies it,
 what changed when the theory did.
 
-**Five ask the model to change what a theory says.** `preference_construction`,
-`counter_argument`, `attack`, `defence`, `attack_defense`. The answer is a set
-of directives that must reach a stated goal, keep the theory consistent, and do
-it in close to the fewest moves. The package builds a twelfth,
-`counter_argument_strict`, which the release leaves out; the reason is under
-"What a score does not license".
+**Six ask the model to change what a theory says.** `preference_construction`,
+`counter_argument`, `counter_argument_strict`, `attack`, `defence`,
+`attack_defense`. The answer is a set of directives that must reach a stated
+goal, keep the theory consistent, and do it in close to the fewest moves.
 
 The second family is why the benchmark exists. Its answers have no oracle: any
 directive set reaching the goals is correct, so grading means running the engine
@@ -58,19 +56,19 @@ on fresh seeds from the same spec. A fixed dataset cannot offer that.
 
 | | |
 |---|---|
-| Tasks | 11 |
+| Tasks | 12 |
 | Levels | 1 through 15 |
-| Strength orderings | last-link elitist, weakest-link elitist, weakest-link democratic |
+| Strength orderings | last-link and weakest-link, each elitist and democratic |
 | Seeds per cell | 10 (lite: 2) |
-| Items | 4950 (lite: 990) |
+| Items | 7200 (lite: 1440) |
 | Engine | `python-argumentation==2.0.2`, pinned |
 | Semantics | grounded, except `semantics_query`, which asks about five |
 | License | MIT |
 
-The grid is `tasksets/standard.yaml`. Ten seeds give each (task, level) 30
+The grid is `tasksets/standard.yaml`. Ten seeds give each (task, level) 40
 items, which is what a per-task level curve needs; at two, a (task, level) mean
-over 6 items moves in steps of 0.17. `tasksets/lite.yaml` is the same grid at two seeds, for a model
-ranking at a fifth of the cost. Its rows are the first two of every standard
+over 8 items moves in steps of 0.125. `tasksets/lite.yaml` is the same grid at
+two seeds, for a model ranking at a fifth of the cost. Its rows are the first two of every standard
 cell, so a lite score is a score on a subset of the standard release rather than
 on another draw.
 
@@ -80,7 +78,7 @@ produced the items and which were skipped.
 
 ## How to read a score
 
-**Per task, not in aggregate.** The eleven metrics are of four kinds: engine
+**Per task, not in aggregate.** The twelve metrics are of four kinds: engine
 verification, F1 over label pairs, an ordered-sequence constraint, and a
 weighted blend for `formalization`. An unweighted mean over them moves mostly
 with which tasks are in the basket, which is a property of the basket rather
@@ -97,14 +95,14 @@ task, and on four of them it is worth a lot. Measured at level 3:
 | `claim_chain` | 0.190 | hand the theory back |
 | `perturbation` | 0.153 | "overruled" for every claim of the original theory |
 | `defeat_diagnosis` | 0.131 | the line `status: overruled`, and no failure points |
-| the five engine-checked tasks | 0.000 | no fixed answer reaches a goal |
+| the six engine-checked tasks | 0.000 | no fixed answer reaches a goal |
 
 The floor is the best of what the search tried, so it is a lower bound on what
 an uninformed answer gets, and every one is printed with the strategy that
 reached it. That is what makes a zero readable: `formalization` reported
 `0.000 empty` while an answer shaped like a theory was worth 0.22, and only the
 strategy name said the search had found nothing fitting the answer format rather
-than nothing that pays (#103). On the five above, everything the search tries
+than nothing that pays (#103). On the six above, everything the search tries
 scores zero, and the tie goes to `empty` because it is listed first.
 
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report
@@ -165,23 +163,22 @@ proven globally minimal. An answer shorter than the reference is possible, and
 efficiency is clamped at 1.0, so it earns full credit rather than extra. The
 manifest records the caveat with the taskset.
 
-**`counter_argument_strict` is an ablation of `counter_argument`, built and
-tested but not released.** The two arms build the same theory -- byte for byte
+**`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
+independent measurement.** The two arms publish the same theory -- byte for byte
 on all 120 of their cells, every level and ordering at two seeds -- and vary one
 thing, whether the answer may add a strict rule. Permitting one buys a cheaper
 minimum on every cell. The plain arm's own reference, submitted to the strict
 item, earns full credit on none of them: on 89 of them it scores between 0.75
 and 0.92, docked on economy for directives the cheaper minimum no longer needs,
 and on the other 31 it runs past twice the strict minimum and scores zero for
-bloat. So the strict arm asks its own question, but not an argumentation one. A
-strict rule cannot be attacked in ASPIC+, so a strict counter-argument defeats
-every defeasible chain with no preference at all, and the answer is a walk read
-off the question line: a strict rebuttal of the target, then one undercut for
-each strict rule concluding it. On all 120 cells that walk scores 1.0 in exactly
-the gold's number of lines, whichever antecedent it undercuts, and the gold
-carries no preference directive (#139). The arm measures whether a model finds
-that template, and a model given one row found it on its first sample. A spec
-naming the task freezes it as a probe.
+bloat. What the strict arm then asks is not argumentation. A strict rule cannot
+be attacked in ASPIC+, so a strict counter-argument defeats every defeasible
+chain with no preference, and the answer is a walk read off the question line: a
+strict rebuttal of the target, then one undercut for each strict rule concluding
+it. On all 120 cells that walk scores 1.0 in exactly the gold's number of lines,
+and the gold carries no preference directive (#139). Read the arm as the contrast
+against `counter_argument` -- what removing the preference machinery does to a
+model's score -- and not as a reasoning score of its own.
 
 **Preference direction is arbitrary, deliberately.** ASPIC+ takes the ordering
 as a parameter and derives nothing; Modgil and Prakken define the set orderings
@@ -196,16 +193,16 @@ the compared set is an argument's last defeasible rules, and outside
 across all twelve tasks at levels 1, 3, 6, 9, 12 and 15, built under either
 last-link ordering, the two give the same defeat relation, status map and
 extensions everywhere except 8 of the 24 `status_query` theories, and every
-construction reference still scores 1.0 under the partner ordering (#113). So
-the release ships last-link elitist only, and
+construction reference still scores 1.0 under the partner ordering (#113). So on
+eleven tasks the two last-link columns are two draws of one question, not
+independent evidence about the ordering; on `status_query` a queried label
+differs between them on 5 of 60 theories (#72).
 `tests/test_the_last_link_orderings_are_one_ordering.py` fails if a generator
-makes democratic last-link live. It drops the one place the pair does differ in
-the gold, a queried `status_query` label on 5 of 60 theories in #72's count.
-Under weakest-link the axis reaches an answer on two tasks: a
+changes that. Under weakest-link the axis reaches an answer on two tasks: a
 `preference_construction` reference re-scored under its partner ordering still
 scores 1.0 on only 6 of 30 items and a `counter_argument` one on 17 of 30,
 because the answer's own preference directives are what put several defeasible
-rules into an argument (#72). So both weakest-link orderings ship.
+rules into an argument (#72).
 
 **A frozen row is re-scorable only against the pinned engine.** Scoring the
 construction tasks runs `python-argumentation==2.0.2` at scoring time, not just
