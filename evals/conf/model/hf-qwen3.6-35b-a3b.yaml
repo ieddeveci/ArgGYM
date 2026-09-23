@@ -1,18 +1,32 @@
+# Qwen/Qwen3.6-35B-A3B on vLLM, served by hpc/vllm/models/hf-qwen3.6-35b-a3b.yaml.
+#
+# Sampling: the card's "Thinking mode for general tasks": temperature=1.0,
+# top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
+# (https://huggingface.co/Qwen/Qwen3.6-35B-A3B).
+#
+# This is the only Qwen card that recommends presence_penalty 1.5 in
+# thinking mode; the 3.6-27B and 3.8-27B cards say 0.0. The card warns a
+# higher value "may occasionally result in language mixing and a slight
+# decrease in model performance" (#130).
+#
+# Cap: max_model_len 262,144 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py).
+# Context: config.json and the card: 262,144 native.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,390
+# tokens.
 name: hf-qwen3.6-35b-a3b
 model: Qwen/Qwen3.6-35B-A3B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 32768
+  max_tokens: 253952
   temperature: 1.0
   top_p: 0.95
-  seed: 0
   presence_penalty: 1.5
+  seed: 0
 extra_body:
   top_k: 20
   min_p: 0.0
   repetition_penalty: 1.0
   chat_template_kwargs:
     enable_thinking: true
-timeout_s: 5400
-retries: 2

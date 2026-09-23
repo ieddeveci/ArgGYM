@@ -1,58 +1,38 @@
-# Qwen3.6-27B on a local vLLM. Same family and same serving flags as 3.8.
+# Qwen/Qwen3.6-27B on a local vLLM.
 #
-# This harness does not start the server -- stand it up however you like and
-# point base_url at it. What belongs here is what the request must carry. The
-# cap below is only valid against a server sized the way this file assumes, so
-# set the two together.
+# A local-server twin of hf-qwen3.6-27b, which is the config the HPC sweep runs
+# (hpc/vllm/submit_truba.sh). Every setting is held equal to that one, so
+# the two differ only in name and base_url; serve with the profile's
+# --max-model-len or the cap below will not fit. They land in separate run
+# directories because run_id is built from model.name.
 #
-# The sampling values are Qwen's own recommendation for thinking mode
-# (huggingface.co/Qwen/Qwen3.8-27B): temperature 1.0, top_p 0.95, top_k 20,
-# min_p 0.0. `top_k` and `min_p` are not OpenAI parameters, so they travel in
-# extra_body, which is what that field is for.
+# Sampling: the card's "Thinking mode for general tasks": temperature=1.0,
+# top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
+# (https://huggingface.co/Qwen/Qwen3.6-27B).
 #
-# The token cap follows from the serving size. Serve with
-# `--max-model-len 131072`, reserve 8192 tokens for the prompt, and the cap is
-# what is left:
+# presence_penalty is 0.0 because this card says so. The 1.5 this config
+# used to carry is the Qwen3.6-35B-A3B card's value, not this one's (#130).
+# The card's own output-length advice is 32,768, or 81,920 for competition
+# math and code; the cap here is set by the context rule instead.
 #
-#     --max-model-len 131072   standard 128k context (2^17)
-#       prompt reserve   8192
-#       max_tokens     122880   = 131072 - 8192
-#
-# Both halves have room. The longest composed prompt is 4409 tokens
-# (prompt_version 7, chat-templated, which is what vLLM counts), so the 8192
-# reserve clears the worst case several times over.
-#
-# That prompt figure carries over from 3.8 unchanged: the two tokenizers are
-# identical for text, differing only by seven audio and TTS special tokens that
-# no prompt contains, so every row tokenizes to the same length under both.
-#
-# The cap clears every completion length observed for either checkpoint. The
-# longest that ran to a stop is 56316 tokens, and that one was at level 3. The
-# grid runs to L15 and output grows with level, so a cap near 57344 truncates
-# at the easiest rung: two of twelve level-3 items hit exactly that cap and
-# came back with `finish_reason: length`.
-#
-# To run the two checkpoints side by side on two servers, override the endpoint
-# rather than copying this file: `++model.base_url=http://localhost:8000/v1`.
-# They land in separate run directories because `run_id` is built from
-# `model.name`. base_url is not part of that name, so pointing one config at
-# two servers needs a `run_id=` of its own, or the second invocation resumes
-# into the first's directory and is refused for a changed endpoint.
-#
-# Do not add `reasoning_effort: high`. Qwen3.8's chat template accepts only
-# xhigh, medium and low, and answers 500 on anything else (QwenLM/Qwen3.8#217).
+# Cap: max_model_len 262,144 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py).
+# Context: config.json and the card: 262,144 native.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,390
+# tokens.
 name: qwen3.6-27b-vllm
 model: Qwen/Qwen3.6-27B
 base_url: ${oc.env:VLLM_BASE_URL,http://localhost:8927/v1}
 api_key_env: VLLM_API_KEY
 sampling:
+  max_tokens: 253952
   temperature: 1.0
   top_p: 0.95
-  max_tokens: 122880
+  presence_penalty: 0.0
+  seed: 0
 extra_body:
   top_k: 20
   min_p: 0.0
-  # Thinking is on by default for this model; saying so makes the run manifest
-  # record it rather than leaving a reader to know the default.
+  repetition_penalty: 1.0
   chat_template_kwargs:
     enable_thinking: true

@@ -10,7 +10,7 @@ dtype: bfloat16
 quantization: mxfp4
 
 tensor_parallel_size: 1
-max_model_len: 65536
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 reasoning_parser: openai_gptoss
 trust_remote_code: false

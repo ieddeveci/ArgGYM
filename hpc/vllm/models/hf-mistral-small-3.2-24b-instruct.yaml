@@ -5,7 +5,7 @@ tier: large
 
 dtype: bfloat16
 tensor_parallel_size: 2
-max_model_len: 65536
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 trust_remote_code: false
 

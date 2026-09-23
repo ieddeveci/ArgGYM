@@ -5,7 +5,7 @@ tier: large
 
 dtype: bfloat16
 tensor_parallel_size: 2
-max_model_len: 65536
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 reasoning_parser: deepseek_r1
 trust_remote_code: false
@@ -14,7 +14,7 @@ trust_remote_code: false
 extra_args:
 - --enforce-eager
 
-# 32B BF16 weights plus ArgGYM's 65,536-token context need conservative
-# headroom on 80 GB H100. A 141 GB H200 can serve this profile on one GPU.
+# 32B BF16 weights plus a 131,072-token context (34 GiB of KV) need two
+# 80 GB H100s. A 141 GB H200 can serve this profile on one GPU.
 tensor_parallel_size_h100: 2
 tensor_parallel_size_h200: 1

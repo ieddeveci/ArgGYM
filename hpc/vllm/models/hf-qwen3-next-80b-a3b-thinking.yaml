@@ -8,9 +8,8 @@ dtype: bfloat16
 allow_over_40b_bf16: true
 
 tensor_parallel_size: 4
-# Native context is 262,144. ArgGYM intentionally caps this evaluation lane at
-# 65,536, which still accommodates 32,768 output tokens plus prompt reserve.
-max_model_len: 65536
+# Native context is 262,144 (config.json and card).
+max_model_len: 262144
 gpu_memory_utilization: 0.9
 reasoning_parser: deepseek_r1
 trust_remote_code: false

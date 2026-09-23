@@ -1,0 +1,23 @@
+# mistralai/Mistral-Small-3.2-24B-Instruct-2506 on vLLM, served by hpc/vllm/models/hf-mistral-small-3.2-24b-instruct.yaml.
+#
+# Sampling: the card's "We recommend using a relatively low temperature, such as
+# temperature=0.15"; generation_config.json agrees and sets no top_p
+# (https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506).
+#
+# The card also asks for a system prompt (its SYSTEM_PROMPT.txt for general
+# use); the harness sends only the elicitation's (a prompt-layer choice, not
+# changed here).
+#
+# Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py).
+# Context: config.json's max_position_embeddings, 131,072.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163
+# tokens.
+name: hf-mistral-small-3.2-24b-instruct
+model: mistralai/Mistral-Small-3.2-24B-Instruct-2506
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 122880
+  temperature: 0.15
+  seed: 0

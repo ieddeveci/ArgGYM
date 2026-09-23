@@ -32,8 +32,7 @@ model: anthropic/claude-sonnet-4.5
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEY
 sampling:
-  temperature: 0.0
-  max_tokens: 32768
+  max_tokens: 64000
 extra_body:
   reasoning:
     effort: high

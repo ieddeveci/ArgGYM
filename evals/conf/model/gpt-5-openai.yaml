@@ -1,8 +1,16 @@
 # OpenAI direct. base_url unset, so the SDK uses its own default.
+#
+# Limits: 400,000 context, 128,000 max output, reasoning tokens included
+# (https://developers.openai.com/api/docs/models/gpt-5,
+# https://developers.openai.com/api/docs/guides/reasoning). The cap is the
+# output limit.
+#
+# No temperature. OpenAI's guidance for its reasoning models is to remove
+# `temperature` and `top_p` whenever reasoning effort is not `none`, and gpt-5
+# has no `none` (https://developers.openai.com/api/docs/guides/latest-model).
 name: gpt-5-openai
 model: gpt-5
 base_url: null
 api_key_env: OPENAI_API_KEY
 sampling:
-  temperature: 0.0
-  max_completion_tokens: 32768
+  max_completion_tokens: 128000

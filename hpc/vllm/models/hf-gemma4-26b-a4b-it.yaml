@@ -4,7 +4,7 @@ params_b: 26
 tier: large-moe
 dtype: bfloat16
 tensor_parallel_size: 1
-max_model_len: 65536
+max_model_len: 262144
 gpu_memory_utilization: 0.9
 reasoning_parser: gemma4
 trust_remote_code: false

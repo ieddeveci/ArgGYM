@@ -11,9 +11,13 @@
 # the run manifest records the actual experimental condition instead of relying
 # on a provider-side default.
 #
-# max_tokens is deliberately the model's full 65,536-token output allowance.
-# Gemini counts internal thinking tokens against the output-token limit, so a
-# smaller hard cap can terminate generation while the model is still reasoning.
+# max_tokens is deliberately the model's full 65,536-token output allowance
+# (input limit 1,048,576;
+# https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash). Gemini counts
+# internal thinking tokens against the output-token limit, so a smaller hard cap
+# can terminate generation while the model is still reasoning
+# (https://ai.google.dev/gemini-api/docs/thinking). Sampling guidance:
+# https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5.
 name: gemini-aistudio
 model: gemini-3.8-flash
 base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}

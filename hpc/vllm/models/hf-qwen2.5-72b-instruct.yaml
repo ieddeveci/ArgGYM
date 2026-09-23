@@ -7,7 +7,8 @@ dtype: bfloat16
 allow_over_40b_bf16: true
 
 tensor_parallel_size: 4
-# Native checkpoint config is 32,768. Avoid static YaRN in this short-prompt lane.
+# Native checkpoint config is 32,768. The card's 131,072 needs static YaRN,
+# which it advises adding only for long inputs; ArgGYM's are short.
 max_model_len: 32768
 gpu_memory_utilization: 0.9
 trust_remote_code: false

@@ -8,13 +8,23 @@
 # Anthropic's shim also caps temperature at 1 and silently ignores `seed`,
 # `response_format` and `reasoning_effort`. Going direct means going without all
 # of that; if you do it anyway, read the recorded request body afterwards.
+#
+# Limits: 200K context, 64K max output, and thinking tokens count against
+# max_tokens (https://platform.claude.com/docs/en/models/sonnet-4-5/overview,
+# https://platform.claude.com/docs/en/build-with-claude/context-windows).
+# OpenRouter's models API lists max_completion_tokens 64000. The cap is that
+# output limit: 200K minus the 8192-token prompt reserve is larger.
+#
+# No temperature. With thinking on, Sonnet 4.5 accepts neither `temperature` nor
+# `top_k` (https://platform.claude.com/docs/en/build-with-claude/thinking), and
+# `reasoning.effort: high` turns thinking on with a budget of 0.8 x max_tokens
+# (https://openrouter.ai/docs/use-cases/reasoning-tokens).
 name: claude-openrouter
 model: anthropic/claude-sonnet-4.5
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEY
 sampling:
-  temperature: 0.0
-  max_tokens: 32768
+  max_tokens: 64000
 extra_body:
   reasoning:
     effort: high

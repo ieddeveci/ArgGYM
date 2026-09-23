@@ -4,7 +4,13 @@ params_b: 27
 tier: large
 dtype: bfloat16
 tensor_parallel_size: 1
-max_model_len: 65536
+# Native context is 262,144 (config.json). Served at half that because one
+# H100 holds this profile: after ~50 GiB of BF16 weights, the KV pool left at
+# 0.9 utilisation is under 20 GiB, and a single 262,144-token sequence needs
+# 16 GiB of full-attention KV (16 layers x 4 KV heads x 256 dims x K,V x 2 B),
+# leaving nothing for the harness's 16 concurrent requests. Two H100s, as
+# hf-qwen3.6-27b uses for the same architecture, would allow the full 262,144.
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 reasoning_parser: qwen3
 trust_remote_code: false

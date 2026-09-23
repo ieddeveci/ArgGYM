@@ -1,0 +1,25 @@
+# Qwen/Qwen3-Next-80B-A3B-Thinking on vLLM, served by hpc/vllm/models/hf-qwen3-next-80b-a3b-thinking.yaml.
+#
+# Sampling: the card's "Temperature=0.6, TopP=0.95, TopK=20, and MinP=0"
+# (https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking).
+#
+# The model thinks always; its chat template opens the <think> block itself,
+# so there is no enable_thinking switch to set.
+#
+# Cap: max_model_len 262,144 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py).
+# Context: config.json and the card: 262,144 native.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,068
+# tokens.
+name: hf-qwen3-next-80b-a3b-thinking
+model: Qwen/Qwen3-Next-80B-A3B-Thinking
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 253952
+  temperature: 0.6
+  top_p: 0.95
+  seed: 0
+extra_body:
+  top_k: 20
+  min_p: 0.0

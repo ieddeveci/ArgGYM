@@ -1,11 +1,24 @@
+# mistralai/Ministral-3-3B-Reasoning-2512 on vLLM, served by hpc/vllm/models/hf-ministral3-3b-reasoning.yaml.
+#
+# Sampling: the card's "Use a temperature of 0.7 for most environments", with the
+# top_p 0.95 its examples use (https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512).
+# generation_config.json sets no sampling keys.
+#
+# The card says to use its own system prompt, the [THINK] template in
+# SYSTEM_PROMPT.txt, appended to any custom one; the harness sends only the
+# elicitation's (a prompt-layer choice, not changed here).
+#
+# Cap: max_model_len 262,144 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py).
+# Context: config.json and the card: 262,144 ("256k").
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163
+# tokens.
 name: hf-ministral3-3b-reasoning
 model: mistralai/Ministral-3-3B-Reasoning-2512
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 16384
+  max_tokens: 253952
   temperature: 0.7
   top_p: 0.95
   seed: 0
-timeout_s: 5400
-retries: 2

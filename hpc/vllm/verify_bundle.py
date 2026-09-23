@@ -27,6 +27,28 @@ ALLOWED_SAMPLING = {
     "reasoning_effort",
 }
 
+# Tokens held back for the prompt when a serving profile's max_model_len is split
+# into prompt and output. Every hf-* eval config sets
+# max_tokens = max_model_len - PROMPT_RESERVE, and the check below holds it to
+# that.
+#
+# Measured on 2026-09-23 against tasksets/standard.yaml at commit 91307ae (7,070
+# of its 7,200 rows: 13 slow high-level cells of counter_argument,
+# counter_argument_strict and preference_construction had not finished
+# building, and those tasks' prompts run 3,000+ characters shorter than the
+# longest at every level), each
+# prompt composed as evals/prompt.py:compose does with the xml_tags template and
+# the cot elicitation (the HPC runner's default, and the longer of the two
+# shipped conditions), chat-templated with each served model's own tokenizer,
+# generation prompt included. The longest is 4,773 tokens, under
+# Mistral-7B-Instruct-v0.3's tokenizer, on status_query/L15/weakest_link_elitist/s6
+# (8,552 characters); every other tokenizer's longest is 3,708 to 4,428, on a
+# level-15 claim_chain or status_query row. The reserve is that
+# figure rounded up to the next power of two, which leaves 3,419 tokens for
+# prompts that grow when a task states another rule. Re-measure when a generator
+# changes its question text.
+PROMPT_RESERVE = 8192
+
 errors: list[str] = []
 
 required = [
@@ -137,10 +159,10 @@ for name in sorted(set(profiles) & set(endpoints)):
             max_tokens_i = int(max_tokens)
             max_model_len_i = int(p["max_model_len"])
 
-            if max_tokens_i + 4096 > max_model_len_i:
+            if max_tokens_i + PROMPT_RESERVE != max_model_len_i:
                 errors.append(
-                    f"{name}: max_tokens + 4096 prompt reserve "
-                    "exceeds max_model_len"
+                    f"{name}: max_tokens {max_tokens_i} + {PROMPT_RESERVE} "
+                    f"prompt reserve != max_model_len {max_model_len_i}"
                 )
 
         except (KeyError, TypeError, ValueError):
@@ -209,14 +231,17 @@ for name in (
             f"{name}: reasoning parser must be gemma4"
         )
 
+    # Gemma 4 has no reasoning-effort levels: its chat template reads
+    # `enable_thinking` and nothing else.
     if (
         endpoints.get(name, {})
-        .get("sampling", {})
-        .get("reasoning_effort")
-        != "medium"
+        .get("extra_body", {})
+        .get("chat_template_kwargs", {})
+        .get("enable_thinking")
+        is not True
     ):
         errors.append(
-            f"{name}: expected medium reasoning_effort"
+            f"{name}: expected chat_template_kwargs.enable_thinking true"
         )
 
     if (
@@ -230,10 +255,14 @@ for name in (
         )
 
 
-# Qwen 3.6 presence penalties.
+# Qwen 3.6/3.8 presence penalties, as each model card recommends for thinking
+# mode on general tasks. The two 3.6 cards differ: only the 35B-A3B card sets
+# 1.5 (huggingface.co/Qwen/Qwen3.6-35B-A3B, huggingface.co/Qwen/Qwen3.6-27B,
+# huggingface.co/Qwen/Qwen3.8-27B).
 expected_presence_penalty = {
     "hf-qwen3.6-27b": 0.0,
     "hf-qwen3.6-35b-a3b": 1.5,
+    "hf-qwen3.8-27b": 0.0,
 }
 
 for name, expected in expected_presence_penalty.items():

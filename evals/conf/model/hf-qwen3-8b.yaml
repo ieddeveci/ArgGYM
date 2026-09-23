@@ -1,9 +1,25 @@
+# Qwen/Qwen3-8B on vLLM, served by hpc/vllm/models/hf-qwen3-8b.yaml.
+#
+# Sampling: the card's thinking-mode recommendation, "Temperature=0.6, TopP=0.95,
+# TopK=20, and MinP=0"
+# (https://huggingface.co/Qwen/Qwen3-8B).
+#
+# The card offers presence_penalty (0 to 2) only as a remedy for endless
+# repetition, so none is set; #130 is where that gets measured.
+#
+# Cap: max_model_len 40,960 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py).
+# Context: config.json's max_position_embeddings, which the card says is sized as
+# 32,768 output + 8,192 prompt. The cap equals the card's recommended output
+# length for most queries, 32,768.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
+# tokens.
 name: hf-qwen3-8b
 model: Qwen/Qwen3-8B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 16384
+  max_tokens: 32768
   temperature: 0.6
   top_p: 0.95
   seed: 0
@@ -12,5 +28,3 @@ extra_body:
   min_p: 0.0
   chat_template_kwargs:
     enable_thinking: true
-timeout_s: 5400
-retries: 2

@@ -1,12 +1,16 @@
+# Gemini 2.5 Pro through the Gemini API's OpenAI-compatible endpoint.
+#
+# Limits: 1,048,576 input, 65,536 output, and thinking tokens count against the
+# output limit (https://ai.google.dev/gemini-api/docs/models/gemini-2.5-pro,
+# https://ai.google.dev/gemini-api/docs/thinking). The cap is the output limit.
+#
+# Thinking cannot be turned off on this model, and `medium` maps to an
+# 8,192-token thinking budget (https://ai.google.dev/gemini-api/docs/openai).
+# Google publishes no sampling recommendation for 2.5 Pro, so none is set.
 name: gemini-2.5-pro-api
 model: gemini-2.5-pro
-
 base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
 api_key_env: GEMINI_API_KEY
-
 sampling:
   max_tokens: 65536
   reasoning_effort: medium
-
-timeout_s: 5400
-retries: 2
