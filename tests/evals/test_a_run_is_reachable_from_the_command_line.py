@@ -152,6 +152,18 @@ def test_the_manifest_records_the_taskset_it_actually_read(tmp_path, rows,
     assert meta["endpoint"]["api_key_env"] == "ARGGYM_STUB_KEY"
 
 
+def test_an_rl_config_records_its_base_model_and_never_sends_it(tmp_path, rows,
+                                                                  taskset_file, provider):
+    """`base_model` names what a fine-tune was trained from; the server has no use for it."""
+    p = provider(answering(rows))
+    run_dir = os.fspath(tmp_path / "run")
+    meta = execute(cfg_for(taskset_file, p.url, **{"+model.base_model": "Qwen/Qwen3-8B"}),
+                   run_dir)
+    assert meta["base_model"] == "Qwen/Qwen3-8B"
+    assert meta["endpoint"]["model"] == "stub"
+    assert p.requests and not any("base_model" in json.dumps(r) for r in p.requests)
+
+
 def test_a_directory_will_not_take_a_second_sampling_configuration(tmp_path, rows,
                                                                    taskset_file,
                                                                    provider):

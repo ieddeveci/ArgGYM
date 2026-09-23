@@ -72,9 +72,21 @@ A config is named `<provider>-<model>[-<level>]`. The provider is the endpoint
 (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`), the model is the
 checkpoint name after the last `/` in lowercase, and the level is the reasoning
 effort the config sends: `openrouter-claude-sonnet-4.5-high`,
-`openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`. An RL
-fine-tune is named after its base model with `-rl-<tag>` added,
-`hf-qwen3-8b-rl-<tag>`, and its serving profile pins the checkpoint.
+`openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`.
+
+An RL fine-tune is named after the model it was trained from, with an RL tag:
+`<provider>-<base model>-rl-<tag>[-<level>]`. Its `model` is the fine-tune's
+own repo, which is what gets served, and a `base_model` field names the
+checkpoint it started from:
+
+```yaml
+name: hf-qwen3-8b-rl-arggym-40k
+model: your-org/qwen3-8b-arggym-grpo   # served, at the profile's revision if pinned
+base_model: Qwen/Qwen3-8B              # recorded in run.json, never sent
+```
+
+A config with `base_model` must take the `-rl-<tag>` form and one without must
+not; `tests/evals` and `hpc/vllm/verify_bundle.py` both check this.
 
 A model that takes a reasoning-effort level has one config per level it accepts
 and no level-less one. The level changes what the model is asked as much as the

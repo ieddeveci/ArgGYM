@@ -19,8 +19,10 @@ CONFIGS = sorted((ROOT / "evals" / "conf" / "model").glob("*.yaml"))
 HPC_MODELS = ROOT / "hpc" / "vllm" / "models"
 
 #: What `evals/run.py:build_solver` reads off `cfg.model`, plus the `name` that
-#: `run_id` is built from.
-READ = {"name", "model", "base_url", "api_key_env", "sampling", "extra_body"}
+#: `run_id` is built from and the `base_model` an RL fine-tune names, which
+#: `evals/run.py:manifest` records and the request never carries.
+READ = {"name", "model", "base_model", "base_url", "api_key_env", "sampling",
+        "extra_body"}
 
 
 @pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)
@@ -118,47 +120,85 @@ def level_sent(cfg: dict):
             or (google.get("thinking_config") or {}).get("thinking_level"))
 
 
-def base_name(cfg: dict) -> str:
-    """`<provider>-<model>`: the checkpoint name after the last `/`, lowercased."""
-    return f"{PROVIDER[cfg['api_key_env']]}-{cfg['model'].rsplit('/', 1)[-1].lower()}"
+def slug(model_id: str) -> str:
+    """The checkpoint name after the last `/`, lowercased."""
+    return model_id.rsplit("/", 1)[-1].lower()
+
+
+def expected_name(cfg: dict) -> str:
+    """The name the rule gives a config, with `<tag>` standing for an RL tag.
+
+    `<provider>-<model>[-<level>]`, or for an RL fine-tune, which declares the
+    checkpoint it was trained from in `base_model` and sends its own repo as
+    `model`, `<provider>-<base model>-rl-<tag>[-<level>]`.
+    """
+    level = level_sent(cfg)
+    tail = f"-{level}" if level else ""
+    provider = PROVIDER[cfg["api_key_env"]]
+    if cfg.get("base_model"):
+        return f"{provider}-{slug(cfg['base_model'])}-rl-<tag>{tail}"
+    return f"{provider}-{slug(cfg['model'])}{tail}"
+
+
+def names_fit(stem: str, cfg: dict) -> bool:
+    """Whether `stem` is the name the rule gives `cfg`."""
+    if cfg.get("base_model") and cfg["base_model"] == cfg["model"]:
+        return False  # the base checkpoint itself is not a fine-tune
+    head, tagged, tail = expected_name(cfg).partition("<tag>")
+    if not tagged:
+        return stem == head
+    return bool(re.fullmatch(re.escape(head) + r"[a-z0-9][a-z0-9.-]*" + re.escape(tail),
+                             stem))
 
 
 @pytest.mark.parametrize("path", NAMED, ids=lambda p: p.stem)
 def test_a_config_is_named_by_its_provider_model_and_level(path):
     cfg = yaml.safe_load(path.read_text())
-    base, level = base_name(cfg), level_sent(cfg)
-    tail = f"-{level}" if level else ""
-    # An RL fine-tune keeps its base model's name and adds `-rl-<tag>`; its
-    # serving profile pins the checkpoint.
-    assert names_fit(path.stem, cfg), \
-        f"{path.stem} should be {base + tail} (or {base}-rl-<tag>{tail})"
+    assert names_fit(path.stem, cfg), f"{path.stem} should be {expected_name(cfg)}"
     assert re.fullmatch(r"[a-z0-9][a-z0-9.-]*", path.stem), path.stem
-    if path.stem != base + tail:
-        profile = HPC_MODELS / f"{path.stem[: len(path.stem) - len(tail)]}.yaml"
-        assert (yaml.safe_load(profile.read_text()) or {}).get("revision"), \
-            f"{path.stem} is an RL fine-tune, so {profile.name} must pin its revision"
 
 
-def names_fit(stem: str, cfg: dict) -> bool:
-    """`<provider>-<model>[-<level>]`, or `<provider>-<model>-rl-<tag>[-<level>]`."""
-    base, level = base_name(cfg), level_sent(cfg)
-    tail = f"-{level}" if level else ""
-    return stem == base + tail or bool(re.fullmatch(
-        re.escape(base) + r"-rl-[a-z0-9][a-z0-9.-]*" + re.escape(tail), stem))
+def test_the_rule_names_an_rl_fine_tune_after_its_base_model():
+    """On configs no file carries: an RL fine-tune, its base, and hosted Gemma."""
+    base = {"api_key_env": "VLLM_API_KEY", "model": "Qwen/Qwen3-8B"}
+    assert names_fit("hf-qwen3-8b", base)
+    assert not names_fit("hf-qwen3-8b-rl-arggym-40k", base)  # no base_model, no -rl-
+    assert not names_fit("hf-qwen3-8b-arggym-40k", base)
 
+    rl = {"api_key_env": "VLLM_API_KEY", "model": "someorg/ArgGYM-Qwen3-8B-GRPO",
+          "base_model": "Qwen/Qwen3-8B"}
+    assert names_fit("hf-qwen3-8b-rl-arggym-40k", rl)
+    assert not names_fit("hf-arggym-qwen3-8b-grpo", rl)  # named after the repo
+    assert not names_fit("hf-qwen3-8b", rl)  # a fine-tune must say so
+    assert not names_fit("hf-qwen3-8b-rl-arggym-40k",
+                         {**rl, "model": "Qwen/Qwen3-8B"})  # the base is no fine-tune
 
-def test_the_rule_takes_the_rl_form_and_refuses_an_invented_name():
-    """The rule itself, on names no config carries."""
-    qwen = {"api_key_env": "VLLM_API_KEY", "model": "Qwen/Qwen3-8B"}
-    assert names_fit("hf-qwen3-8b", qwen)
-    assert names_fit("hf-qwen3-8b-rl-arggym-40k", qwen)
-    assert not names_fit("hf-qwen3-8b-arggym-40k", qwen)
+    leveled = {**rl, "sampling": {"reasoning_effort": "low"}}
+    assert names_fit("hf-qwen3-8b-rl-arggym-40k-low", leveled)
+    assert not names_fit("hf-qwen3-8b-rl-arggym-40k", leveled)
+
     gemma = {"api_key_env": "GEMINI_API_KEY", "model": "gemma-4-31b-it",
              "extra_body": {"extra_body": {"google": {"thinking_config":
                                                       {"thinking_level": "high"}}}}}
     assert names_fit("aistudio-gemma-4-31b-it-high", gemma)
     assert not names_fit("gemma4-31b-aistudio", gemma)
     assert not names_fit("aistudio-gemma-4-31b-it", gemma)
+
+
+def test_a_synthetic_rl_config_is_checked_like_any_other(tmp_path):
+    """The same test the shipped configs go through, on a file written here."""
+    body = {"model": "someorg/ArgGYM-Qwen3-8B-GRPO", "base_model": "Qwen/Qwen3-8B",
+            "base_url": "http://127.0.0.1:8000/v1", "api_key_env": "VLLM_API_KEY",
+            "sampling": {"max_tokens": 32768, "temperature": 0.6}}
+    good = tmp_path / "hf-qwen3-8b-rl-arggym-40k.yaml"
+    good.write_text(yaml.safe_dump({"name": good.stem, **body}))
+    test_every_key_in_a_model_config_is_read(good)
+    test_a_config_is_named_by_its_provider_model_and_level(good)
+
+    bad = tmp_path / "hf-arggym-qwen3-8b-grpo.yaml"
+    bad.write_text(yaml.safe_dump({"name": bad.stem, **body}))
+    with pytest.raises(AssertionError):
+        test_a_config_is_named_by_its_provider_model_and_level(bad)
 
 
 #: Every level each model's provider accepts, as the configs cite them. A model
@@ -195,8 +235,10 @@ def test_every_model_with_levels_has_a_config_at_each_level_and_no_other():
         cfg = yaml.safe_load(p.read_text())
         # Keyed by the endpoint as well: one checkpoint through two providers is
         # two sets of configs.
-        sent.setdefault((cfg["api_key_env"], cfg["model"]), []).append(level_sent(cfg))
-    for (key, model), levels in sorted(sent.items()):
+        # An RL fine-tune takes the levels of the model it was trained from.
+        model = cfg.get("base_model") or cfg["model"]
+        sent.setdefault((cfg["api_key_env"], cfg["model"], model), []).append(level_sent(cfg))
+    for (key, _, model), levels in sorted(sent.items()):
         if model in VALID_LEVELS:
             assert sorted(levels) == sorted(VALID_LEVELS[model]), \
                 f"{model} via {key}: configs at {sorted(map(str, levels))}, " \
@@ -204,4 +246,4 @@ def test_every_model_with_levels_has_a_config_at_each_level_and_no_other():
         else:
             assert levels == [None] * len(levels), \
                 f"{model} via {key} sends a level but has no level set listed"
-    assert {m for _, m in sent} >= set(VALID_LEVELS), "a listed model has no config"
+    assert {m for _, _, m in sent} >= set(VALID_LEVELS), "a listed model has no config"

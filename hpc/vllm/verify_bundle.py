@@ -142,19 +142,30 @@ for name in sorted(configs):
 # ---------------------------------------------------------------------------
 
 for profile, p in sorted(profiles.items()):
-    # A profile is named `hf-<model>`, or `hf-<base model>-rl-<tag>` for an RL
-    # fine-tune, where <model> is the checkpoint name its configs send,
-    # lowercased. Never with a level: pairing.py reads a trailing level off a
-    # config's stem, so a profile ending in one would pair with the wrong file.
+    # A profile is named `hf-<model>`, where <model> is the checkpoint name its
+    # configs send, lowercased. An RL fine-tune sends its own repo as `model`
+    # and declares what it was trained from in `base_model`; its profile is
+    # `hf-<base model>-rl-<tag>`. Never with a level: pairing.py reads a
+    # trailing level off a config's stem, so a profile ending in one would pair
+    # with the wrong file.
     if not re.fullmatch(r"hf-[a-z0-9][a-z0-9.-]*", profile):
         errors.append(f"{profile}: a profile stem is hf- and then [a-z0-9.-]")
     if any(profile.endswith(f"-{lv}") for lv in EFFORT_LEVELS):
         errors.append(f"{profile}: a profile stem carries no effort level")
-    for model in sorted({str(configs[s].get("model")) for s in served.get(profile, [])}):
-        slug = "hf-" + model.rsplit("/", 1)[-1].lower()
-        if profile != slug and not profile.startswith(f"{slug}-rl-"):
-            errors.append(f"{profile}: serves {model}, so should be named {slug}"
-                          f" (or {slug}-rl-<tag> for an RL fine-tune)")
+    for stem in served.get(profile, []):
+        model, base = str(configs[stem].get("model")), configs[stem].get("base_model")
+        if base:
+            want = "hf-" + str(base).rsplit("/", 1)[-1].lower() + "-rl-"
+            if base == model:
+                errors.append(f"{stem}: base_model is the model it serves, so it is "
+                              f"no fine-tune; drop base_model")
+            elif not re.fullmatch(re.escape(want) + r"[a-z0-9][a-z0-9.-]*", profile):
+                errors.append(f"{profile}: serves a fine-tune of {base}, so should be "
+                              f"named {want}<tag>")
+        else:
+            want = "hf-" + model.rsplit("/", 1)[-1].lower()
+            if profile != want:
+                errors.append(f"{profile}: serves {model}, so should be named {want}")
     # The lane serves BF16 weights; run_vllm_arggym.py refuses anything else
     # at job start, which is a queue wait too late to find out.
     if p.get("dtype") != "bfloat16":

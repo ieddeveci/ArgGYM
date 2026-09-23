@@ -144,6 +144,10 @@ def manifest(cfg: DictConfig, solver: ChatSolver, ts_manifest: Dict[str, Any],
         "taskset_hash": ts_manifest.get("taskset_hash"),
         "taskset_versions": ts_manifest.get("versions", {}),
         "endpoint": solver.client.endpoint.redacted(),
+        # The checkpoint an RL fine-tune was trained from. `endpoint.model` is
+        # the fine-tune's own repo, the one served; this is only written down,
+        # never sent.
+        "base_model": cfg.model.get("base_model"),
         "template": cfg.template.name,
         "elicitation": solver.elicitation.name,
         # The text, not just the name. A name is what a config file happens to
