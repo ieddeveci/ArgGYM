@@ -21,9 +21,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import multiprocessing
 import os
+import signal
 import sys
-from concurrent.futures import ProcessPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -351,17 +353,53 @@ def _slow_first(cell: Tuple[str, int, str]) -> Tuple[bool, int]:
     `preference_construction` cell takes about 950 s of the grid's 5500. This key
     comes within a few seconds of ordering by measured time at 4, 8 and 16 workers.
     """
+    # Only the wall time depends on this key. Results are read back in spec order,
+    # so an ordering this names wrongly, or one added later, costs minutes and
+    # never changes a byte of the file.
     _, level, ordering = cell
     return ordering != "weakest_link_democratic", -level
 
 
 def usable_cores() -> int:
-    """The cores this process may run on, which a container or `taskset` can limit."""
+    """The cores this process may run on: its CPU affinity, lowered by a CPU quota.
+
+    `docker --cpus=4` on a 128-core host leaves the affinity at 128 and writes the
+    quota to `/sys/fs/cgroup/cpu.max`, which is where a cgroup-v2 container sees
+    its own limit. On a host that file is absent and affinity decides.
+    """
     if hasattr(os, "process_cpu_count"):  # Python 3.13+
-        return os.process_cpu_count() or 1
-    if hasattr(os, "sched_getaffinity"):
-        return len(os.sched_getaffinity(0))
-    return os.cpu_count() or 1
+        cores = os.process_cpu_count() or 1
+    elif hasattr(os, "sched_getaffinity"):
+        cores = len(os.sched_getaffinity(0))
+    else:
+        cores = os.cpu_count() or 1
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            quota, period = f.read().split()
+        if quota != "max":
+            cores = min(cores, max(1, math.ceil(int(quota) / int(period))))
+    except (OSError, ValueError):
+        pass
+    return cores
+
+
+def _ignore_sigint() -> None:
+    # Ctrl-C reaches every process in the terminal's group. The main process
+    # handles it by terminating the pool; a worker handling it too would print
+    # one traceback per worker.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def _fill_in_worker(fill: Any, cell: Tuple[str, int, str], spec: TasksetSpec) -> Any:
+    """Run `fill` on one cell, returning a freeze guard's refusal instead of raising it.
+
+    The guards are `SystemExit`, and a pool worker catches only `Exception`: a
+    raised guard would end the worker and leave its result pending forever.
+    """
+    try:
+        return fill(*cell, spec), None
+    except SystemExit as refusal:
+        return None, refusal
 
 
 def _filled_cells(spec: TasksetSpec, workers: int
@@ -379,16 +417,22 @@ def _filled_cells(spec: TasksetSpec, workers: int
         for task, level, ordering in spec.cells:
             yield fill_cell(task, level, ordering, spec)
         return
-    pool = ProcessPoolExecutor(max_workers=workers)
+    pool = multiprocessing.Pool(workers, initializer=_ignore_sigint)
     try:
-        futures = {cell: pool.submit(fill_cell, *cell, spec)
+        # `fill_cell` is looked up here and sent with each cell, so a worker runs
+        # the function this process sees, whichever way the worker was started.
+        pending = {cell: pool.apply_async(_fill_in_worker, (fill_cell, cell, spec))
                    for cell in sorted(spec.cells, key=_slow_first)}
         for cell in spec.cells:
-            yield futures[cell].result()
+            result, refusal = pending[cell].get()
+            if refusal is not None:
+                raise refusal
+            yield result
     finally:
-        # After a failing cell or Ctrl-C, cells not yet started are dropped. The
-        # ones already running still finish, since a pool cannot stop them.
-        pool.shutdown(wait=True, cancel_futures=True)
+        # Every result has been read by now unless a cell failed or the run was
+        # interrupted, and then the cells still running are not wanted either.
+        pool.terminate()
+        pool.join()
 
 
 def freeze(spec: TasksetSpec, path: str, verbose: bool = True,

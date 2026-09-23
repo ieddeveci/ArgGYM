@@ -7,6 +7,7 @@ being designed out.
 """
 import dataclasses
 import json
+import time
 
 import pytest
 
@@ -177,6 +178,27 @@ def test_a_parallel_freeze_refuses_the_cell_a_serial_one_refuses(tmp_path):
         messages.append(str(err.value))
     assert messages[0].startswith("status_query|L3|weakest_link_democratic filled")
     assert messages[0] == messages[1]
+
+
+def _refuse_the_first_cell_last(task, level, ordering, spec):
+    """A `fill_cell` that refuses every cell, the first in spec order a second late."""
+    if ordering == "last_link_elitist":
+        time.sleep(1.0)
+    raise F.CellUnfilled(f"{task}|L{level}|{ordering} refused by the test")
+
+
+def test_a_parallel_freeze_names_the_first_failing_cell_in_spec_order_not_in_time(
+        monkeypatch, tmp_path):
+    # The cheap cells above fail in spec order whichever way results are read, so
+    # they cannot tell spec order from completion order. Here the second cell
+    # fails a second before the first; reading results as they complete would
+    # name the second.
+    two = TasksetSpec(tasks=("claim_chain",), levels=(3,),
+                      orderings=("last_link_elitist", "weakest_link_elitist"),
+                      seeds=SeedPolicy(start=0, take=2, scan_limit=10))
+    monkeypatch.setattr(F, "fill_cell", _refuse_the_first_cell_last)
+    with pytest.raises(F.CellUnfilled, match=r"^claim_chain\|L3\|last_link_elitist refused"):
+        F.freeze(two, str(tmp_path / "t.jsonl"), verbose=False, workers=2)
 
 
 def test_skipping_a_seed_changes_the_hash(monkeypatch, tmp_path):
