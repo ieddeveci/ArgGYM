@@ -41,6 +41,10 @@ def test_extraction_agrees_with_the_package_on_the_shared_convention():
              "draft <answer>first</answer> revised <answer>second</answer>",
              "<answer>\n  spaced  \n</answer>",
              "<ANSWER>upper</ANSWER>",
+             "I'll use <answer> tags.\n<answer>\nreal\n</answer>",
+             "<answer>X</answer> revising: <answer>Y",
+             "<answer>a<answer>b</answer>c</answer>",
+             "<answer>unclosed",
              "no fence at all",
              ""]
     for text in cases:
@@ -50,6 +54,22 @@ def test_extraction_agrees_with_the_package_on_the_shared_convention():
 def test_the_last_region_wins_because_a_reasoning_model_revises():
     body, found = region("<answer>draft</answer> ... <answer>final</answer>", "xml_tags")
     assert found and body == "final"
+
+
+def test_a_tag_named_in_the_reasoning_does_not_start_the_region():
+    """#183, under every template: the region starts at the last opening delimiter."""
+    for name, tmpl in TEMPLATES.items():
+        text = f"I'll put it in {tmpl.open} as asked.\n{tmpl.wrap('final')}"
+        assert region(text, name) == ("final", True), name
+
+
+def test_the_reasoning_fallback_ignores_a_tag_named_in_the_reasoning():
+    from evals.score import answer_of
+
+    found = answer_of({"completion": "",
+                       "reasoning": "I'll answer in <answer> tags.\n<answer>\nX\n</answer>"},
+                      "xml_tags")
+    assert found["answer"] == "X" and found["answer_in_cot"] is True
 
 
 def test_no_template_means_the_whole_completion_is_the_answer(rows):

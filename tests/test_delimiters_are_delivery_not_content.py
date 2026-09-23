@@ -148,6 +148,44 @@ def test_the_last_region_wins_because_the_first_is_the_draft():
     assert extract_answer(text).strip() == "[prefer_rule: b > a]"
 
 
+def test_a_tag_named_in_the_reasoning_does_not_start_the_answer():
+    # #183: the region used to run from the first `<answer>`, so a model that named
+    # the tag while reasoning had that prose read as answer lines, and the stray-text
+    # rule zeroed a correct answer. The body starts at the last opening tag before
+    # the close.
+    item, _ = arggym.TaskDataset("status_query", 3, ORDERING, size=1, seed=0).build_at(0)
+    ref = item["reference_answer"]
+    text = ("I'll put the final answer in <answer> tags as asked.\n"
+            "Working through the theory...\n<answer>\n" + ref + "\n</answer>")
+    assert extract_answer(text) == ref
+    assert arggym.score_row(extract_answer(text), item).score == pytest.approx(1.0)
+
+
+def test_a_truncated_final_answer_leaves_the_last_complete_one():
+    # An opening tag with no close after it is not a pair, so it neither replaces
+    # the earlier complete answer nor joins it.
+    assert extract_answer("<answer>X</answer> revising: <answer>Y") == "X"
+
+
+def test_nested_tags_give_the_innermost_pair():
+    assert extract_answer("<answer>a<answer>b</answer>c</answer>") == "b"
+
+
+def test_a_tag_named_after_the_answer():
+    # A lone opening or closing tag after the answer makes no pair and changes
+    # nothing. A complete pair written after it is the last pair, and wins.
+    assert extract_answer("<answer>X</answer> I used <answer> tags.") == "X"
+    assert extract_answer("<answer>X</answer> then closed with </answer>.") == "X"
+    assert extract_answer("<answer>X</answer> as in <answer>this</answer>.") == "this"
+
+
+def test_every_template_reads_its_last_complete_pair():
+    t = AnswerTemplate("square", "[answer]", "[/answer]")
+    assert t.region("I use [answer] tags.\n[answer]\nq\n[/answer]") == "q"
+    assert t.region("[answer]\nunclosed") is None
+    assert t.region("") is None and t.region(None) is None
+
+
 def test_nothing_at_all_is_an_empty_body_not_an_error():
     assert extract_answer(None) == ""
     assert extract_answer("") == ""

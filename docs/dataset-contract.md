@@ -71,7 +71,14 @@ question = ds[0]["question"] + "\n" + arggym.XML_TAGS.instruction
 ```
 
 `extract_answer` reads the `<answer>` region back and returns an unfenced
-completion whole. Nothing in ArgGYM calls it (`arggym/core/answers.py:52`);
+completion whole. The region is the body of the last complete
+`<answer>...</answer>` pair, and a pair runs from the last opening tag before
+its close (`AnswerTemplate.region`, `arggym/core/answers.py:43`). So a revised
+answer beats the draft before it, and a model that names the tag while
+reasoning does not have that prose read as answer lines. An opening tag with no
+close after it, as in a truncated generation, is not a pair. The harness in
+`evals/` reads every template through the same method. Nothing in ArgGYM's
+scorers calls `extract_answer` (`arggym/core/answers.py:70`);
 `examples/evaluate.py` names its convention once and derives both the
 instruction and the extraction from it, which is the shape a harness wants.
 

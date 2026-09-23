@@ -40,15 +40,32 @@ class AnswerTemplate:
     def wrap(self, body: str) -> str:
         return f"{self.open}\n{body}\n{self.close}"
 
+    def region(self, text: Optional[str]) -> Optional[str]:
+        """The body of the last complete pair of delimiters in `text`, or None.
+
+        A pair is an opening delimiter and the first closing one after it, with
+        no other opening delimiter in between. So the body runs from the *last*
+        opening delimiter before a close, and a model that names the tag in its
+        reasoning ("I'll put the answer in <answer> tags") does not drag that
+        prose into its answer.
+
+        The last pair rather than the first: a reasoning model drafts a
+        candidate mid-thought and then revises it, so the first pair is the
+        draft. An opening delimiter with no close after it is not a pair, so a
+        truncated final answer leaves the last complete one standing, and a
+        lone unclosed one gives None. One whitespace character inside each
+        delimiter is trimmed, as reasoning-gym does.
+        """
+        o, c = re.escape(self.open), re.escape(self.close)
+        found = re.findall(f"{o}\\s?((?:(?!{o}).)*?)\\s?{c}", text or "", re.S | re.I)
+        return found[-1] if found else None
+
 
 #: The default, matching reasoning-gym: its system prompts ask for
 #: `<answer>answer here</answer>` and `reasoning_gym/utils.py:25` reads the
 #: region back with `<{tag}>\s?(.*?)\s?</{tag}>`.
 XML_TAGS = AnswerTemplate("xml_tags", "<answer>", "</answer>")
 DEFAULT_TEMPLATE = XML_TAGS
-
-_FENCE = re.compile(r"<answer>\s?(.*?)\s?</answer>", re.S | re.I)
-
 
 def extract_answer(text: Optional[str]) -> str:
     """The part of a completion that holds the answer, for a harness that wants it.
@@ -58,20 +75,17 @@ def extract_answer(text: Optional[str]) -> str:
     one, not because the dataset has an opinion. A harness using another fence
     reads its own; one with a structured-output solver needs no extraction at all.
 
-    A fenced answer yields its last region; unfenced text is returned whole.
+    A fenced answer yields the body of its last complete `<answer>...</answer>`
+    pair (`AnswerTemplate.region`); text with no complete pair is returned
+    whole, so the parser sees what the model actually wrote.
 
     Only one fence is read. Accepting several would need a precedence rule for a
     completion carrying two of them, and there is no reason to prefer either.
-
-    The last region rather than the first: a reasoning model drafts a candidate
-    mid-thought and then revises it, so the first region is the draft. The v1
-    harness settled this and said so in `evals/extract.py`; the v2 scorers used
-    `.search`, which took the draft.
     """
     if not text:
         return ""
-    found = _FENCE.findall(text)
-    return found[-1] if found else text
+    found = XML_TAGS.region(text)
+    return text if found is None else found
 
 
 class UnparseableAnswer(ValueError):
