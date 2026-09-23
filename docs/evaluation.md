@@ -296,7 +296,9 @@ tasks.
 Two things follow from a floor being *measured* rather than given. Each
 breakdown measures its own — a level-15 group is corrected by a level-15 floor,
 not by one averaged over the grid. And a floor is measured over the rows a run
-actually scored, so a filtered run's floors are estimates from that filter. The
+actually scored, the same rows its mean is over: a row lost to an API error or a
+scorer refusal leaves both, and a group with no scored row has neither. A filtered
+run's floors are therefore estimates from that filter. The
 report marks a task's floor with `*` when two runs disagree about it, and also
 when one of them could not measure it at all: `(score - floor) / (1 - floor)`
 then cannot be reproduced from the single number in the column. A floor that
