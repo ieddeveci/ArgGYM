@@ -12,10 +12,9 @@
 #
 # Cap: the card recommends no output length (its examples use
 # max_new_tokens=1024 and 512), and neither does Google's Gemma 4 model card
-# (https://ai.google.dev/gemma/docs/core/model_card_4), so the cap is the context rule.
-# That is max_model_len 262,144 minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py).
-# Context: config.json and the card: 262,144 ("256K").
+# (https://ai.google.dev/gemma/docs/core/model_card_4), so the cap is the context
+# rule. That is the serving profile's max_model_len minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,054
 # tokens.
 name: hf-gemma4-31b-it

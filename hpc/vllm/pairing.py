@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Which serving profile serves which eval config: by file stem, nothing else.
+
+`hpc/vllm/models/<profile>.yaml` says how to serve a checkpoint;
+`evals/conf/model/<config>.yaml` says what each request carries, including the
+checkpoint id. A config is served by the profile of the same stem, or, for a
+model with reasoning-effort levels, by the profile its `<profile>-<level>` stem
+names. Neither file names the other.
+
+    python3 hpc/vllm/pairing.py hf-qwen3.8-27b-medium   # prints hf-qwen3.8-27b
+
+Standard library only: `submit_truba.sh` runs this on the login node.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+PROFILES = ROOT / "hpc" / "vllm" / "models"
+CONFIGS = ROOT / "evals" / "conf" / "model"
+
+#: Every level any config names. Which of them a model accepts is in its configs.
+EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh")
+
+
+def profile_names() -> set[str]:
+    return {p.stem for p in PROFILES.glob("*.yaml")}
+
+
+def level_of(config: str, profiles: set[str] | None = None) -> str | None:
+    """The effort level a config's stem carries, if the rest of it is a profile."""
+    profiles = profile_names() if profiles is None else profiles
+    for level in EFFORT_LEVELS:
+        if config.endswith(f"-{level}") and config[: -len(level) - 1] in profiles:
+            return level
+    return None
+
+
+def profile_of(config: str, profiles: set[str] | None = None) -> str | None:
+    profiles = profile_names() if profiles is None else profiles
+    if config in profiles:
+        return config
+    level = level_of(config, profiles)
+    return config[: -len(level) - 1] if level else None
+
+
+def configs_of(profile: str) -> list[str]:
+    """Every eval config the profile serves."""
+    profiles = profile_names()
+    return sorted(p.stem for p in CONFIGS.glob(f"{profile}*.yaml")
+                  if profile_of(p.stem, profiles) == profile)
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        raise SystemExit(f"usage: {sys.argv[0]} EVAL_CONFIG")
+    config = sys.argv[1]
+    if not (CONFIGS / f"{config}.yaml").is_file():
+        near = sorted(p.stem for p in CONFIGS.glob(f"{config}-*.yaml"))
+        hint = f" Pick one of: {', '.join(near)}." if near else ""
+        raise SystemExit(f"No eval config evals/conf/model/{config}.yaml.{hint}")
+    profile = profile_of(config)
+    if profile is None:
+        raise SystemExit(f"No serving profile under hpc/vllm/models/ serves {config}.")
+    print(profile)
+
+
+if __name__ == "__main__":
+    main()

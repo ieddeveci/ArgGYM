@@ -9,15 +9,13 @@
 # template answers any other value with an error. One config per level:
 # hf-qwen3.8-27b-low, hf-qwen3.8-27b-medium, hf-qwen3.8-27b-xhigh.
 #
-# Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py), which is below the longest output the card
-# recommends: "Reasoning Content: Set the maximum output length to 262,144 tokens.
+# Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
+# output the card recommends:
+# "Reasoning Content: Set the maximum output length to 262,144 tokens.
 # Final Response: Set the maximum output length to 131,072 tokens."
 # (https://huggingface.co/Qwen/Qwen3.8-27B). Both exceed what the served
 # context leaves, so the context rule decides.
-# Context: 262,144 native (config.json, card), served at 131,072 because
-# one H100 cannot hold more alongside the weights; the serving profile
-# has the arithmetic.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,428
 # tokens.
 name: hf-qwen3.8-27b-low

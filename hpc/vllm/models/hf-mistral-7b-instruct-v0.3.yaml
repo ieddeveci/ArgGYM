@@ -1,9 +1,5 @@
-endpoint_config: hf-mistral-7b-instruct-v0.3
-hf_model: mistralai/Mistral-7B-Instruct-v0.3
-params_b: 7
-tier: 7-8b
 dtype: bfloat16
-tensor_parallel_size: 1
+# Context: config.json's max_position_embeddings, 32,768.
 max_model_len: 32768
 gpu_memory_utilization: 0.9
 reasoning_parser: null

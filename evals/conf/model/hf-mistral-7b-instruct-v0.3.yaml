@@ -5,10 +5,9 @@
 # keys (https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3), so the
 # values are left as they were, without a source.
 #
-# Cap: the card recommends no output length, so the cap is the context rule.
-# That is max_model_len 32,768 minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py).
-# Context: config.json's max_position_embeddings, 32,768.
+# Cap: the card recommends no output length, so the cap is the context rule. That
+# is the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,773
 # tokens.
 name: hf-mistral-7b-instruct-v0.3

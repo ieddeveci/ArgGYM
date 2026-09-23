@@ -51,6 +51,36 @@ def test_the_timeout_outlasts_the_largest_cap_at_a_slow_decode():
     assert Endpoint(model="m").timeout_s == timeout, "the client default lags the config"
 
 
+LEVELS = ("minimal", "low", "medium", "high", "xhigh")
+
+
+def test_the_configs_of_one_model_differ_only_in_their_effort_level():
+    """`<config>-<level>` files are one model at several levels, and nothing else.
+
+    They are written as separate files, so a sampling change made to one and not
+    its siblings would turn a comparison across levels into a comparison across
+    settings.
+    """
+    groups = {}
+    for p in CONFIGS:
+        for level in LEVELS:
+            if p.stem.endswith(f"-{level}"):
+                groups.setdefault(p.stem[: -len(level) - 1], {})[level] = p
+
+    def masked(node, level):
+        if isinstance(node, dict):
+            return {k: masked(v, level) for k, v in node.items() if k != "name"}
+        return "<level>" if node == level else node
+
+    assert groups, "no per-level configs found"
+    for base, files in groups.items():
+        shapes = {lv: masked(yaml.safe_load(p.read_text()), lv) for lv, p in files.items()}
+        first = next(iter(shapes.values()))
+        for lv, shape in shapes.items():
+            assert shape == first, f"{base}-{lv} differs from its siblings beyond the level"
+            assert "<level>" in str(shape), f"{base}-{lv} never sends its level"
+
+
 @pytest.mark.parametrize("path", [p for p in CONFIGS if p.stem != "stub"],
                          ids=lambda p: p.stem)
 def test_no_real_model_decodes_greedily(path):

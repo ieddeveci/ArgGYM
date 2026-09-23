@@ -12,9 +12,8 @@
 # For benchmarking on highly complex problems, such as those found in math and
 # programming competitions, we suggest setting the max output length to
 # 81,920 tokens." (https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking).
-# It fits: max_model_len 262,144 leaves 253,952 after the 8,192-token
-# prompt reserve (hpc/vllm/verify_bundle.py).
-# Context: config.json and the card: 262,144 native.
+# It fits within the serving profile's max_model_len minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,068
 # tokens.
 name: hf-qwen3-next-80b-a3b-thinking

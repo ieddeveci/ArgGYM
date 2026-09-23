@@ -13,10 +13,8 @@
 # not a recommendation:
 # "131,072 max output tokens"
 # (https://developers.openai.com/api/docs/models/gpt-oss-120b), so the cap is the
-# context rule.
-# That is max_model_len 131,072 minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py).
-# Context: config.json's max_position_embeddings, 131,072.
+# context rule. That is the serving profile's max_model_len minus the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 3,917
 # tokens.
 name: hf-gpt-oss-20b-low

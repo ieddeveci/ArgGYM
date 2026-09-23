@@ -7,14 +7,13 @@
 # The card offers presence_penalty (0 to 2) only as a remedy for endless
 # repetition, so none is set; #130 is where that gets measured.
 #
-# Cap: max_model_len 40,960 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py), which is below the longest output the card
-# recommends: "We recommend using an output length of 32,768 tokens for most queries.
+# Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
+# output the card recommends:
+# "We recommend using an output length of 32,768 tokens for most queries.
 # For benchmarking on highly complex problems, such as those found in math and
 # programming competitions, we suggest setting the max output length to
 # 38,912 tokens." (https://huggingface.co/Qwen/Qwen3-32B).
-# Context: config.json's max_position_embeddings, 40,960, which the card says
-# is sized as 32,768 output + 8,192 prompt.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
 # tokens.
 name: hf-qwen3-32b

@@ -1,9 +1,5 @@
-endpoint_config: hf-ministral3-3b-reasoning
-hf_model: mistralai/Ministral-3-3B-Reasoning-2512
-params_b: 4
-tier: ~3b-tier
 dtype: bfloat16
-tensor_parallel_size: 1
+# Context: config.json and the card: 262,144 ("256k").
 max_model_len: 262144
 gpu_memory_utilization: 0.9
 reasoning_parser: mistral

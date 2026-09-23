@@ -11,14 +11,13 @@
 # The serving profile pins a revision; otherwise this is the plain
 # Qwen/Qwen3-1.7B checkpoint in thinking mode.
 #
-# Cap: max_model_len 40,960 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py), which is below the longest output the card
-# recommends: "We recommend using an output length of 32,768 tokens for most queries.
+# Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
+# output the card recommends:
+# "We recommend using an output length of 32,768 tokens for most queries.
 # For benchmarking on highly complex problems, such as those found in math and
 # programming competitions, we suggest setting the max output length to
 # 38,912 tokens." (https://huggingface.co/Qwen/Qwen3-1.7B).
-# Context: config.json's max_position_embeddings, 40,960, which the card says
-# is sized as 32,768 output + 8,192 prompt.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
 # tokens.
 name: hf-qwen3-1.7b-arggym-40k

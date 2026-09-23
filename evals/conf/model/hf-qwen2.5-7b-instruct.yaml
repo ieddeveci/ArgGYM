@@ -11,11 +11,9 @@
 # Cap: the card's "Context Length: Full 131,072 tokens and generation 8192 tokens"
 # (https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
 # describes what the model can generate, not advice for long reasoning,
-# so it is no recommendation, and the cap is the context rule.
-# That is max_model_len 32,768 minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py).
-# Context: config.json's max_position_embeddings, 32,768. The card's 131,072
-# needs static YaRN, which it advises only for long inputs.
+# so it is no recommendation, and the cap is the context rule. That is the serving
+# profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
 # tokens.
 name: hf-qwen2.5-7b-instruct

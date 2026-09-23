@@ -1,13 +1,5 @@
-endpoint_config: hf-qwen3-next-80b-a3b-thinking
-hf_model: Qwen/Qwen3-Next-80B-A3B-Thinking
-params_b: 80
-active_params_b: 3
-tier: xlarge-moe-reasoning
-
 dtype: bfloat16
-allow_over_40b_bf16: true
 
-tensor_parallel_size: 4
 # Native context is 262,144 (config.json and card).
 max_model_len: 262144
 gpu_memory_utilization: 0.9

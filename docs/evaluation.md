@@ -52,9 +52,17 @@ OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 mean this harness knowing every provider, which is the thing we are avoiding.
 
 Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini and
-Gemma on AI Studio, every model the HPC lane serves on vLLM (`hf-*`), and
-Qwen3.6-27B and Qwen3.8-27B on a local vLLM, plus a stub for running the
-pipeline without spending a token. Adding another is copying one.
+Gemma on AI Studio, and every model the HPC lane serves on vLLM (`hf-*`), plus a
+stub for running the pipeline without spending a token. Adding another is
+copying one. An `hf-*` config also runs against a vLLM you started yourself:
+set `VLLM_BASE_URL`, and serve with the `max_model_len` of the profile of the
+same name under `hpc/vllm/models/`, or the config's `max_tokens` will not fit.
+
+The two layers hold different facts and never the same one. The eval config
+says what each request carries, the checkpoint id included; the serving
+profile says how to serve it (GPU counts, dtype, context length, parser, extra
+vLLM flags). They pair by file stem, and `hpc/vllm/verify_bundle.py` checks
+that they fit.
 
 A model that takes a reasoning-effort level has one config per level and no
 level-less one, named `<model>-<level>`: `claude-openrouter-high`,

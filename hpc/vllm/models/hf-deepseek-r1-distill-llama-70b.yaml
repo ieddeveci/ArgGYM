@@ -1,12 +1,6 @@
-endpoint_config: hf-deepseek-r1-distill-llama-70b
-hf_model: deepseek-ai/DeepSeek-R1-Distill-Llama-70B
-params_b: 70
-tier: xlarge-reasoning
-
 dtype: bfloat16
-allow_over_40b_bf16: true
 
-tensor_parallel_size: 4
+# Context: config.json's max_position_embeddings, 131,072.
 max_model_len: 131072
 gpu_memory_utilization: 0.9
 reasoning_parser: deepseek_r1

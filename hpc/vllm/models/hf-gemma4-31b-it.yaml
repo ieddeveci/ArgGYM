@@ -1,9 +1,5 @@
-endpoint_config: hf-gemma4-31b-it
-hf_model: google/gemma-4-31B-it
-params_b: 31
-tier: large
 dtype: bfloat16
-tensor_parallel_size: 2
+# Context: config.json and the card: 262,144 ("256K").
 max_model_len: 262144
 gpu_memory_utilization: 0.9
 reasoning_parser: gemma4

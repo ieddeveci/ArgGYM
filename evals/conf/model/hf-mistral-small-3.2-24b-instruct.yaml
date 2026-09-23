@@ -10,10 +10,9 @@
 # changed here).
 #
 # Cap: the card recommends no output length (its vLLM examples set
-# MAX_TOK = 131072, the whole context), so the cap is the context rule.
-# That is max_model_len 131,072 minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py).
-# Context: config.json's max_position_embeddings, 131,072.
+# MAX_TOK = 131072, the whole context), so the cap is the context rule. That is
+# the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163
 # tokens.
 name: hf-mistral-small-3.2-24b-instruct
