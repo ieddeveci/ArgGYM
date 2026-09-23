@@ -6,6 +6,9 @@
 # and its taskset_hash instead.
 #
 #   uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+#
+# 12 tasks x 15 levels x 4 orderings x 10 seeds = 7200 rows. tasksets/lite.yaml is
+# this file at two seeds a cell, and its rows are a subset of these.
 
 # Checked before anything is generated, so a mismatch costs seconds rather than
 # a full export. Leave a field out and the export records what it used instead.
@@ -13,6 +16,14 @@ arggym: "2.0.0"
 pyarg: "2.0.2"
 theory_schema: 1
 
+# Every registered task. counter_argument_strict is the ablation arm of
+# counter_argument: the same theory, with strict rules permitted in the answer.
+# A strict rule cannot be attacked in ASPIC+, so a strict counter-argument
+# defeats every defeasible chain with no preference, and a two-hop walk read off
+# the question line -- a strict rebuttal of the target, then one undercut for
+# each strict rule concluding it -- scores 1.0 in the gold's line count on all
+# 120 cells the tests build (#139). Read its rows as the contrast against
+# counter_argument, not as an independent measurement of reasoning.
 tasks:
   - preference_construction
   - counter_argument
@@ -36,17 +47,17 @@ tasks:
 levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 # All four set orderings. Elitist and democratic differ only where a preference
-# decides between sets with more than one element, and the theories rarely hold
-# one: over 720 measured -- every task at levels 3, 6, 9, 12 and 15, four
-# orderings, three seeds, taken while those five levels were the whole grid --
-# only status_query separates the two. It separates them in the gold and not
-# just in the defeat relation -- on 5 of its 60 theories a queried literal's
-# label differs between the two members of a family, each row still correct
-# under the ordering it was built with. Where the axis changes an
-# answer is under weakest-link, on preference_construction and counter_argument,
-# whose reference directives put several defeasible rules into an argument (#72).
-# Both halves stay in the grid because the audit that measures that is only
-# possible if both are generated.
+# decides between sets with more than one element. Under last-link the compared
+# set is an argument's last defeasible rules, and outside status_query that set
+# has one member or no preference ranks its members. So on the other eleven
+# tasks the two last-link orderings give the same defeat relation, status map
+# and extensions, and every construction reference scores 1.0 under either
+# (#113): the two last-link columns there are two draws of one question, not
+# independent evidence. On status_query a queried label differs between them on
+# 5 of 60 theories (#72). tests/test_the_last_link_orderings_are_one_ordering.py
+# fails the day a generator changes that. Under weakest-link the axis changes
+# answers on preference_construction and counter_argument, whose reference
+# directives put several defeasible rules into an argument (#72).
 orderings:
   - last_link_elitist
   - last_link_democratic
@@ -58,25 +69,37 @@ seeds:
   # Items required per cell. The export produces this many or fails naming the
   # cell -- it never ships a short cell quietly. The frozen v2 taskset had a
   # status_query L12 cell that rejected 12 of 20 seeds.
-  take: 2
-  # How far the export may look for those items. Two per cell over 40 seeds is
-  # a generous bound; a cell that needs it is a cell worth looking at.
+  #
+  # Ten gives each (task, level) 40 items, one per seed and ordering, so the grid
+  # is sized for a per-task level curve and not only for a ranking: at two seeds a
+  # (task, level) mean over 8 items moves in steps of 0.125, and on near-binary
+  # scores a difference between adjacent levels is one flipped item (#132).
+  take: 10
+  # How far the export may look for those items. The deepest scan any cell needs
+  # is twelve seeds, so 40 is a generous bound; a cell that needs it is a cell
+  # worth looking at.
   scan_limit: 40
 
 # Refuse a cell that needs more than two seeds per item, so a degraded cell is a
-# decision rather than a silent property of the file.
+# decision rather than a silent property of the file. Five seeds of this grid are
+# skipped, all preference_construction under weakest-link democratic at levels 9,
+# 12, 14 and 15, where the minimum search ran out of its call budget
+# (minimality_unproven, #124). The lowest rate is 0.83, at L14 (10 kept of 12).
+# The same cell is the edge of lite.yaml: its first four seeds hold both of its
+# skips, so it keeps 2 of 4 and sits exactly on this bound.
 min_acceptance: 0.5
 
-# The guard above counts seeds, and every seed of this grid builds; what varies
-# is how many candidates the retry loop discards on the way, from none on nine
-# tasks to six in seven on semantics_query at level 12 (#114). This one counts
-# candidates. Set just under the thinnest cell measured on this grid, the 0.14 of
-# semantics_query at L12 under last-link democratic, so it records today's floor
-# and fires on a generator that falls below it. That 0.14 is a reading at the
-# `take: 2` above, not a property of the cell -- the scan stops as soon as the
-# cell is full, so the same cell reports 0.13 at `take: 4`. Change `take` and this
-# floor has to be measured again.
-min_build_acceptance: 0.1
+# The guard above counts seeds; what varies far more is how many candidates the
+# retry loop discards on the way, from none on eight tasks to more than three in
+# four on perturbation and semantics_query (#114). This one counts candidates,
+# and is set to fire on a generator that falls below today's floor. The floor is
+# a reading at a given `take`, not a property of the cell: the scan stops as soon
+# as the cell is full. At the `take: 10` above the thinnest cell is perturbation
+# at L6 under last-link elitist, 0.227 (10 kept of 44). lite.yaml shares this
+# value, and at its `take: 2` the thinnest is semantics_query at L12 under
+# last-link democratic, 0.143 (2 kept of 14), so 0.13 sits just under the lower
+# of the two. Change `take` and this floor has to be measured again.
+min_build_acceptance: 0.13
 
 # The only exportable profile. The axis is real -- nine tasks branch on it -- but
 # two tasks take no profile at all and only one mixes it into its seed, so a

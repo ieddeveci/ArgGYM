@@ -1,10 +1,11 @@
-.PHONY: help setup test test-all freeze eval inspect clean
+.PHONY: help setup test test-all freeze freeze-lite eval inspect clean
 
 help:
 	@echo 'make setup     install the package and its dev dependencies'
 	@echo 'make test      run the test suite'
 	@echo 'make test-all  run the test suite including the slow end-to-end grid'
 	@echo 'make freeze    freeze the standard taskset into data/taskset.jsonl'
+	@echo 'make freeze-lite  freeze the two-seed lite taskset into data/taskset-lite.jsonl'
 	@echo 'make eval      run + score one model (MODEL=..., TEMPLATE=..., ELICITATION=...)'
 	@echo 'make inspect   start the inspector on http://127.0.0.1:5000'
 	@echo 'make clean     remove build artefacts and caches (leaves data/)'
@@ -24,6 +25,9 @@ test-all:
 
 freeze:
 	uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+
+freeze-lite:
+	uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
 
 # `make eval MODEL=claude-openrouter`. Scoring is a second step on purpose, so
 # it can be rerun against these generations whenever the scorer moves.

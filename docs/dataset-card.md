@@ -59,16 +59,22 @@ on fresh seeds from the same spec. A fixed dataset cannot offer that.
 | Tasks | 12 |
 | Levels | 1 through 15 |
 | Strength orderings | last-link and weakest-link, each elitist and democratic |
-| Seeds per cell | 2 |
-| Items | 1440 |
+| Seeds per cell | 10 (lite: 2) |
+| Items | 7200 (lite: 1440) |
 | Engine | `python-argumentation==2.0.2`, pinned |
 | Semantics | grounded, except `semantics_query`, which asks about five |
 | License | MIT |
 
-The grid is `tasksets/standard.yaml`. A release is identified by its
-`taskset_hash`, and the manifest records the arggym version, the engine version,
-the prompt and scoring versions, which seeds produced the items and which were
-skipped.
+The grid is `tasksets/standard.yaml`. Ten seeds give each (task, level) 40
+items, which is what a per-task level curve needs; at two, a (task, level) mean
+over 8 items moves in steps of 0.125. `tasksets/lite.yaml` is the same grid at
+two seeds, for a model ranking at a fifth of the cost. Its rows are the first two of every standard
+cell, so a lite score is a score on a subset of the standard release rather than
+on another draw.
+
+A release is identified by its `taskset_hash`, and the manifest records the
+arggym version, the engine version, the prompt and scoring versions, which seeds
+produced the items and which were skipped.
 
 ## How to read a score
 
@@ -158,16 +164,21 @@ efficiency is clamped at 1.0, so it earns full credit rather than extra. The
 manifest records the caveat with the taskset.
 
 **`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
-set of theories.** The two arms publish the same theory -- byte for byte on all
-120 of their cells -- and vary one thing, whether the answer may add a strict
-rule. Permitting one buys a cheaper minimum on every cell, so the pair is one
-comparison rather than two independent measurements. The plain arm's own
-reference, submitted to the strict item, earns full credit on none of them: on
-89 of them it scores between 0.75 and 0.92, docked on economy for directives the
-cheaper minimum no longer needs, and on the other 31 it runs past twice the
-strict minimum and scores zero for bloat. So the strict arm's rows carry no
-theory the plain arm has not already published, and a model evaluated on both
-arms reads each theory twice.
+independent measurement.** The two arms publish the same theory -- byte for byte
+on all 120 of their cells, every level and ordering at two seeds -- and vary one
+thing, whether the answer may add a strict rule. Permitting one buys a cheaper
+minimum on every cell. The plain arm's own reference, submitted to the strict
+item, earns full credit on none of them: on 89 of them it scores between 0.75
+and 0.92, docked on economy for directives the cheaper minimum no longer needs,
+and on the other 31 it runs past twice the strict minimum and scores zero for
+bloat. What the strict arm then asks is not argumentation. A strict rule cannot
+be attacked in ASPIC+, so a strict counter-argument defeats every defeasible
+chain with no preference, and the answer is a walk read off the question line: a
+strict rebuttal of the target, then one undercut for each strict rule concluding
+it. On all 120 cells that walk scores 1.0 in exactly the gold's number of lines,
+and the gold carries no preference directive (#139). Read the arm as the contrast
+against `counter_argument` -- what removing the preference machinery does to a
+model's score -- and not as a reasoning score of its own.
 
 **Preference direction is arbitrary, deliberately.** ASPIC+ takes the ordering
 as a parameter and derives nothing; Modgil and Prakken define the set orderings
@@ -176,20 +187,22 @@ coin flip. If preference direction always matched plausibility, a model could
 answer from priors and the verified oracle would be decorative.
 
 **Elitist and democratic diverge only where a preference decides between sets
-with more than one element**, and the published theories almost never hold one.
-Over 720 theories -- every task at levels 3, 6, 9, 12 and 15, four orderings,
-three seeds, measured while those five levels were the whole grid -- the two
-orderings of a family give the same defeat relation and the same status map
-everywhere except `status_query`, which carries an argument with two last
-defeasible rules on 24 of its 30 last-link theories, enough to split the defeat
-relation on 12 of them and a queried literal's gold label on 5 of its 60. The
-axis reaches an answer on two tasks, and only under weakest-link: a
+with more than one element**, and the theories rarely hold one. Under last-link
+the compared set is an argument's last defeasible rules, and outside
+`status_query` that set has one member or no preference ranks its members:
+across all twelve tasks at levels 1, 3, 6, 9, 12 and 15, built under either
+last-link ordering, the two give the same defeat relation, status map and
+extensions everywhere except 8 of the 24 `status_query` theories, and every
+construction reference still scores 1.0 under the partner ordering (#113). So on
+eleven tasks the two last-link columns are two draws of one question, not
+independent evidence about the ordering; on `status_query` a queried label
+differs between them on 5 of 60 theories (#72).
+`tests/test_the_last_link_orderings_are_one_ordering.py` fails if a generator
+changes that. Under weakest-link the axis reaches an answer on two tasks: a
 `preference_construction` reference re-scored under its partner ordering still
 scores 1.0 on only 6 of 30 items and a `counter_argument` one on 17 of 30,
 because the answer's own preference directives are what put several defeasible
-rules into an argument. No reference breaks under last-link (#72). Both halves
-are generated because measuring where they diverge is only possible if both
-exist, not because every task uses the distinction.
+rules into an argument (#72).
 
 **A frozen row is re-scorable only against the pinned engine.** Scoring the
 construction tasks runs `python-argumentation==2.0.2` at scoring time, not just

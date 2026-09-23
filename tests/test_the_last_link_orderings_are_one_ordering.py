@@ -13,6 +13,8 @@ tasks", which was wrong on the count and on the dimension -- the split is by
 family, not by task. This test is what keeps the corrected claim honest: a
 generator change that gives arguments two last defeasible rules turns
 `last_link_democratic` into a cell worth evaluating, and this fails and says so.
+The release ships both last-link orderings, so this is also what tells a reader
+that the two last-link columns are one question on every task but `status_query`.
 
 Measured on the theory rather than by diffing items. Every generator mixes the
 ordering into its RNG seed, so two orderings at one (task, level, seed) build two

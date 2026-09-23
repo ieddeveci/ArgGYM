@@ -59,10 +59,10 @@ class TasksetSpec:
     #: degraded cell should be a decision, not a silent property of the file.
     min_acceptance: float = 0.5
     #: Refuse a cell that keeps fewer than this share of the candidates `build`
-    #: produced. Seed acceptance is 1.00 on every cell of the standard grid, so
-    #: `min_acceptance` alone cannot fire there; the retry loop absorbs the
-    #: rejections, and `semantics_query` at level 12 reaches its items by
-    #: discarding six candidates in seven (#114). Off by default, so a spec that
+    #: produced. Seed acceptance is at least 0.83 on every cell of the standard
+    #: grid, so `min_acceptance` alone cannot fire there; the retry loop absorbs
+    #: the rejections, and `perturbation` at level 6 reaches its items by
+    #: discarding 34 candidates of 44 (#114). Off by default, so a spec that
     #: does not name it keeps the old behaviour; `tasksets/standard.yaml` names it.
     min_build_acceptance: float = 0.0
     #: Optional constraints, checked before generating. See the module docstring.

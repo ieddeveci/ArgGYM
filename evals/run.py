@@ -86,7 +86,7 @@ class RunFailed(SystemExit):
 
 
 def quiet_http() -> None:
-    """One INFO line per request is 1440 lines of noise on a full taskset."""
+    """One INFO line per request is thousands of lines of noise on a full taskset."""
     import logging
 
     for name in ("httpx", "httpx2", "httpcore", "openai"):

@@ -251,7 +251,7 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
     population than the rest, and a per-ordering mean would read that as an ordering effect.
 
     Not keyed on the seed, because `tasksets/standard.yaml` scans up to 40 seeds a cell and
-    keeps the first two that build, so a seed-keyed rule realises an uncontrolled fraction.
+    keeps the first ones that build, so a seed-keyed rule realises an uncontrolled fraction.
 
     The spread is even as well as complete: no ordering carries more than one ring above
     any other, and no two adjacent levels share one, so each ordering's rings sit four
@@ -286,6 +286,23 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
             continue
         assert not any(sq.wants_unshielded_ring(level, o) for o in ALL_ORDERINGS), (
             f"level {level} never asks about stable, so a ring there asks nothing")
+
+
+def test_the_release_ships_every_ordering_the_ring_is_balanced_over():
+    """The balance above is over `ALL_ORDERINGS`, so it holds for the release only while
+    the release ships all four. Drop one and its ring levels export no ring at all, which
+    moves the ring's share of the `stable` rows without failing anything above.
+    """
+    from pathlib import Path
+
+    from arggym.core.spec import load
+
+    shipped = load(str(Path(__file__).resolve().parent.parent / "tasksets"
+                       / "standard.yaml")).orderings
+    assert set(shipped) == set(ALL_ORDERINGS), (
+        f"tasksets/standard.yaml ships {shipped}, so the rings at levels "
+        f"{sorted(lv for lv, o in RING.items() if o not in shipped)} are never exported; "
+        f"re-read the ring's share of the stable rows on the release")
 
 
 def test_the_grid_exports_every_level_that_carries_a_ring():

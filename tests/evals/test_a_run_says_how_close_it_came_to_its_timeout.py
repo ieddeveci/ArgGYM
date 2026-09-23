@@ -341,8 +341,8 @@ def test_a_solver_with_no_clock_publishes_no_latency_rather_than_zero(
         tmp_path, rows, taskset_file):
     """`evals/solver.py` advertises a solver with no model in it.
 
-    Such a solver sets no latency, and a default of `0.0` would publish 1440
-    measurements nobody took as the healthiest endpoint ever recorded -- p95 of
+    Such a solver sets no latency, and a default of `0.0` would publish one
+    measurement per row that nobody took as the healthiest endpoint ever recorded -- p95 of
     zero seconds, every item infinitely far from the wall.
     """
     def symbolic(row):
