@@ -20,6 +20,7 @@ from arggym.core.curriculum import (
 )
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.prompting import STRAY_TEXT, answer_format
+from arggym.core.scoring import unmark
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -444,7 +445,7 @@ def parse(text: str, item: DDItem) -> DefeatDiagnosisAnswer:
     An empty answer parses to a status of nothing and no records. It is an answer
     with nothing in it, not an answer that failed to arrive.
     """
-    body = text or ""
+    body = unmark(text)
     for k in _KIND.findall(body):
         written = k.strip()
         if written.strip(",;.").lower() not in (UNDERMINE, UNDERCUT, REBUT):

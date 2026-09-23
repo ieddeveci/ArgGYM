@@ -125,7 +125,8 @@ definition.
 The shapes below are what an answer says. Where it goes is the harness's choice: the question
 states what a legal answer must contain and stops there, so a fence, a JSON schema, a tool call or
 a solver that returns the answer directly all work (`docs/dataset-contract.md` section 1).
-Whitespace, blank lines, bullets and numbering are ignored; content is what is parsed. Anything
+Whitespace, blank lines, bullets, numbering, lines that are only a code fence, and backticks are
+ignored; content is what is parsed. Anything
 else outside the lines a shape below asks for -- a word of prose, a label, a heading -- scores the
 whole answer zero. A solver that produces the answer as a value rather than as text can submit it
 with `score_value` and skip this section entirely.

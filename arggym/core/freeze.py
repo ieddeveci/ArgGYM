@@ -73,7 +73,13 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: rows on the standard grid, 522 ask different queries and 120 carry a different theory,
 #: because the retry loop accepts a different candidate for that seed. No other task
 #: moves.
-PROMPT_VERSION = 12
+#:
+#: Version 13 moves the five tasks whose prompt carries `permitted_block`: `attack`,
+#: `defence`, `attack_defense`, `counter_argument` and `counter_argument_strict`. The
+#: sentence on unreadable directives now ends ", so write only directives", as it
+#: already did in the blocks of `preference_construction` and `formalization` (#187).
+#: Theories, ids and gold are unchanged; only the question's wording moves.
+PROMPT_VERSION = 13
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:
@@ -100,7 +106,8 @@ PROMPT_VERSION = 12
 #: under 5 was also asked differently, and the two constants have to be read
 #: together for anything measured before 2026-09-22.
 #:
-#: Version 6 moves `formalization.score_value` twice and the construction scorer once.
+#: Version 6 moves `formalization.score_value` twice, the construction scorer once,
+#: and every parser once.
 #:
 #: `success` requires the answer's theory to give the same status as the reference to
 #: every atom the reference names, in both polarities, `UNSATISFIABLE` included
@@ -119,8 +126,15 @@ PROMPT_VERSION = 12
 #: wanted status it started at leaves the average, and one it broke scores 0.0;
 #: `UNDECIDED` earns its 0.4 only where the goal did not start there; a subgoal counts
 #: only if it started `JUSTIFIED` or the answer moved it. An answer that changes
-#: nothing now scores 0.0 where it earned up to 0.23. No construction score rises: a
+#: nothing now scores 0.0 where it earned up to 0.23. This part raises no score: a
 #: success scores as before, and a failed answer scores the same or lower.
+#:
+#: Every parser drops markdown code markup before it reads (#187, `scoring.unmark`):
+#: a line that is only a code fence, with or without a language tag, and every
+#: backtick. A correct answer wrapped in a fence or written with each line in
+#: backticks scored 0.0 on all 12 tasks under 5 and scores what the bare answer
+#: scores under 6. A stray word, backticked or not, still zeroes the answer. This
+#: part only admits answers.
 SCORING_VERSION = 6
 
 

@@ -18,6 +18,7 @@ from arggym.core.curriculum import (
 from arggym.core.invariants import language_enrichment, randomize_rule_names
 from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import STRAY_TEXT, answer_format
+from arggym.core.scoring import unmark
 
 TASK = "perturbation"
 HELD_FRAC = 0.35
@@ -398,7 +399,7 @@ def parse(answer_text: str, item: PerturbItem) -> Value:
     the same thing twice is one prediction is a scoring question, and `score_value`
     answers it.
     """
-    body = (answer_text or "").strip()
+    body = unmark(answer_text).strip()
     # `none` is how text writes the empty label map: the answer names no changed claim.
     if body.lower() == "none":
         return {}

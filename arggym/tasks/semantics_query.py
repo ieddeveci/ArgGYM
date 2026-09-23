@@ -14,6 +14,7 @@ from arggym.core.build import BuildReport, Rejected, retry
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import STRAY_TEXT, answer_format
+from arggym.core.scoring import unmark
 from arggym.core.spec import ALL_ORDERINGS
 
 TASK = "semantics_query"
@@ -766,7 +767,7 @@ def parse(answer_text: str, item: SemItem) -> Value:
     the same thing twice is one prediction is a scoring question, and `score_value`
     answers it.
     """
-    body = answer_text or ""
+    body = unmark(answer_text)
     said: Dict[Tuple[str, str], List[str]] = {}
     for claim, sem, st in _PAIR.findall(body):
         said.setdefault(_key(claim, sem), []).append(st.upper().replace(" ", "_"))

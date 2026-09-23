@@ -24,6 +24,7 @@ from arggym.core.invariants import (
     split_atoms_and_rules,
 )
 from arggym.core.prompting import STRAY_TEXT, answer_format
+from arggym.core.scoring import unmark
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -396,7 +397,7 @@ def parse(text: str, item: CCItem) -> ClaimChainAnswer:
     An empty answer parses to an empty sequence. It is an answer with nothing in
     it, not an answer that failed to arrive.
     """
-    body = text or ""
+    body = unmark(text)
     quoted = _QUOTED.findall(body)
     if not quoted:
         return [line.strip() for line in body.splitlines() if line.strip()]
