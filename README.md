@@ -88,6 +88,13 @@ skipped, so two exports can be compared by what they skipped and not only by the
 It is 12 tasks x 15 levels x 4 orderings x 10 seeds, 7200 rows. `tasksets/lite.yaml` is the same
 grid at 2 seeds, 1440 rows, and its rows are the first two of every standard cell.
 
+Cells fill in parallel, one process per core this process may use; `-j N` sets the count and
+`-j 1` freezes serially. The file is the same byte for byte at any count. On 16 cores standard
+takes about 16 minutes and lite about 13, against 85 and 27 on one. More cores do not help past
+that point, because the slowest cell sets the wall time: on standard it is
+`preference_construction` at level 14 under `weakest_link_democratic`, which alone takes 16
+minutes.
+
 ## A row
 
 ```jsonc

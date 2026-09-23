@@ -23,8 +23,10 @@ import hashlib
 import json
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import closing
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from arggym.core.build import reasons_text, top_reason
 from arggym.core.dataset import TaskDataset
@@ -340,49 +342,105 @@ def _versions() -> Dict[str, Any]:
             "pythonhashseed": os.environ.get("PYTHONHASHSEED", "<unset>")}
 
 
-def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]:
-    """Write one JSONL holding a manifest line and every row."""
+def _slow_first(cell: Tuple[str, int, str]) -> Tuple[bool, int]:
+    """A sort key that puts the cells likely to take longest at the front.
+
+    The longest cell sets the wall time of a parallel freeze, so it has to start
+    first. On the standard grid at `take: 10` the cost sits in
+    `weakest_link_democratic` and grows with level: its level-14
+    `preference_construction` cell takes about 950 s of the grid's 5500. This key
+    comes within a few seconds of ordering by measured time at 4, 8 and 16 workers.
+    """
+    _, level, ordering = cell
+    return ordering != "weakest_link_democratic", -level
+
+
+def usable_cores() -> int:
+    """The cores this process may run on, which a container or `taskset` can limit."""
+    if hasattr(os, "process_cpu_count"):  # Python 3.13+
+        return os.process_cpu_count() or 1
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
+
+
+def _filled_cells(spec: TasksetSpec, workers: int
+                  ) -> Iterator[Tuple[List[Dict[str, Any]], CellReport]]:
+    """`fill_cell` over every cell, yielded in spec order whatever `workers` is.
+
+    A cell depends on nothing but its own arguments -- each generator seeds a
+    local `random.Random` from the cell and the seed -- so the worker a cell runs
+    in cannot change its rows. Results come back in spec order, so the first
+    failing cell in spec order raises, with the message a serial freeze gives.
+    """
+    # A worker beyond one per cell would start and have nothing to do.
+    workers = min(workers, len(spec.cells))
+    if workers <= 1:
+        for task, level, ordering in spec.cells:
+            yield fill_cell(task, level, ordering, spec)
+        return
+    pool = ProcessPoolExecutor(max_workers=workers)
+    try:
+        futures = {cell: pool.submit(fill_cell, *cell, spec)
+                   for cell in sorted(spec.cells, key=_slow_first)}
+        for cell in spec.cells:
+            yield futures[cell].result()
+    finally:
+        # After a failing cell or Ctrl-C, cells not yet started are dropped. The
+        # ones already running still finish, since a pool cannot stop them.
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+def freeze(spec: TasksetSpec, path: str, verbose: bool = True,
+           workers: int = 1) -> Dict[str, Any]:
+    """Write one JSONL holding a manifest line and every row.
+
+    `workers` above 1 fills cells in that many processes. The file is the same
+    byte for byte; only the time it takes changes.
+    """
     check_versions(spec)
     rows: List[Dict[str, Any]] = []
     cells: Dict[str, Any] = {}
-    for task, level, ordering in spec.cells:
-        got, report = fill_cell(task, level, ordering, spec)
-        # source_index is the row's position in the whole file, not in its cell.
-        for r in got:
-            r["metadata"]["source_index"] = len(rows)
-            rows.append(r)
-        # The bloat rule is gated on `min_directives` in the scorer and asserted flatly
-        # by every prompt that carries it. All six construction generators do set one,
-        # but that was a property of six generators rather than a checked invariant, so
-        # a prompt could come to promise a rule the scorer would skip.
-        unsupported = [r["id"] for r in got
-                       if MINIMALITY in r["question"]
-                       and not r["metadata"].get("gold", {}).get("min_directives")]
-        if unsupported:
-            raise PromptClaimUnsupported(
-                f"{report.key()}: {len(unsupported)} of {len(got)} rows state the "
-                f"minimality rule and carry no min_directives, so the scorer would not "
-                f"apply it ({', '.join(unsupported[:3])}). The question would be making "
-                f"a promise the row cannot keep.")
-        unverified = [r["id"] for r in got
-                      if r["metadata"]["reference_score"] < 0.999]
-        if unverified:
-            raise ReferenceNotVerified(
-                f"{report.key()}: the reference answer does not score 1.0 on "
-                f"{len(unverified)} of {len(got)} rows ({', '.join(unverified[:3])}). "
-                f"Either the row is missing something its scorer reads or the gold "
-                f"is wrong; a taskset whose own answers fail is not publishable.")
-        cells[report.key()] = report.to_dict()
-        if verbose:
-            note = "" if report.acceptance == 1.0 else f"  ({report.acceptance:.0%} of seeds accepted)"
-            # Printed whenever the cell built more candidates than it kept, which
-            # seed acceptance never shows: every grid cell fills, and some fill by
-            # discarding six candidates in seven.
-            if report.build_calls > len(got):
-                note += (f"  [{report.build_calls} candidates, "
-                         f"{report.build_acceptance:.0%} kept: "
-                         f"{reasons_text(report.build_rejections)}]")
-            print(f"  {report.key():54s} {len(got):3d} items{note}")
+    # `closing` so that a check below that raises also shuts the pool down now,
+    # rather than whenever the generator is collected.
+    with closing(_filled_cells(spec, workers)) as filled:
+        for got, report in filled:
+            # source_index is the row's position in the whole file, not in its cell.
+            for r in got:
+                r["metadata"]["source_index"] = len(rows)
+                rows.append(r)
+            # The bloat rule is gated on `min_directives` in the scorer and asserted flatly
+            # by every prompt that carries it. All six construction generators do set one,
+            # but that was a property of six generators rather than a checked invariant, so
+            # a prompt could come to promise a rule the scorer would skip.
+            unsupported = [r["id"] for r in got
+                           if MINIMALITY in r["question"]
+                           and not r["metadata"].get("gold", {}).get("min_directives")]
+            if unsupported:
+                raise PromptClaimUnsupported(
+                    f"{report.key()}: {len(unsupported)} of {len(got)} rows state the "
+                    f"minimality rule and carry no min_directives, so the scorer would not "
+                    f"apply it ({', '.join(unsupported[:3])}). The question would be making "
+                    f"a promise the row cannot keep.")
+            unverified = [r["id"] for r in got
+                          if r["metadata"]["reference_score"] < 0.999]
+            if unverified:
+                raise ReferenceNotVerified(
+                    f"{report.key()}: the reference answer does not score 1.0 on "
+                    f"{len(unverified)} of {len(got)} rows ({', '.join(unverified[:3])}). "
+                    f"Either the row is missing something its scorer reads or the gold "
+                    f"is wrong; a taskset whose own answers fail is not publishable.")
+            cells[report.key()] = report.to_dict()
+            if verbose:
+                note = "" if report.acceptance == 1.0 else f"  ({report.acceptance:.0%} of seeds accepted)"
+                # Printed whenever the cell built more candidates than it kept, which
+                # seed acceptance never shows: every grid cell fills, and some fill by
+                # discarding six candidates in seven.
+                if report.build_calls > len(got):
+                    note += (f"  [{report.build_calls} candidates, "
+                             f"{report.build_acceptance:.0%} kept: "
+                             f"{reasons_text(report.build_rejections)}]")
+                print(f"  {report.key():54s} {len(got):3d} items{note}")
 
     manifest = {
         "spec": spec.to_dict(),

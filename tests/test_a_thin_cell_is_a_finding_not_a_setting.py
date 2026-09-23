@@ -5,13 +5,14 @@ failed seed; this is the one place that scans past a failure, so this is the one
 place that can record it. A cell that quietly ships short is the failure mode
 being designed out.
 """
+import dataclasses
 import json
 
 import pytest
 
 from arggym.core import freeze as F
 from arggym.core.build import BuildReport
-from arggym.core.spec import SeedPolicy, TasksetSpec
+from arggym.core.spec import SeedPolicy, TasksetSpec, load
 
 CHEAP = TasksetSpec(tasks=("claim_chain",), levels=(3,),
                     orderings=("last_link_elitist",),
@@ -151,6 +152,31 @@ def test_the_same_spec_twice_gives_the_same_hash(tmp_path):
     b = F.freeze(CHEAP, str(tmp_path / "b.jsonl"), verbose=False)
     assert a["taskset_hash"] == b["taskset_hash"]
     assert a["cells"] == b["cells"]
+
+
+def test_a_parallel_freeze_writes_the_serial_file_byte_for_byte(tmp_path):
+    # Six cells over three generators, filled out of spec order: the slow-first
+    # schedule starts the `weakest_link_democratic` cells before the others.
+    spec = load("tests/data/one-cheap-cell.yaml")
+    F.freeze(spec, str(tmp_path / "serial.jsonl"), verbose=False, workers=1)
+    F.freeze(spec, str(tmp_path / "parallel.jsonl"), verbose=False, workers=2)
+    assert (tmp_path / "serial.jsonl").read_bytes() == (tmp_path / "parallel.jsonl").read_bytes()
+
+
+def test_a_parallel_freeze_refuses_the_cell_a_serial_one_refuses(tmp_path):
+    # Two cells keep half their candidates, `status_query` fourth in spec order and
+    # `preference_construction` sixth. Serial stops at the fourth; parallel has to
+    # name the same cell whichever of the two finishes first.
+    spec = dataclasses.replace(load("tests/data/one-cheap-cell.yaml"),
+                               min_build_acceptance=0.9)
+    messages = []
+    for workers in (1, 2):
+        with pytest.raises(SystemExit) as err:
+            F.freeze(spec, str(tmp_path / "t.jsonl"), verbose=False, workers=workers)
+        assert err.type is F.CellUnfilled
+        messages.append(str(err.value))
+    assert messages[0].startswith("status_query|L3|weakest_link_democratic filled")
+    assert messages[0] == messages[1]
 
 
 def test_skipping_a_seed_changes_the_hash(monkeypatch, tmp_path):
