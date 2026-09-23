@@ -7,6 +7,9 @@
 # The card offers presence_penalty (0 to 2) only as a remedy for endless
 # repetition, so none is set; #130 is where that gets measured.
 #
+# The serving profile pins the Hub revision, so a rerun serves the same
+# weights.
+#
 # Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
 # (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
 # output the card recommends:

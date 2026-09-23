@@ -74,7 +74,7 @@ checkpoint name after the last `/` in lowercase, and the level is the reasoning
 effort the config sends: `openrouter-claude-sonnet-4.5-high`,
 `openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`. An RL
 fine-tune is named after its base model with `-rl-<tag>` added,
-`hf-qwen3-8b-rl-arggym-40k`, and its serving profile pins the checkpoint.
+`hf-qwen3-8b-rl-<tag>`, and its serving profile pins the checkpoint.
 
 A model that takes a reasoning-effort level has one config per level it accepts
 and no level-less one. The level changes what the model is asked as much as the
