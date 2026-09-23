@@ -121,6 +121,57 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
         prev_rule = nm
 
 
+def _root(ops: List[Operation], names, negated: bool) -> str:
+    """Add the premise a chain starts from. A negated root is attacked by its positive
+    twin and survives on the premise preference."""
+    base = next(names)
+    ops.append(Operation(kind="premise", content=base))
+    if not negated:
+        return base
+    ops.append(Operation(kind="premise", content="-" + base))
+    ops.append(Operation(kind="prefer_premise", stronger="-" + base, weaker=base))
+    return "-" + base
+
+
+def _chain(ops: List[Operation], names, ridx: List[int], root: str, claim: str,
+           depth: int, j_points: Set[int], level: int
+           ) -> Tuple[List[Operation], List[str], List[str]]:
+    """A chain of `depth` rules from `root` to `claim`, with a junction at each of
+    `j_points`. Returns its directives, its trunk rule names and its trunk literals."""
+    line_ops = [Operation(kind="premise", content=root)]
+    trunk_rules: List[str] = []
+    trunk_lits: List[str] = []
+    order = sorted(j_points)
+    cur = root
+    for j in range(depth):
+        ridx[0] += 1
+        nm = f"r_{ridx[0]}"
+        nxt = claim if j == depth - 1 else next(names)
+        extra_lits = []
+        if j in j_points:
+            for _e in range(2 if wants_ternary(level, order.index(j)) else 1):
+                broot = next(names)
+                src = ("-" + broot) if negated_branch(order.index(j) * 2 + _e) else broot
+                ops.append(Operation(kind="premise", content=src))
+                ridx[0] += 1
+                brule = Operation(kind="defeasible", name=f"r_{ridx[0]}", antecedents=(src,),
+                                  consequent=next(names))
+                ops.append(brule)
+                extra_lits.append(brule.consequent)
+                line_ops.append(Operation(kind="premise", content=src))
+                line_ops.append(brule)
+            ridx[0] += 1
+            nm = f"r_{ridx[0]}"
+        r = Operation(kind="defeasible", name=nm, antecedents=tuple([cur] + extra_lits),
+                      consequent=nxt)
+        ops.append(r)
+        line_ops.append(r)
+        trunk_rules.append(nm)
+        trunk_lits.append(nxt)
+        cur = nxt
+    return line_ops, trunk_rules, trunk_lits
+
+
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL") -> Union[CCItem, Rejected]:
     depth = max(2, min(2 + level, 20))
@@ -138,103 +189,34 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     ridx = [0]
 
     use_neg_root = level >= 4
-    if use_neg_root:
-        nbase = next(it)
-        ops.append(Operation(kind="premise", content=nbase))
-        ops.append(Operation(kind="premise", content="-" + nbase))
-        ops.append(Operation(kind="prefer_premise", stronger="-" + nbase, weaker=nbase))
-        root = "-" + nbase
-        line_ops: List[Operation] = [Operation(kind="premise", content=root)]
-    else:
-        root = next(it)
-        ops.append(Operation(kind="premise", content=root))
-        line_ops = [ops[-1]]
-    cur = root
-    mid_lit = None
     j_points = set()
     if j_budget and depth >= 3:
         step = max(1, depth // (j_budget + 1))
         j_points = {min(depth - 2, step * (i + 1)) for i in range(j_budget)}
-    for j in range(depth):
-        ridx[0] += 1
-        nm = f"r_{ridx[0]}"
-        nxt = claim if j == depth - 1 else next(it)
-        if j in j_points:
-            n_extra = 2 if wants_ternary(level, sorted(j_points).index(j)) else 1
-            extra_lits = []
-            for _e in range(n_extra):
-                _neg = negated_branch(sorted(j_points).index(j) * 2 + _e)
-                broot = next(it)
-                _src = ("-" + broot) if _neg else broot
-                ops.append(Operation(kind="premise", content=_src))
-                ridx[0] += 1
-                bname = f"r_{ridx[0]}"
-                blit = next(it)
-                brule = Operation(kind="defeasible", name=bname, antecedents=(_src,),
-                                  consequent=blit)
-                ops.append(brule)
-                extra_lits.append(blit)
-                line_ops.append(Operation(kind="premise", content=_src))
-                line_ops.append(brule)
-            ridx[0] += 1
-            nm = f"r_{ridx[0]}"
-            r = Operation(kind="defeasible", name=nm,
-                          antecedents=tuple([cur] + extra_lits), consequent=nxt)
-            ops.append(r)
-            line_ops.append(r)
-        else:
-            r = Operation(kind="defeasible", name=nm, antecedents=(cur,), consequent=nxt)
-            ops.append(r)
-            line_ops.append(r)
-        if j == depth // 2:
-            mid_lit = nxt
-        cur = nxt
-    if tower_true and mid_lit:
-        _tower(ops, it, ridx, mid_lit, tower_true)
 
+    root = _root(ops, it, use_neg_root)
+    line_ops, _, true_lits = _chain(ops, it, ridx, root, claim, depth, j_points, level)
+    if tower_true:
+        _tower(ops, it, ridx, true_lits[depth // 2], tower_true)
+
+    # A decoy is built exactly like the true line -- same root sign and root preference,
+    # same junctions, same branch signs -- so nothing but the attacks tells them apart
+    # (#185). Where the root carries the surviving preference, a decoy cannot fail at its
+    # root, so it fails at its first step instead. Mode 0 only occurs from level 4.
     decoy_info = []
     for k in range(n_decoy):
-        droot = next(it)
-        ops.append(Operation(kind="premise", content=droot))
-        cur = droot
-        drules: List[str] = []
-        dlits: List[str] = []
-        _dj = {max(1, depth // 2)} if (level >= 5 and depth >= 3) else set()
-        if level >= 9 and depth >= 5:
-            _dj.add(max(1, depth // 4))
-        for j in range(depth):
-            ridx[0] += 1
-            nm = f"r_{ridx[0]}"
-            nxt = claim if j == depth - 1 else next(it)
-            if j in _dj:
-                _ex = []
-                for _e in range(2 if wants_ternary(level, k) else 1):
-                    br, bl = next(it), next(it)
-                    ops.append(Operation(kind="premise", content=br))
-                    ridx[0] += 1
-                    ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
-                                         antecedents=(br,), consequent=bl))
-                    _ex.append(bl)
-                ridx[0] += 1
-                nm = f"r_{ridx[0]}"
-                ops.append(Operation(kind="defeasible", name=nm,
-                                     antecedents=tuple([cur] + _ex), consequent=nxt))
-            else:
-                ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur,),
-                                     consequent=nxt))
-            drules.append(nm)
-            dlits.append(nxt)
-            cur = nxt
+        droot = _root(ops, it, use_neg_root)
+        _, drules, dlits = _chain(ops, it, ridx, droot, claim, depth, j_points, level)
         mode = (k + level) % 4
         if mode == 3:
+            target = dlits[0] if use_neg_root else droot
             ops.append(Operation(
                 kind="axiom" if PROFILES[profile].permits("axiom") else "premise",
-                content="-" + droot))
-            where = "impossible-root"
+                content="-" + target))
+            where = "impossible-first-step" if use_neg_root else "impossible-root"
         elif mode == 0:
-            ops.append(Operation(kind="premise", content="-" + droot))
-            ops.append(Operation(kind="prefer_premise", stronger="-" + droot, weaker=droot))
-            where = "root"
+            _tower(ops, it, ridx, dlits[0], 1)
+            where = "first-step"
         elif mode == 1:
             _tower(ops, it, ridx, dlits[len(dlits) // 2], 1)
             where = "mid"

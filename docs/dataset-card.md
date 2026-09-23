@@ -249,6 +249,15 @@ benchmark isolates the reasoning, and it is also the limit: it says nothing
 about defeasible reasoning over real arguments in natural language, except
 through `formalization`, whose limits are above.
 
+Nor does a derivation's shape give the answer away. In `claim_chain`, every
+derivation of the claim is built the same way: from level 4 each starts at a
+negated premise preferred over its positive twin, and each has the same junctions
+with the same negated branches, so the justifying line and its decoys have equal
+numbers of premises, rules and junctions. Only the attacks tell them apart. At
+every level, picking a derivation by the sign of its premises, a preference on
+its root, or its size scores what a random derivation scores
+(`tests/test_claim_chain_gold_has_no_surface_cue.py`).
+
 There is no personal data, no scraped text, and no human annotation. The natural
 language in `formalization` comes from surface forms taken from the ASPIC+ and
 argumentation-schemes literature (`arggym/core/nlforms.py`).
