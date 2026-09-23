@@ -129,6 +129,13 @@ PROMPT_VERSION = 13
 #: nothing now scores 0.0 where it earned up to 0.23. This part raises no score: a
 #: success scores as before, and a failed answer scores the same or lower.
 #:
+#: Every parser drops markdown code markup before it reads (#187, `scoring.unmark`):
+#: a line that is only a code fence, with or without a language tag, and every
+#: backtick. A correct answer wrapped in a fence or written with each line in
+#: backticks scored 0.0 on all 12 tasks under 5 and scores what the bare answer
+#: scores under 6. A stray word, backticked or not, still zeroes the answer. This
+#: part only admits answers.
+#:
 #: `counter_argument`'s `min_directives` moves on every weakest-link row, 300 of its
 #: 600 on the standard grid (#184). The generator offers a rebuttal plus one undercut
 #: per chain, which costs `1 + n` directives, or `n` from level 9, under every
