@@ -22,6 +22,7 @@ a level off the grid, which is why the level axis comes here.
 """
 from __future__ import annotations
 
+import random
 import re
 
 import pytest
@@ -315,6 +316,55 @@ def test_defeat_diagnosis_states_that_only_three_kind_words_are_read(level):
 
     shouted = kinds.sub(lambda m: "kind: " + m.group(1).upper(), ref)
     assert defeat_diagnosis.score(shouted, item).score == pytest.approx(1.0)
+
+
+def _case_variants(ref: str, level: int) -> dict:
+    keys = re.compile(r"\b(status|defeated_at|defeater|kind|survives_because)\b")
+    rng = random.Random(level)
+    return {
+        "Capitalised keys": keys.sub(lambda m: m.group(1).capitalize(), ref),
+        "upper-case keys": keys.sub(lambda m: m.group(1).upper(), ref),
+        "upper-case values": "\n".join(
+            line if line.startswith("status") else
+            re.sub(r"(:\s*)([^;\n]+)", lambda m: m.group(1) + m.group(2).upper(), line)
+            for line in ref.splitlines()),
+        "mixed case": "".join(c.upper() if rng.random() < 0.5 else c for c in ref),
+    }
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_defeat_diagnosis_reads_keys_and_values_in_any_case(level):
+    """Keys and labels are case-free in every task, and `KIND_RULE` promises it here (#192).
+
+    Before this, a record was read only where `defeated_at` was lowercase: a capitalised
+    one dropped every record, and the answer scored its status line alone, 0.15 with
+    reason `ok`. Values were compared exactly, so an upper-case target or defeater never
+    matched a gold that is always lowercase. Each variant is scored against what the
+    lowercase reference scores, with the same number of records read.
+    """
+    item = item_at("defeat_diagnosis", level)
+    ref = reference_of(item)
+    assert ref == ref.lower(), "the gold is no longer lowercase, so this proves less"
+    want = defeat_diagnosis.score(ref, item)
+    assert want.score == pytest.approx(1.0)
+    for name, text in _case_variants(ref, level).items():
+        assert text != ref, f"{name}: the variant changed nothing"
+        got = defeat_diagnosis.score(text, item)
+        assert got.diagnostics["n_quoted"] == want.diagnostics["n_quoted"], (
+            f"{name}: read {got.diagnostics['n_quoted']} of "
+            f"{want.diagnostics['n_quoted']} records")
+        assert (got.score, got.success, got.reason) == (want.score, want.success, want.reason), name
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_defeat_diagnosis_folds_value_case_in_a_submitted_value(level):
+    """A solver submitting the value directly gets the same fold as one writing text."""
+    item = item_at("defeat_diagnosis", level)
+    value = defeat_diagnosis.parse(reference_of(item), item)
+    shouted = {"status": [s.upper() for s in value["status"]],
+               "records": [{k: v.upper() for k, v in rec.items()} for rec in value["records"]]}
+    got = defeat_diagnosis.score_value(shouted, item)
+    assert (got.score, got.success) == (pytest.approx(1.0), True)
 
 
 @pytest.mark.parametrize("task,level", CELLS)

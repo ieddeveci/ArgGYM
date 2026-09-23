@@ -107,14 +107,14 @@ PROMPT_VERSION = 13
 #: together for anything measured before 2026-09-22.
 #:
 #: Version 6 moves `formalization.score_value` twice, the construction scorer once,
-#: and every parser once.
+#: every parser once, and `defeat_diagnosis` once more.
 #:
 #: `success` requires the answer's theory to give the same status as the reference to
 #: every atom the reference names, in both polarities, `UNSATISFIABLE` included
 #: (#190). It used to check only the queried literals, whose statuses the question
 #: prints, so an answer built from those printed statuses succeeded on every row
 #: without formalising the text, and an undercut written as a rebuttal usually
-#: succeeded too. Scores do not move for this half.
+#: succeeded too. Scores do not move for this change.
 #:
 #: `type_score` is the F1 of the axiom and strict decisions, where it used to be their
 #: recall (#191). An axiom or strict directive the gold does not have now costs
@@ -135,6 +135,12 @@ PROMPT_VERSION = 13
 #: backticks scored 0.0 on all 12 tasks under 5 and scores what the bare answer
 #: scores under 6. A stray word, backticked or not, still zeroes the answer. This
 #: part only admits answers.
+#:
+#: `defeat_diagnosis` reads the `defeated_at` key in any case, as it already read the
+#: other keys, and compares the `defeated_at`, `defeater` and `survives_because`
+#: values without regard to case (#192). It used to drop every record whose
+#: `defeated_at` was capitalised and score the answer on its status line alone, 0.15
+#: with reason `ok`. A lowercase answer scores as before.
 SCORING_VERSION = 6
 
 
