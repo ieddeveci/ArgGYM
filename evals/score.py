@@ -49,6 +49,10 @@ NEAR_TIMEOUT_FRACTION = 0.8
 #: inside whichever real bucket looked closest.
 UNCLASSIFIED = "unclassified"
 
+#: How the scorer's `reason` starts when the bloat gate zeroed an answer
+#: (`arggym/core/scoring.py`: `bloated:{n_used}_used_vs_{minimum}_minimum`).
+BLOATED = "bloated:"
+
 
 class TasksetMismatch(SystemExit):
     """The run was generated against different questions than these."""
@@ -177,6 +181,13 @@ def _stats(records: Sequence[Dict[str, Any]], floor: Optional[float],
         "n_untruncated": len(untrunc),
         "success_rate": _rate(sum(bool(r["success"]) for r in ok), len(ok)),
         "zero_with_region": sum(bool(r.get("zero_with_region")) for r in ok),
+        # Answers the construction scorer zeroed for using more than twice the
+        # minimum number of directives (`arggym/core/scoring.py`, BLOAT_FACTOR).
+        # On a row whose minimum is 2 the partial-credit band is two directives
+        # wide, so this is how much of a zero the gate decided rather than the
+        # argumentation. Zero on tasks with no directive budget.
+        "bloat_rate": _rate(sum(str(r.get("reason") or "").startswith(BLOATED)
+                                for r in ok), len(ok)),
     }
     if floor is not None:
         out["floor"] = round(floor, 4)
@@ -575,11 +586,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               f"({'; '.join(m['_meta']['floors_unmeasured'])}); their `corrected` "
               f"column is absent rather than zero.\n")
     print(f"{'task':26s} {'n':>4s} {'scored':>6s} {'mean':>7s} {'untrunc':>8s} "
-          f"{'floor':>7s} {'corr':>7s} {'succ':>7s}")
+          f"{'floor':>7s} {'corr':>7s} {'succ':>7s} {'bloat':>7s}")
     for task, v in m["by_task"].items():
         print(f"{task:26s} {v['n']:4d} {v['n_scored']:6d} {_f(v['mean'])} "
               f"{_f(v['mean_untruncated'])} {_f(v.get('floor'))} "
-              f"{_f(v.get('corrected'))} {_f(v['success_rate'])}")
+              f"{_f(v.get('corrected'))} {_f(v['success_rate'])} "
+              f"{_f(v['bloat_rate'])}")
     print("\nNo overall mean: the per-task metrics are not the same quantity.")
     return 0
 

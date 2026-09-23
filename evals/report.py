@@ -334,6 +334,12 @@ def render(runs: List[Dict[str, Any]]) -> str:
         "`score == 1.0` on every task. No floor column: a floor is a mean "
         "score, not a success rate.", "",
         task_table(runs, "success_rate", show_floor=False), "",
+        "## Bloat rate, by task", "",
+        "The share of scored answers zeroed for using more than twice the "
+        "minimum number of directives. Nonzero only on the construction tasks; "
+        "read it beside their mean, since a bloat zero and a wrong answer score "
+        "the same. No floor column: this is a rate, not a score.", "",
+        task_table(runs, "bloat_rate", show_floor=False), "",
         "## Mean over untruncated generations only", "",
         task_table(runs, "mean_untruncated"), "",
         "---", "",
@@ -356,7 +362,7 @@ def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
               "n_scorer_refused", "mean", "mean_untruncated",
               "success_rate", "floor", "floor_strategy", "corrected", "floor_error",
               "truncated_rate", "no_answer_region_rate",
-              "answer_in_cot_rate", "zero_with_region"]
+              "answer_in_cot_rate", "zero_with_region", "bloat_rate"]
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, restval="")
