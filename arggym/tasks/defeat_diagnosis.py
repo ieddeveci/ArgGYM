@@ -409,7 +409,7 @@ DiagnosisRecord = Dict[str, str]
 DefeatDiagnosisAnswer = Dict[str, Any]
 
 _KIND = re.compile(r"kind\s*[:=]\s*([^;\n,]+)", re.I)
-_RECORD_START = re.compile(r"(?=defeated_at\s*[:=])")
+_RECORD_START = re.compile(r"(?=defeated_at\s*[:=])", re.I)
 
 
 def _blank_diagnostics(item: DDItem) -> Dict:
@@ -485,11 +485,14 @@ def score_value(value: DefeatDiagnosisAnswer, item: DDItem) -> ScoreResult:
         # of the answer's claims and nothing is scored against it.
         if "defeated_at" not in rec or "defeater" not in rec:
             continue
-        key = (rec["defeated_at"], rec["defeater"])
+        # Values are read without regard to case, as keys are: the gold's atoms and
+        # rule names are lowercase, and a claim id in the label-map tasks folds the
+        # same way (#41).
+        key = (str(rec["defeated_at"]).lower(), str(rec["defeater"]).lower())
         pred.setdefault(key, set()).add(str(rec.get("kind", "")).lower())
         if rec.get("survives_because"):
             pred_surv.setdefault(key, set()).add(
-                str(rec["survives_because"])
+                str(rec["survives_because"]).lower()
             )
     diag["n_quoted"] = len(pred)
     if not statuses and not pred:
