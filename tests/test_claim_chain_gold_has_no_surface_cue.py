@@ -1,10 +1,20 @@
-"""No shortcut short of evaluating the attacks may pick out `claim_chain`'s gold.
+"""Nothing cheaper than walking the attack towers may pick out `claim_chain`'s gold.
 
 Every `claim_chain` theory holds several derivations of the claim: the justifying line and
 one to three decoys that the theory defeats. Choosing among them should take working out
 which attacks succeed. #185 found it did not: the gold was the only derivation with a
-negated root, the largest one, the one whose root preference was listed first, and the
-one whose every attacker was itself attacked, and each of those picks scored 1.000.
+negated root, the largest one, the one whose root preference was listed first, the one
+whose every attacker was itself attacked, and the one other rules built on, and each of
+those picks scored 1.000.
+
+From level 4 each derivation is attacked by exactly one tower -- a rule rebutting one of
+its trunk literals, and rules above it each undercutting the one below -- and that tower
+alone decides it: even height and the derivation stands, odd and it falls. So the parity
+of the towers scores 1.0 by construction, and it is meant to: counting a tower to its top
+is the walk the task asks for. The contract is that nothing cheaper than that walk does
+better than a random derivation. Below level 4 the line is unattacked and each decoy
+falls to one attack, so one step of attack reasoning is the whole task there, as the
+README states.
 
 The check lists every argument for the claim the engine builds, renders each as an
 answer, scores it with the task's own scorer, and then scores a set of picks against a
@@ -12,22 +22,30 @@ uniform pick over the same derivations. A pick that ties several derivations is 
 the mean over the tie, which is what a solver breaking ties at random expects.
 
 Two kinds of pick must land within one item of random. Surface picks read signs,
-preferences and sizes, and hold at every level. Shallow-attack picks read one step
-of the attack graph -- how many directives attack a derivation, whether any does, whether
-an axiom contradicts it, whether every attacker is itself attacked or out-preferred --
-and hold from level 4. Below that the line is unattacked and each decoy falls to one
-unanswered attack, so one step of attack reasoning is the whole task there, as the README
-states.
+preferences, sizes and what other rules build on, and hold at every level.
+Shallow-attack picks read one step of the attack graph -- how many directives attack a
+derivation, whether any does, whether an axiom contradicts it, whether every attacker is
+itself attacked or out-preferred -- and hold from level 4.
 
 Picks read off quantities the generator draws at random per item -- where a derivation
-or its root preference is listed, what it is called, how long its attack tower is and
-which step it hits -- differ from random by sampling noise on a few dozen items, so a
-one-item bound would fail on luck. They are held to a few standard deviations instead,
-which still catches a pick that decides a level: the gold's root preference was listed
-first on every row from level 4 until the preferences were shuffled too.
+or its root preference is listed, what it is called, which step its tower hits, and from
+level 8 whether its tower is the shortest or the longest -- differ from random by
+sampling noise, so they are held to `NOISE_SD` standard deviations instead. That bound
+has a blind spot, and it is written down here rather than hidden: at 40 items a level
+one standard deviation is about three items, so the default run sees a pick that decides
+a whole level (the listed-first root preference sat seven or more away) but not one that
+decides a quarter of it. The slow run reads 50 seeds a cell to narrow it. Partial walks
+live in that gap on purpose: "every attacker's attacker is undefeated" picks towers of
+height exactly 2, and from level 8 that is the line whenever its tower is the shortest,
+about ten items in 40. Reading two steps of the tower is part of the walk, not a
+shortcut around it.
+
+At levels 4 to 7 the towers are 2 against 3, so the shortest tower is the even one:
+length there is parity, and the tower-length picks are not held to random.
 """
 from __future__ import annotations
 
+import dataclasses
 from collections import defaultdict
 from typing import Dict, List
 
@@ -41,13 +59,16 @@ from arggym.tasks import claim_chain as cc
 #: every derivation, and then equals random exactly, or it moves the sum by the share of
 #: items it decides -- 20 items a level for the root-sign cue of #185.
 SEEDS = tuple(range(10))
+#: The slow run's seeds for the picks held to a standard-deviation bound.
+MANY_SEEDS = tuple(range(50))
 
 #: The first level at which the line itself is attacked.
 ATTACKED_FROM = 4
+#: The first level at which tower heights overlap, so that length is not parity.
+TOWERS_OVERLAP_FROM = 8
 
-#: A shuffled pick scores random in expectation, and over 40 items its sum has a
-#: standard deviation of about three items. Four of them keep 150 checks from failing
-#: on luck, and a pick that decides every item of a level lands six or more away.
+#: A shuffled pick scores random in expectation. Four standard deviations keep some 150
+#: checks from failing on luck; see the module docstring for what they cannot see.
 NOISE_SD = 4.0
 
 
@@ -74,12 +95,12 @@ def derivations(item: cc.CCItem) -> List[Dict]:
         concluding[o.consequent].append(o.name)
     listed = {cc.render_op(o): i for i, o in enumerate(item.base_ops)}
 
-    def tower(name: str) -> int:
-        """How many rules undercut one another above an attacking rule, itself included."""
-        n = 1
-        while concluding.get("-" + name):
-            name, n = concluding["-" + name][0], n + 1
-        return n
+    def tower(name: str):
+        """The rules undercutting one another above an attacking rule, itself first."""
+        chain = [name]
+        while concluding.get("-" + chain[-1]):
+            chain.append(concluding["-" + chain[-1]][0])
+        return chain
 
     out = []
     for a, label in v.fw.argument_labels().items():
@@ -110,22 +131,24 @@ def derivations(item: cc.CCItem) -> List[Dict]:
         # contrary, a rule undercutting one of its rules. One is "answered" when a
         # stated preference puts the attacked premise above it, or a rule undercuts it.
         lits = set(prem) | {r.consequent for r in rs}
-        attackers = []
+        own = {r.name for r in rs}
+        attackers, towers, hit = [], [], []
         for x in lits:
             if _neg(x) in kind:
-                answered = _neg(x) not in axioms and x in beats[_neg(x)]
-                attackers.append((answered, None, None))
+                attackers.append(_neg(x) not in axioms and x in beats[_neg(x)])
             for rn in concluding.get(_neg(x), []):
-                at = steps.index(x) if x in steps else None
-                attackers.append((bool(concluding.get("-" + rn)), tower(rn), at))
-        for r in rs:
-            for rn in concluding.get("-" + r.name, []):
-                attackers.append((bool(concluding.get("-" + rn)), tower(rn), None))
-        towers = [t for _, t, _ in attackers if t is not None]
-        hit = [at for _, _, at in attackers if at is not None]
+                attackers.append(bool(concluding.get("-" + rn)))
+                towers.append(tower(rn))
+                if x in steps:
+                    hit.append(steps.index(x))
+        for rn in own:
+            for an in concluding.get("-" + rn, []):
+                attackers.append(bool(concluding.get("-" + an)))
+                towers.append(tower(an))
         out.append({
             "text": text,
             "label": label,
+            "key": (frozenset(prem), frozenset(own)),
             "root_neg": root.startswith("-"),
             "branch_neg": any(p.startswith("-") for p in prem if p != root),
             "n_neg": sum(p.startswith("-") for p in prem),
@@ -135,12 +158,15 @@ def derivations(item: cc.CCItem) -> List[Dict]:
             "n_prem": len(prem), "n_rules": len(rs),
             "n_junctions": sum(len(r.antecedents) > 1 for r in rs),
             "trunk": trunk,
+            "fanout": sum(1 for o in rules.values()
+                          if o.name not in own and set(o.antecedents) & lits),
             "n_attacks": len(attackers),
             "unattacked": not attackers,
             "no_axiom_contra": not any(_neg(x) in axioms for x in lits),
-            "answered": all(ok for ok, _, _ in attackers),
-            "n_live": sum(not ok for ok, _, _ in attackers),
-            "tower": max(towers, default=0),
+            "answered": all(attackers),
+            "n_live": sum(not ok for ok in attackers),
+            "towers": towers,
+            "tower": max((len(t) for t in towers), default=0),
             "hit_step": min(hit, default=trunk),
             "root_pos": listed[f"[{kind[root]}: {root}]"],
             "top_pos": listed[cc.render_op(top)],
@@ -150,7 +176,7 @@ def derivations(item: cc.CCItem) -> List[Dict]:
     return out
 
 
-#: Signs, preferences and sizes. Asserted at every level.
+#: Signs, preferences, sizes and what other rules build on. Asserted at every level.
 SURFACE = {
     "neg_root": ("flag", "root_neg"),
     "neg_branch": ("flag", "branch_neg"),
@@ -164,6 +190,7 @@ SURFACE = {
     "most_junc": ("max", "n_junctions"),
     "fewest_junc": ("min", "n_junctions"),
     "longest_trunk": ("max", "trunk"),
+    "most_fanout": ("max", "fanout"),
 }
 #: One step of the attack graph. Asserted from `ATTACKED_FROM`.
 SHALLOW_ATTACK = {
@@ -174,7 +201,8 @@ SHALLOW_ATTACK = {
     "fewest_live": ("min", "n_live"),
 }
 STRUCTURAL = {**SURFACE, **SHALLOW_ATTACK}
-#: Drawn at random per item. Asserted within `NOISE_SD` standard deviations.
+#: Listing order and names, shuffled per item. Asserted within `NOISE_SD` standard
+#: deviations at every level.
 SHUFFLED = {
     "pref_first": ("min", "pref_rank"),
     "root_first": ("min", "root_pos"),
@@ -184,15 +212,33 @@ SHUFFLED = {
     "root_name_first": ("min", "root_name"),
     "top_name_first": ("min", "top_name"),
 }
-#: The attack tower's length and target, drawn at random per derivation from level 4.
-#: Below that only the decoys are attacked, so these read the same one step as
-#: `SHALLOW_ATTACK`. Asserted within `NOISE_SD` standard deviations from `ATTACKED_FROM`.
-SHUFFLED_ATTACK = {
-    "shortest_tower": ("min", "tower"),
-    "longest_tower": ("max", "tower"),
+#: The step a tower hits, drawn per derivation from `ATTACKED_FROM`. Asserted within
+#: `NOISE_SD` standard deviations from there.
+TOWER_TARGET = {
     "hit_earliest": ("min", "hit_step"),
     "hit_latest": ("max", "hit_step"),
 }
+#: A tower's length is fixed by its role -- even for the line, odd for a decoy -- and
+#: only which derivation has the shortest or the longest is balanced, from
+#: `TOWERS_OVERLAP_FROM`. Asserted within `NOISE_SD` standard deviations from there.
+TOWER_LENGTH = {
+    "shortest_tower": ("min", "tower"),
+    "longest_tower": ("max", "tower"),
+}
+ALL_PICKS = {**STRUCTURAL, **SHUFFLED, **TOWER_TARGET, **TOWER_LENGTH}
+
+
+def exact_picks(level: int) -> Dict:
+    return SURFACE if level < ATTACKED_FROM else STRUCTURAL
+
+
+def noisy_picks(level: int) -> Dict:
+    out = dict(SHUFFLED)
+    if level >= ATTACKED_FROM:
+        out.update(TOWER_TARGET)
+    if level >= TOWERS_OVERLAP_FROM:
+        out.update(TOWER_LENGTH)
+    return out
 
 
 def picks(item: cc.CCItem) -> Dict[str, float]:
@@ -204,7 +250,7 @@ def picks(item: cc.CCItem) -> Dict[str, float]:
 
     row = {"random": mean_over(range(len(ds))), "n_cands": len(ds),
            "n_in": sum(d["label"] == "IN" for d in ds)}
-    for name, (how, key) in {**STRUCTURAL, **SHUFFLED, **SHUFFLED_ATTACK}.items():
+    for name, (how, key) in ALL_PICKS.items():
         vals = [d[key] for d in ds]
         if how == "flag":
             idx = [i for i, x in enumerate(vals) if x] or range(len(ds))
@@ -227,24 +273,33 @@ def surface_table(levels=LEVELS, seeds=SEEDS) -> Dict[int, Dict[str, List[float]
     return tab
 
 
+def _noisy_off(tab, level) -> Dict[str, float]:
+    base = sum(tab["random"])
+    sd = sum(p * (1 - p) for p in tab["random"]) ** 0.5
+    return {name: round(sum(tab[name]) - base, 2) for name in noisy_picks(level)
+            if abs(sum(tab[name]) - base) > NOISE_SD * sd}
+
+
 @pytest.mark.parametrize("level", LEVELS)
 def test_no_shortcut_beats_a_random_derivation(level):
     tab = surface_table(levels=(level,))[level]
     base = sum(tab["random"])
-    exact = SURFACE if level < ATTACKED_FROM else STRUCTURAL
-    off = {name: round(sum(tab[name]) - base, 2) for name in exact
+    off = {name: round(sum(tab[name]) - base, 2) for name in exact_picks(level)
            if abs(sum(tab[name]) - base) > 1.0}
     assert not off, (
         f"L{level}: over {len(tab['random'])} items these picks score more than one item "
         f"away from a random derivation (random sums to {base:.2f}): {off}")
+    off = _noisy_off(tab, level)
+    assert not off, f"L{level}: more than {NOISE_SD} SD from random: {off}"
 
-    sd = sum(p * (1 - p) for p in tab["random"]) ** 0.5
-    noisy = SHUFFLED if level < ATTACKED_FROM else {**SHUFFLED, **SHUFFLED_ATTACK}
-    off = {name: round(sum(tab[name]) - base, 2) for name in noisy
-           if abs(sum(tab[name]) - base) > NOISE_SD * sd}
-    assert not off, (
-        f"L{level}: these picks sit more than {NOISE_SD} standard deviations "
-        f"({NOISE_SD * sd:.1f} items) from a random derivation: {off}")
+
+@pytest.mark.slow
+@pytest.mark.parametrize("level", LEVELS)
+def test_no_shuffled_pick_beats_a_random_derivation_on_many_seeds(level):
+    tab = surface_table(levels=(level,), seeds=MANY_SEEDS)[level]
+    off = _noisy_off(tab, level)
+    assert not off, (f"L{level}: over {len(tab['random'])} items, more than {NOISE_SD} SD "
+                     f"from random: {off}")
 
 
 @pytest.mark.parametrize("level", LEVELS)
@@ -257,3 +312,20 @@ def test_the_gold_is_the_only_justified_derivation(level):
             assert len(ds) >= 2 and len(ok) == 1, (level, ordering, seed, len(ds), len(ok))
             assert cc.score(ok[0]["text"], it).score == 1.0
             assert cc.score(it.reference, it).score == 1.0
+
+
+@pytest.mark.parametrize("level", [lv for lv in LEVELS if lv >= ATTACKED_FROM])
+def test_each_derivation_is_decided_by_its_one_tower(level):
+    """Delete the top of a derivation's tower and its standing flips: nothing else
+    attacking it decides."""
+    for ordering in ALL_ORDERINGS:
+        for seed in SEEDS:
+            it = cc.make_item(level, seed, ordering)
+            for d in derivations(it):
+                assert len(d["towers"]) == 1, (level, ordering, seed, d["towers"])
+                top = d["towers"][0][-1]
+                sub = dataclasses.replace(it, base_ops=[
+                    o for o in it.base_ops if not (o.kind == "defeasible" and o.name == top)])
+                after = {e["key"]: e["label"] for e in derivations(sub)}
+                assert (after[d["key"]] == "IN") != (d["label"] == "IN"), (
+                    level, ordering, seed, d["label"], after[d["key"]])

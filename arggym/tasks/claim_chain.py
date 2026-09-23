@@ -188,12 +188,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     # below. The line's tower has even height, so its bottom rule ends up defeated and
     # the line stands. A decoy's has odd height of at least 3, so its bottom rule is
     # undercut too, yet stands, and the decoy falls: only walking the whole tower
-    # decides (#185). How many decoy towers are shorter than the line's is uniform over
-    # 0..n_decoy, and every tower's target is drawn the same way, so neither length nor
-    # place tells them apart.
+    # decides (#185). Every tower's target is drawn the same way. Heights grow in
+    # stages: 2 against 3 at levels 4-7, where the shorter tower is the even one and
+    # reading its length is reading its parity; from level 8 the line's is 2 or 4
+    # (4 or 6 from level 12) with each decoy's one shorter or one longer, and how many
+    # decoy towers are shorter than the line's is uniform over 0..n_decoy, so the
+    # line is the shortest or the longest no more often than any other derivation.
     tw = random.Random(stable_seed(seed, level, ordering, "tw"))
     tower_true, decoy_towers = 0, [0] * n_decoy
-    if use_neg_root:
+    if use_neg_root and level < 8:
+        tower_true, decoy_towers = 2, [3] * n_decoy
+    elif use_neg_root:
         extra = 0 if level < 12 else 2
         n_short = tw.randrange(n_decoy + 1)
         tower_true = (2 if n_short == 0 else 4) + extra
@@ -216,6 +221,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     root = _root(ops, it, use_neg_root)
     line_ops, _, true_lits = _chain(ops, it, ridx, root, claim, depth, j_points, level)
+    chains = [line_ops]
     if tower_true:
         _tower(ops, it, ridx, true_lits[tw.randrange(depth - 1)], tower_true)
 
@@ -225,7 +231,8 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     decoy_info = []
     for k in range(n_decoy):
         droot = _root(ops, it, use_neg_root)
-        _, drules, dlits = _chain(ops, it, ridx, droot, claim, depth, j_points, level)
+        dline, drules, dlits = _chain(ops, it, ridx, droot, claim, depth, j_points, level)
+        chains.append(dline)
         mode = (k + level) % 4
         if decoy_towers[k]:
             step = tw.randrange(depth - 1)
@@ -248,18 +255,20 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             where = "near-claim"
         decoy_info.append({"rules": drules, "defeat_at": where})
 
+    # Two rules leading nowhere hang off each derivation at the same place, so "the one
+    # whose literals other rules build on" is every derivation rather than the line.
     if branch_decoys and depth >= 4:
-        _line_rules = [o for o in line_ops if o.kind in ("defeasible", "strict") and o.consequent]
-        if not _line_rules:
-            return Rejected("no_line_rule_to_anchor")
-        anchor = _line_rules[min(len(_line_rules) - 1, depth // 3)].consequent
-        cur = anchor
-        for j in range(2):
-            ridx[0] += 1
-            nxt = next(it)
-            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}", antecedents=(cur,),
-                                 consequent=nxt))
-            cur = nxt
+        for chain in chains:
+            _rules = [o for o in chain if o.kind in ("defeasible", "strict") and o.consequent]
+            if not _rules:
+                return Rejected("no_line_rule_to_anchor")
+            cur = _rules[min(len(_rules) - 1, depth // 3)].consequent
+            for j in range(2):
+                ridx[0] += 1
+                nxt = next(it)
+                ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                     antecedents=(cur,), consequent=nxt))
+                cur = nxt
 
     _base = sum(1 for o in ops if o.kind == "defeasible")
     _have = sum(1 for o in ops if o.kind == "defeasible" and len(o.antecedents or ()) > 1)
