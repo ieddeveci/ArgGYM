@@ -90,7 +90,7 @@ GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh hf-qwen3.8-27b-medium
 Example, H200:
 
 ```bash
-GPU_TYPE=H200 ./hpc/vllm/submit_truba.sh hf-gemma4-31b-it
+GPU_TYPE=H200 ./hpc/vllm/submit_truba.sh hf-gemma-4-31b-it
 ```
 
 The argument is an eval config under `evals/conf/model/`. A model with

@@ -1,0 +1,31 @@
+# Gemini 3.8 Flash through the Gemini API's OpenAI-compatible endpoint.
+#
+# Limits: 1,048,576 input, 65,536 output, and thinking tokens count against the
+# output limit (https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash,
+# https://ai.google.dev/gemini-api/docs/thinking). The cap is the output limit.
+#
+# No temperature, top_p or top_k. Google's guidance for every Gemini 3.x model
+# is to leave all three at their defaults
+# (https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5).
+#
+# Thinking level: high, set through Gemini's own thinking_config rather than
+# reasoning_effort (the two cannot be sent together;
+# https://ai.google.dev/gemini-api/docs/openai). The Gemini API lists low,
+# medium and high for gemini-3.8-flash, default medium; "minimal is not
+# supported and returns an error"
+# (https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash,
+# https://ai.google.dev/gemini-api/docs/thinking).
+# One config per level: aistudio-gemini-3.8-flash-low,
+# aistudio-gemini-3.8-flash-medium, aistudio-gemini-3.8-flash-high.
+name: aistudio-gemini-3.8-flash-high
+model: gemini-3.8-flash
+base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
+api_key_env: GEMINI_API_KEY
+sampling:
+  max_tokens: 65536
+extra_body:
+  extra_body:
+    google:
+      thinking_config:
+        thinking_level: high
+        include_thoughts: false

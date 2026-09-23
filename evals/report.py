@@ -78,7 +78,9 @@ def label(m: Dict[str, Any]) -> str:
     e = meta.get("endpoint") or {}
     base = str(e.get("model") or os.path.basename(meta.get("run_dir", "run")))
     parts = [base]
-    if meta.get("elicitation") and meta["elicitation"] != "none":
+    # The default elicitation and template go unnamed, so a header shows only
+    # what differs from the default run.
+    if meta.get("elicitation") and meta["elicitation"] != "cot":
         parts.append(str(meta["elicitation"]))
     if meta.get("template") != "xml_tags":
         parts.append(str(meta.get("template")))
@@ -122,13 +124,18 @@ def labels(runs: Sequence[Dict[str, Any]]) -> List[str]:
 
 
 def _settings(m: Dict[str, Any]) -> Dict[str, Any]:
-    """The endpoint knobs that could tell two same-named runs apart."""
+    """The endpoint knobs and elicitation text that could tell two same-named runs apart."""
     e = m["_meta"].get("endpoint") or {}
     out = dict(e.get("sampling") or {})
     out.update({k: json.dumps(v, sort_keys=True)
                 for k, v in (e.get("extra_body") or {}).items()})
     if e.get("base_url"):
         out["base_url"] = e["base_url"]
+    # Two runs under one elicitation name can carry different text, as when a
+    # condition is reworded and keeps its name.
+    for k, v in (m["_meta"].get("elicitation_config") or {}).items():
+        if k != "name" and v:
+            out[f"elicitation.{k}"] = v
     return out
 
 

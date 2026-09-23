@@ -1,4 +1,7 @@
+# The elicitation every config runs under. It asks only for reasoning before
+# the answer: the question already states the answer format and the template
+# says where the answer goes, so neither is repeated here.
 name: cot
-system: "Work the problem out step by step, then answer in the format the question asks for."
+system: "Think the problem through step by step before you answer."
 prefix: ""
 suffix: ""

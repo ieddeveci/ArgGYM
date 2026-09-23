@@ -1,0 +1,37 @@
+# Gemma 4 31B IT through the Gemini API's OpenAI-compatible endpoint, under the
+# model identifier gemma-4-31b-it
+# (https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api).
+#
+# Thinking level: high, which turns thinking on. The hosted API offers
+# Gemma 4 thinking only as "high" (enabled) or "minimal" (disabled)
+# (https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api). This is the
+# condition the vLLM config for the same checkpoint, hf-gemma-4-31b-it, runs
+# under, though the two servers are not guaranteed to decode alike.
+# One config per level: aistudio-gemma-4-31b-it-minimal,
+# aistudio-gemma-4-31b-it-high.
+#
+# Sampling is Google's recommendation for Gemma 4, "temperature=1.0,
+# top_p=0.95, top_k=64" (https://ai.google.dev/gemma/docs/core/model_card_4).
+# top_k is not an OpenAI parameter and this endpoint documents no way to pass
+# it, so it is left to the provider.
+#
+# The model's context is 256K (same card). Google documents no output limit for
+# hosted Gemma 4; 32,768 is kept from before and is not verified against the
+# API's `outputTokenLimit`, nor is whether thinking tokens count against it.
+#
+# Keep concurrency conservative: the AI Studio quota limits both requests per
+# minute and input tokens per minute.
+name: aistudio-gemma-4-31b-it-high
+model: gemma-4-31b-it
+base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
+api_key_env: GEMINI_API_KEY
+sampling:
+  max_tokens: 32768
+  temperature: 1.0
+  top_p: 0.95
+extra_body:
+  extra_body:
+    google:
+      thinking_config:
+        thinking_level: high
+        include_thoughts: false

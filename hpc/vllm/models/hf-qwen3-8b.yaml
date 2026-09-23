@@ -1,3 +1,5 @@
+revision: b968826d9c46dd6066d109eabc6255188de91218
+
 dtype: bfloat16
 # Context: config.json's max_position_embeddings, 40,960, which the card says
 # is sized as 32,768 output + 8,192 prompt.

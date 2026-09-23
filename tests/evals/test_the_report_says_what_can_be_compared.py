@@ -27,7 +27,7 @@ def a_metrics(label, taskset_hash="abc", versions=None, **overrides):
                          "bloat_rate": 0.0},
     }
     return {"_meta": {"run_dir": f"/runs/{label}", "endpoint": {"model": label},
-                      "template": "xml_tags", "elicitation": "none",
+                      "template": "xml_tags", "elicitation": "cot",
                       "taskset_hash": taskset_hash, "run_status": "completed",
                       "taskset_versions": versions or {"prompt_version": 3},
                       "n_scored": 4},
@@ -110,10 +110,25 @@ def test_two_runs_of_one_model_get_different_columns(tmp_path):
     """Elicitation exists so two runs are an experiment, not a collision."""
     a = a_metrics("gpt-5")
     b = a_metrics("gpt-5")
-    b["_meta"]["elicitation"] = "cot"
+    b["_meta"]["elicitation"] = "none"
     labels = [m["_label"] for m in written(tmp_path, a, b)]
     assert len(set(labels)) == 2, labels
-    assert any("cot" in x for x in labels)
+    # The default elicitation goes unnamed; the ablation is named.
+    assert sorted(labels) == ["gpt-5", "gpt-5/none"], labels
+
+
+def test_two_texts_under_one_elicitation_name_get_different_columns(tmp_path):
+    """A reworded `cot` keeps its name, so the text is what separates the runs."""
+    runs = []
+    for text in ("Work the problem out step by step.",
+                 "Think the problem through step by step before you answer."):
+        m = a_metrics("gpt-5")
+        m["_meta"]["elicitation_config"] = {"name": "cot", "system": text,
+                                            "prefix": "", "suffix": ""}
+        runs.append(m)
+    labels = [m["_label"] for m in written(tmp_path, *runs)]
+    assert len(set(labels)) == 2, labels
+    assert all("elicitation.system=" in x for x in labels), labels
 
 
 def test_every_score_column_carries_its_floor(tmp_path):

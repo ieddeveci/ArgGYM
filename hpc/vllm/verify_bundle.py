@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
-from pairing import CONFIGS, PROFILES, ROOT, level_of, profile_of
+from pairing import CONFIGS, EFFORT_LEVELS, PROFILES, ROOT, level_of, profile_of
 
 # Tokens held back for the prompt out of a serving profile's max_model_len. Every
 # hf-* eval config's max_tokens must fit in what is left: the check below
@@ -29,8 +29,8 @@ from pairing import CONFIGS, PROFILES, ROOT, level_of, profile_of
 # counter_argument_strict and preference_construction had not finished
 # building, and those tasks' prompts run 3,000+ characters shorter than the
 # longest at every level), each prompt composed as evals/prompt.py:compose does
-# with the xml_tags template and the cot elicitation (the HPC runner's default,
-# and the longer of the two shipped conditions), chat-templated with each served
+# with the xml_tags template and the cot elicitation (the default, and the
+# longer of the two shipped conditions), chat-templated with each served
 # model's own tokenizer, generation prompt included. The longest is 4,773
 # tokens, under Mistral-7B-Instruct-v0.3's tokenizer, on
 # status_query/L15/weakest_link_elitist/s6 (8,552 characters); every other
@@ -142,6 +142,30 @@ for name in sorted(configs):
 # ---------------------------------------------------------------------------
 
 for profile, p in sorted(profiles.items()):
+    # A profile is named `hf-<model>`, where <model> is the checkpoint name its
+    # configs send, lowercased. An RL fine-tune sends its own repo as `model`
+    # and declares what it was trained from in `base_model`; its profile is
+    # `hf-<base model>-rl-<tag>`. Never with a level: pairing.py reads a
+    # trailing level off a config's stem, so a profile ending in one would pair
+    # with the wrong file.
+    if not re.fullmatch(r"hf-[a-z0-9][a-z0-9.-]*", profile):
+        errors.append(f"{profile}: a profile stem is hf- and then [a-z0-9.-]")
+    if any(profile.endswith(f"-{lv}") for lv in EFFORT_LEVELS):
+        errors.append(f"{profile}: a profile stem carries no effort level")
+    for stem in served.get(profile, []):
+        model, base = str(configs[stem].get("model")), configs[stem].get("base_model")
+        if base:
+            want = "hf-" + str(base).rsplit("/", 1)[-1].lower() + "-rl-"
+            if base == model:
+                errors.append(f"{stem}: base_model is the model it serves, so it is "
+                              f"no fine-tune; drop base_model")
+            elif not re.fullmatch(re.escape(want) + r"[a-z0-9][a-z0-9.-]*", profile):
+                errors.append(f"{profile}: serves a fine-tune of {base}, so should be "
+                              f"named {want}<tag>")
+        else:
+            want = "hf-" + model.rsplit("/", 1)[-1].lower()
+            if profile != want:
+                errors.append(f"{profile}: serves {model}, so should be named {want}")
     # The lane serves BF16 weights; run_vllm_arggym.py refuses anything else
     # at job start, which is a queue wait too late to find out.
     if p.get("dtype") != "bfloat16":
@@ -156,20 +180,20 @@ for profile, p in sorted(profiles.items()):
 # ---------------------------------------------------------------------------
 
 # Ministral-3-3B's card serves it with Mistral's own formats and parser.
-m = profiles.get("hf-ministral3-3b-reasoning")
+m = profiles.get("hf-ministral-3-3b-reasoning-2512")
 if m is not None:
     joined = " ".join(map(str, m.get("extra_args", [])))
     for arg in ("--tokenizer-mode mistral", "--config-format mistral",
                 "--load-format mistral"):
         if arg not in joined:
-            errors.append(f"hf-ministral3-3b-reasoning: missing server arg {arg}")
+            errors.append(f"hf-ministral-3-3b-reasoning-2512: missing server arg {arg}")
     if m.get("reasoning_parser") != "mistral":
-        errors.append("hf-ministral3-3b-reasoning: reasoning_parser must be mistral")
+        errors.append("hf-ministral-3-3b-reasoning-2512: reasoning_parser must be mistral")
 
 # Gemma 4 thinks when the request sets enable_thinking, and the gemma4 parser
 # can only split the thought out if the special tokens that delimit it survive.
 # It has no effort levels to split its config by.
-for profile in ("hf-gemma4-31b-it", "hf-gemma4-26b-a4b-it"):
+for profile in ("hf-gemma-4-31b-it", "hf-gemma-4-26b-a4b-it"):
     if profile not in profiles:
         continue
     if profiles[profile].get("reasoning_parser") != "gemma4":

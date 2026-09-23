@@ -1,5 +1,5 @@
-# The question as frozen, with nothing added. The default, because anything
-# added here is the evaluator's intervention and belongs in a named condition.
+# The question as frozen, with nothing added: the ablation arm, which measures
+# what the cot elicitation buys. Select it with `elicitation=none`.
 name: none
 system: ""
 prefix: ""

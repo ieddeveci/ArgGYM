@@ -5,7 +5,7 @@ writes what came back. Scoring is `score.py`, offline, from these files -- so a
 parser fix, a template change or a scorer bug costs a rerun of a few seconds
 rather than the hours of inference that produced the completions.
 
-    uv run python -m evals.run taskset=data/taskset.jsonl model=gpt-5-openai-medium
+    uv run python -m evals.run taskset=data/taskset.jsonl model=openai-gpt-5-medium
     VLLM_BASE_URL=http://localhost:8000/v1 uv run python -m evals.run model=hf-qwen3.8-27b-medium filter.levels=[3,9] filter.limit=20
 """
 from __future__ import annotations
@@ -144,6 +144,10 @@ def manifest(cfg: DictConfig, solver: ChatSolver, ts_manifest: Dict[str, Any],
         "taskset_hash": ts_manifest.get("taskset_hash"),
         "taskset_versions": ts_manifest.get("versions", {}),
         "endpoint": solver.client.endpoint.redacted(),
+        # The checkpoint an RL fine-tune was trained from. `endpoint.model` is
+        # the fine-tune's own repo, the one served; this is only written down,
+        # never sent.
+        "base_model": cfg.model.get("base_model"),
         "template": cfg.template.name,
         "elicitation": solver.elicitation.name,
         # The text, not just the name. A name is what a config file happens to
