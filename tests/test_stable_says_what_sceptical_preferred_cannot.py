@@ -226,16 +226,16 @@ def test_every_cluster_kind_reaches_a_builder_of_its_own(monkeypatch):
 
 
 #: Which ordering carries the unattacked ring at each level that asks about stable, read
-#: off `wants_unshielded_ring`. Ten levels ask (6 and up), and `ALL_ORDERINGS[(level // 3)
-#: % 4]` walks the four of them in blocks of three, so the tenth level starts a fourth
-#: block that the curriculum ends before it fills. Pinned as a table because the shape of
-#: it is the thing under test and no formula states it more clearly than the rows do.
+#: off `wants_unshielded_ring`. Ten levels ask (6 and up), and `ALL_ORDERINGS[level % 4]`
+#: walks the four orderings one level at a time, so the ten split 3/3/2/2. Pinned as a
+#: table because the shape of it is the thing under test and no formula states it more
+#: clearly than the rows do.
 RING = {
-    6: "weakest_link_elitist", 7: "weakest_link_elitist", 8: "weakest_link_elitist",
-    9: "weakest_link_democratic", 10: "weakest_link_democratic",
-    11: "weakest_link_democratic",
-    12: "last_link_elitist", 13: "last_link_elitist", 14: "last_link_elitist",
-    15: "last_link_democratic",
+    6: "weakest_link_elitist", 7: "weakest_link_democratic",
+    8: "last_link_elitist", 9: "last_link_democratic",
+    10: "weakest_link_elitist", 11: "weakest_link_democratic",
+    12: "last_link_elitist", 13: "last_link_democratic",
+    14: "weakest_link_elitist", 15: "weakest_link_democratic",
 }
 
 
@@ -253,16 +253,9 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
     Not keyed on the seed, because `tasksets/standard.yaml` scans up to 40 seeds a cell and
     keeps the first two that build, so a seed-keyed rule realises an uncontrolled fraction.
 
-    The spread is no longer even, and that is a real cost of exporting every level. The
-    rotation is `ALL_ORDERINGS[(level // 3) % 4]`, which was a bijection from the five
-    exported levels onto the four orderings back when the grid stepped by 3. Level by
-    level it instead walks each ordering for three levels running, and the ten
-    stable-asking levels split 3/3/3/1 rather than the 3/3/2/2 that ten rows allow. So
-    `last_link_democratic` carries the ring on one level where the others carry it on
-    three, and the level-by-ordering cell is confounded in blocks rather than scattered.
-    Nothing reports that cell, and the marginals are still non-empty, so the ring stays
-    readable -- but rebalancing the rotation for a fifteen-level grid is a curriculum
-    change, it would move theories and gold, and it belongs in its own issue.
+    The spread is even as well as complete: no ordering carries more than one ring above
+    any other, and no two adjacent levels share one, so each ordering's rings sit four
+    levels apart rather than in one block of the curriculum (#168).
     """
     asks = [lv for lv in range(1, 16) if sq.STABLE in sq.semantics_for(lv)]
     chosen = {lv: [o for o in ALL_ORDERINGS if sq.wants_unshielded_ring(lv, o)]
@@ -281,6 +274,13 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
         f"one ordering carries {max(carried.values())} of the {len(asks)} rings, so most "
         f"of what `stable` answers under it comes from ring items and its column is a "
         f"measurement of the ring rather than of the ordering: {dict(carried)}")
+    assert max(carried.values()) - min(carried.values()) <= 1, (
+        f"the rings split {dict(carried)} across orderings, where {len(asks)} levels "
+        f"allow a split within one of even")
+    blocks = [lv for lv in asks[:-1] if RING[lv] == RING[lv + 1]]
+    assert not blocks, (
+        f"levels {blocks} hand the ring to the same ordering as the level after them, so "
+        f"that ordering's rings sit in one stretch of the curriculum")
     for level in range(1, 16):
         if level in chosen:
             continue
