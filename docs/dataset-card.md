@@ -269,7 +269,8 @@ or whether each of its attackers is itself attacked scores what a random
 derivation scores (`tests/test_claim_chain_gold_has_no_surface_cue.py`). Counting
 a tower's height does better by design, since that is the walk. So does a partial
 count at levels 4 to 11, where a height of 2 or 3 settles a tower without reading
-past it.
+past it: at levels 8 to 11, 5 of every 6 decoy towers are 3 high, so "a tower of
+height 3 means a decoy" scores 0.83 where a random derivation scores 0.33.
 
 There is no personal data, no scraped text, and no human annotation. The natural
 language in `formalization` comes from surface forms taken from the ASPIC+ and

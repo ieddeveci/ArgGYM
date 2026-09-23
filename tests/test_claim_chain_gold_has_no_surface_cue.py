@@ -31,11 +31,14 @@ Picks read off quantities the generator draws at random per item -- where a deri
 or its root preference is listed, what it is called, which step its tower hits, and from
 level 8 whether its tower is the shortest or the longest -- differ from random by
 sampling noise, so they are held to `NOISE_SD` standard deviations instead. That bound
-has a blind spot, and it is written down here rather than hidden: at 40 items a level
-one standard deviation is about three items, so the default run sees a pick that decides
-a whole level (the listed-first root preference sat seven or more away) but not one that
-decides a quarter of it. The slow run reads 50 seeds a cell to narrow it. Partial walks
-live in that gap on purpose: "every attacker's attacker is undefeated" picks towers of
+has a blind spot, and it is written down here rather than hidden. With random scoring p
+over n items, a pick that always finds the gold on a share f of them and is random on
+the rest passes whenever f is below 4 * sqrt(p / (n * (1 - p))). In the default run,
+40 items a level, that is 63% of a level at levels 4 to 7, 45% at 8 to 11 and 37% at
+12 to 15. The slow run reads 50 seeds a cell, 200 items a level, and narrows it to 28%,
+20% and 16%. A pick that decides a whole level still stands out: the listed-first root
+preference sat 20 items above random at level 4, 6.3 standard deviations. Partial walks
+live in the gap on purpose: "every attacker's attacker is undefeated" picks towers of
 height exactly 2, and from level 8 that is the line whenever its tower is the shortest,
 about ten items in 40. Reading two steps of the tower is part of the walk, not a
 shortcut around it.
