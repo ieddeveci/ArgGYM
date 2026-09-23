@@ -39,7 +39,8 @@ from arggym.core.serialize import ops_from_json
 #: 0.1645 to 0.1734 under the same `all_overruled`. A floor moves with the
 #: scorer and with the search, and `scoring_version` sees only the first, so two
 #: scoring artifacts carrying different floors for the same rows are otherwise
-#: identical.
+#: identical. It covers the search and its strategies, not which rows the
+#: harness fits a floor over: that is harness aggregation (`evals/score.py`).
 FLOORS_VERSION = 2
 
 #: Statuses a label-map task can answer with.

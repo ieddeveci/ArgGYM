@@ -248,7 +248,8 @@ def task_table(runs: List[Dict[str, Any]], field: str, show_floor: bool = True) 
         lines.append("`*` one column's `corrected` cannot be reproduced from this "
                      "floor: either the runs measured different floors for that "
                      "task, or one of them could not measure a floor at all "
-                     "(`_meta.floors_unmeasured` says which). A floor is measured "
+                     "(`_meta.floors_unmeasured` says which) or scored no row of "
+                     "it. A floor is measured "
                      "over the rows a run scored.")
     return "\n".join(lines)
 
