@@ -61,7 +61,13 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: rules at levels 3 to 5 (#167). That rewrites the theory of both arms at levels 1 and
 #: 2 and the strict arm's theory on the 14 cells at levels 3 to 5 where the draw fell,
 #: 46 rows in all.
-PROMPT_VERSION = 10
+#:
+#: Version 11 moves `semantics_query`: the unattacked ring's ordering is `level % 4`
+#: rather than `(level // 3) % 4`, so each ordering carries it on levels four apart
+#: instead of three levels running (#168). The ring moves on 14 cells at levels 7 to
+#: 10 and 13 to 15 and rewrites the theory and gold of their 28 rows. No other task
+#: moves.
+PROMPT_VERSION = 11
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:

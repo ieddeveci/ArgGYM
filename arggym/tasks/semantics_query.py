@@ -121,19 +121,16 @@ def wants_unshielded_ring(level: int, ordering: str) -> bool:
     would realise an uncontrolled fraction.
 
     One ordering per stable-asking level, so a ring is on a quarter of the rows that ask
-    about stable and no more. `level // 3` was written when the grid stepped by 3 and was
-    a bijection from the five exported levels onto the four orderings, which balanced the
-    ordering marginal exactly. The grid exports all fifteen levels now, so the same
-    expression walks each ordering for three levels running and the ten stable-asking
-    levels split 3/3/3/1: every ordering still carries a ring, `last_link_democratic`
-    carries one where the others carry three. Only the level-by-ordering cell is
-    confounded, and nothing reports that cell. Rebalancing the rotation would move
-    theories and gold, so it is a curriculum decision rather than a fix;
-    tests/test_stable_says_what_sceptical_preferred_cannot.py pins the table as it stands.
+    about stable and no more. The rotation walks the four orderings one level at a time,
+    so each ordering's ring levels are four apart rather than sitting in one block, where a per-ordering `stable` mean would read level difficulty
+    as an ordering effect (#168). The stable-asking levels are a contiguous run --
+    `semantics_for` only ever adds semantics as the level rises -- and any contiguous run
+    of levels lands within one of balanced: the ten that ask today split 3/3/2/2.
+    tests/test_stable_says_what_sceptical_preferred_cannot.py pins the table.
     """
     if STABLE not in semantics_for(level):
         return False
-    return ALL_ORDERINGS[(level // 3) % len(ALL_ORDERINGS)] == ordering
+    return ALL_ORDERINGS[level % len(ALL_ORDERINGS)] == ordering
 
 
 def render_ops(ops: Sequence[Operation]) -> str:
