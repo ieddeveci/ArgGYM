@@ -539,7 +539,17 @@ def build(level: int, seed: int, ordering: str = LAST_LINK) -> Union[SemItem, Re
     facts = [o for o in ops if o.kind in ("premise", "axiom")]
     rules = [o for o in ops if o.kind in ("defeasible", "strict")]
     prefs = [o for o in ops if o.kind.startswith("prefer")]
-    base = facts + rules + prefs + _pad
+    # Every padding claim is justified, so the padding has to be listed among the other
+    # facts and rules: appended after the preferences, it marked its claims as justified
+    # by position alone (#208). Its own rng keeps the main stream where it was.
+    listed_facts, listed_rules = facts, rules
+    if _pad:
+        _prng = random.Random(stable_seed(seed, level, ordering, "pad"))
+        listed_facts = facts + [o for o in _pad if o.kind == "premise"]
+        listed_rules = rules + [o for o in _pad if o.kind == "defeasible"]
+        _prng.shuffle(listed_facts)
+        _prng.shuffle(listed_rules)
+    base = listed_facts + listed_rules + prefs
 
     _cache_v: Optional[ASPICVerifier] = None
     if EAGER in sems:

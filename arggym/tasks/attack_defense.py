@@ -16,7 +16,12 @@ from arggym.core.curriculum import (
     junctions_for,
     wants_ternary,
 )
-from arggym.core.invariants import language_enrichment, randomize_rule_names, remap_text
+from arggym.core.invariants import (
+    language_enrichment,
+    ordered_ops,
+    randomize_rule_names,
+    remap_text,
+)
 from arggym.core.minimality import find_minimum, find_minimum_decomposed
 from arggym.core.prompting import render
 from arggym.core.scoring import score_item, subgoals_from
@@ -72,21 +77,9 @@ class Item:
         return subgoals_from(self.goals, self.base_ops)
 
 
-def _ops_ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
-    facts = [o for o in ops if o.kind in ("premise", "axiom")]
-    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
-    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
-    if shuffle_seed is not None:
-        import random
-        rng = random.Random(shuffle_seed)
-        rng.shuffle(facts)
-        rng.shuffle(rules)
-    return facts + rules + prefs
-
-
 def _render_ops(ops: Sequence[Operation]) -> str:
     out = []
-    for o in _ops_ordered(ops):
+    for o in ordered_ops(ops):
         if o.kind in ("premise", "axiom"):
             out.append(f"[{o.kind}: {o.content}]")
         elif o.kind in ("defeasible", "strict"):
@@ -198,7 +191,7 @@ def build_attack_item(level: int, seed: int, ordering: str,
     for _c in chains:
         for _r in _c.rules:
             _r["name"] = _rmap.get(_r["name"], _r["name"])
-    base = _ops_ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
     atoms, rnames = _atoms_and_rules(base)
     if atoms & rnames:
@@ -361,7 +354,7 @@ def build_defence_item(level: int, seed: int, ordering: str,
     extra = list(extra) + _lx
     _allops, _rmap = randomize_rule_names(list(d.all_ops()) + extra,
                                           stable_seed(seed, level, ordering, "drn"))
-    base = _ops_ordered(_allops, shuffle_seed=stable_seed(seed, level, ordering, "dshuf"))
+    base = ordered_ops(_allops, shuffle_seed=stable_seed(seed, level, ordering, "dshuf"))
     atoms, rnames = _atoms_and_rules(base)
     if atoms & rnames:
         return Rejected("atom_rule_name_collision")
@@ -441,7 +434,7 @@ def build_mixed_item(level: int, seed: int, ordering: str,
     extra = list(extra) + _lx
     _allops, _rmap = randomize_rule_names(list(m.all_ops()) + extra,
                                           stable_seed(seed, level, ordering, "mrn"))
-    base = _ops_ordered(_allops, shuffle_seed=stable_seed(seed, level, ordering, "mshuf"))
+    base = ordered_ops(_allops, shuffle_seed=stable_seed(seed, level, ordering, "mshuf"))
     atoms, rnames = _atoms_and_rules(base)
     if atoms & rnames:
         return Rejected("atom_rule_name_collision")
