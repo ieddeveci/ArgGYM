@@ -150,7 +150,7 @@ checking the goals, so any directive set that reaches them is correct. Naming
 the field `answer` invites string comparison, and string comparison is wrong on
 those six. It is also wrong on `formalization`, whose score is a weighted blend
 of behavioural, shape and type components
-(`arggym/tasks/formalization.py:488-491`): a correct formalization written
+(`arggym/tasks/formalization.py:615-618`, section 5): a correct formalization written
 differently matches at 0 and scores high.
 
 Reasoning-gym has the same distinction and handles it by overriding
@@ -304,7 +304,7 @@ rules out.
 | `status_query`, `semantics_query`, `perturbation` | exact match over the label map |
 | `defeat_diagnosis` | exact match, correct status, survivors correct |
 | `claim_chain` | the directive set matches **and** the order constraint holds |
-| `formalization` | the theory behaves like the reference on every queried literal |
+| `formalization` | the theory behaves like the reference on every literal the reference names |
 
 Two of these are judgement calls and are defended here because a paper will have
 to defend them.
@@ -317,13 +317,32 @@ order", checked as a property -- every rule arrives after everything it rests on
 orders. `behaviourally_justifies` is *not* in the conjunction: it is computed on
 the resolved lines only, so it can hold for an answer that also contains junk.
 
-**`formalization`.** `success` is behavioural equivalence alone. The prompt
-states its own success condition behaviourally ("Under a correct formalization:
-..." followed by the status of each queried literal), so a formalization that
-reproduces every queried status is what was asked for, whatever names and
-groupings it used. Requiring `shape_f1 == 1.0` as well would demand the
-reference's exact directive multiset, which is stricter than the question and
-would make the number uninformative before it made it wrong.
+**`formalization`.** `success` is behavioural equivalence: the answer's theory
+gives the same status as the reference to every atom the reference names
+(premise and axiom contents, rule antecedents and consequents, rule names
+excluded), in both polarities, with `UNSATISFIABLE` for a literal no argument
+concludes. Names and groupings are free. Requiring `shape_f1 == 1.0` as well
+would demand the reference's exact directive multiset, which is stricter than
+the question and would make the number uninformative before it made it wrong.
+
+The queried literals alone would not do. The question prints their statuses
+("Under a correct formalization: ..."), and one or two directives per printed
+status reproduce them without reading the text. An undercut written as a
+rebuttal also agrees on them, while it makes the rebutting literal justified
+where the reference has no argument for it. Every theory with no defeat in it
+is behaviourally its atoms, though, so on a small reference with no attack an
+answer that lists the atoms as premises can still succeed; the shape term is
+what separates it there. `diagnostics.mismatched_literals` names the first six
+literals on which a failed answer differs.
+
+The score adds what behaviour cannot see. It is `0.25 * behavioural + 0.35 *
+shape_f1 + 0.40 * type_score`, or `0.4 * behavioural + 0.6 * shape_f1` where
+the gold has no axiom and no strict rule. `behavioural` is the F1 of the queried
+statuses. `type_score` is the F1 of the axiom and strict decisions: recall is
+the share of the gold's axioms and strict rules the answer writes with that
+type, and precision is the share of the answer's axiom and strict directives
+that the gold types the same way. An axiom where the text gives a premise costs
+precision, and a premise where it gives an axiom costs recall.
 
 **`success` deliberately excludes minimality.** A construction answer that meets
 every goal is a success at `score=0.5`; the efficiency term is a separate
