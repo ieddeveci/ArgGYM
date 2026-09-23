@@ -39,12 +39,15 @@ extra_body:
 ```
 
 ```bash
-export OPENROUTER_API_KEY=...
+cp .env.example .env        # then fill in OPENROUTER_API_KEY
 uv run python -m evals.run model=claude-openrouter-high taskset=data/taskset.jsonl
 ```
 
 `api_key_env` names the variable rather than holding the key, so the whole
-config can be written into a run manifest without writing down a secret.
+config can be written into a run manifest without writing down a secret. The
+harness loads `.env` from the working directory upward at startup; a variable
+already exported in the shell wins over the file. `.env.example` lists the
+credentials and endpoints the shipped model configs read.
 
 `extra_body` is for anything one provider understands and the rest do not:
 OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's

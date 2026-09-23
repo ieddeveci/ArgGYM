@@ -29,6 +29,19 @@ from evals.prompt import Elicitation
 from evals.solver import ChatSolver
 from evals.types import SOLVER_RAISED, SOLVER_VALUE_NOT_JSON, Attempt, Solver
 
+try:
+    from dotenv import find_dotenv, load_dotenv
+except ImportError:
+    # The HPC image installs nothing beyond its pinned requirements; there the
+    # credentials come in through the sbatch environment instead.
+    load_dotenv = None
+
+if load_dotenv is not None:
+    # At import, so before Hydra resolves a single `${oc.env:...}`: every variable
+    # a model config names can come from `.env` (see `.env.example`), found from the
+    # working directory upward. A variable already set in the shell wins.
+    load_dotenv(find_dotenv(usecwd=True), override=False)
+
 
 def _plain(node: Any) -> Dict[str, Any]:
     """An omegaconf node as an ordinary dict, tolerating an absent key.

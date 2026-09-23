@@ -9,12 +9,12 @@ names. Neither file names the other.
 
     python3 hpc/vllm/pairing.py hf-qwen3.8-27b-medium   # prints hf-qwen3.8-27b
 
-Standard library only: `submit_truba.sh` runs this on the login node.
+Standard library only, and Python 3.6 syntax: `submit_truba.sh` runs this on the
+login node, whose system python3 may be older than the image's.
 """
-from __future__ import annotations
-
 import sys
 from pathlib import Path
+from typing import List, Optional, Set
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILES = ROOT / "hpc" / "vllm" / "models"
@@ -24,11 +24,11 @@ CONFIGS = ROOT / "evals" / "conf" / "model"
 EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh")
 
 
-def profile_names() -> set[str]:
+def profile_names() -> Set[str]:
     return {p.stem for p in PROFILES.glob("*.yaml")}
 
 
-def level_of(config: str, profiles: set[str] | None = None) -> str | None:
+def level_of(config: str, profiles: Optional[Set[str]] = None) -> Optional[str]:
     """The effort level a config's stem carries, if the rest of it is a profile."""
     profiles = profile_names() if profiles is None else profiles
     for level in EFFORT_LEVELS:
@@ -37,7 +37,7 @@ def level_of(config: str, profiles: set[str] | None = None) -> str | None:
     return None
 
 
-def profile_of(config: str, profiles: set[str] | None = None) -> str | None:
+def profile_of(config: str, profiles: Optional[Set[str]] = None) -> Optional[str]:
     profiles = profile_names() if profiles is None else profiles
     if config in profiles:
         return config
@@ -45,7 +45,7 @@ def profile_of(config: str, profiles: set[str] | None = None) -> str | None:
     return config[: -len(level) - 1] if level else None
 
 
-def configs_of(profile: str) -> list[str]:
+def configs_of(profile: str) -> List[str]:
     """Every eval config the profile serves."""
     profiles = profile_names()
     return sorted(p.stem for p in CONFIGS.glob(f"{profile}*.yaml")
