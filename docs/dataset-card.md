@@ -186,13 +186,18 @@ rule that reaches the target or, where that rule is strict, at the chain's first
 rule. It costs `1 + n` directives, or `n` from level 9, where the theory's decoy
 already rebuts the target. Under last-link, outranking a defeasible chain's
 final rule costs the same as undercutting it, and the gold keeps the preference
-answer; under weakest-link the gold is the walk. A strict rule cannot be
-attacked in ASPIC+, so a strict rebuttal defeats every defeasible chain for
-free, and only the `k` chains that reach the target strictly still need an
-undercut: `1 + k`, with `k` at least 1 and below `n`. On all 120 cells that
-strict walk scores 1.0 in exactly the gold's number of lines (#139). The gap
-between the arms therefore measures whether a model uses the unattackability of
-strict rules; preference reasoning is `preference_construction`'s task. The
+answer; under weakest-link the gold is the walk. So a correct weakest-link
+answer that ranks each chain with preferences, the way the gold did before #184,
+is long: it runs past twice the minimum and scores zero for bloat on 18 of the
+30 `weakest_link_democratic` cells, and scores 0.75 to 0.93 on the rest and on
+every `weakest_link_elitist` cell. A drop from last-link to weakest-link on this
+task is that cost, not an effect of the ordering on the answer. A strict rule
+cannot be attacked in ASPIC+, so a strict rebuttal defeats every defeasible
+chain for free, and only the `k` chains that reach the target strictly still
+need an undercut: `1 + k`, with `k` at least 1 and below `n`. On all 120 cells
+that strict walk scores 1.0 in exactly the gold's number of lines (#139). The
+gap between the arms therefore measures whether a model uses the unattackability
+of strict rules; preference reasoning is `preference_construction`'s task. The
 plain arm's own reference, submitted to the strict item, earns full credit on
 none of the cells: on 120 of them it scores between 0.75 and 0.92, docked on
 economy for directives the cheaper minimum no longer needs, and on 0 of them it

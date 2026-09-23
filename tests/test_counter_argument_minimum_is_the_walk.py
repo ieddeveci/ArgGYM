@@ -10,6 +10,12 @@ one per element of it, and recorded that as the proven minimum: 14 on level 6 se
 under `weakest_link_democratic`, where the 4-line walk scores 1.0 (#184). The bloat gate
 reads the minimum, so a 28-line answer on that row still scored 0.75.
 
+Under last-link, outranking a defeasible chain's final rule costs one line, the same as
+undercutting it, so the walk ties the searched reference. The walk enters the candidate bank
+after that reference and only a strictly shorter candidate replaces it
+(`counter_argument.py`, the `>= bar` test in the bank loop), so the last-link gold keeps its
+preferences. The card says so, and the last test below holds it to that.
+
 Read off `base_ops`, which is the theory the prompt prints, so the walk is written the
 way an answerer would write it rather than taken from the generator.
 """
@@ -33,6 +39,13 @@ CELLS = [
     (3, "weakest_link_democratic", 0),
     (6, "weakest_link_democratic", 0),
     (9, "weakest_link_democratic", 0),
+]
+#: The same levels under last-link, where the walk ties the reference rather than beating it.
+LAST_LINK_CELLS = [
+    (1, "last_link_elitist", 0),
+    (6, "last_link_democratic", 1),
+    (9, "last_link_elitist", 0),
+    (15, "last_link_democratic", 0),
 ]
 
 
@@ -77,3 +90,17 @@ def test_the_recorded_minimum_is_the_walk(level, ordering, seed):
         f"{where}: the row states a minimum of {item.min_directives} where the "
         f"{len(walk)}-line walk answers it, so the bloat gate is graded against the "
         f"wrong number:\n" + "\n".join(walk))
+
+
+@pytest.mark.parametrize("level,ordering,seed", LAST_LINK_CELLS)
+def test_under_last_link_the_walk_ties_and_the_gold_keeps_its_preferences(level, ordering, seed):
+    item = ca.make_item(level, seed, ordering)
+    assert item is not None
+    walk = _walk(item)
+    where = f"L{level} {ordering} seed {seed}"
+    assert item.min_directives == len(walk), (
+        f"{where}: minimum {item.min_directives} against a {len(walk)}-line walk")
+    assert "[prefer_rule:" in item.reference, (
+        f"{where}: the last-link gold no longer carries a rule preference, so the tie with "
+        f"the walk went the other way and the card's account of the gold is wrong:\n"
+        f"{item.reference}")

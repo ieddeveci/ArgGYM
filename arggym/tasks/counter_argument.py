@@ -11,7 +11,7 @@ past the bloat budget.
 `counter_argument_strict` builds the same theory and also permits strict rules. A strict
 rule cannot be attacked, so a strict rebuttal defeats the defeasible chains for free, and
 only the `k` chains that reach the target strictly still need an undercut: `1 + k`, with
-`1 <= k <= n - 1`. The gap between the arms measures whether a model uses the
+`1 <= k <= n - 1`, and `k <= n - 2` from level 9. The gap between the arms measures whether a model uses the
 unattackability of strict rules. Neither arm needs a preference; preference reasoning is
 `preference_construction`'s task.
 """
