@@ -4,14 +4,15 @@
 # 0.5-0.7 (0.6 is recommended)", with the top-p 0.95 its benchmarks used;
 # generation_config.json says the same (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B).
 #
-# The card sets "the maximum generation length ... to 32,768 tokens" for
-# its own evaluations; the cap follows the context rule and sits well above
-# that. The card also advises no system prompt, which the cot elicitation
-# adds (a prompt-layer choice, not changed here). The chat template already
+# The card also advises no system prompt, which the cot elicitation adds
+# (a prompt-layer choice, not changed here). The chat template already
 # opens the response with "<think>\n", as the card asks.
 #
-# Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py).
+# Cap: the longest output the card recommends, 32,768:
+# "For all our models, the maximum generation length is set to 32,768
+# tokens." (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B).
+# It fits: max_model_len 131,072 leaves 122,880 after the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py).
 # Context: config.json's max_position_embeddings, 131,072.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,058
 # tokens.
@@ -20,7 +21,7 @@ model: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 122880
+  max_tokens: 32768
   temperature: 0.6
   top_p: 0.95
   seed: 0

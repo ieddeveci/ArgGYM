@@ -8,8 +8,10 @@
 # use); the harness sends only the elicitation's (a prompt-layer choice, not
 # changed here).
 #
-# Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py).
+# Cap: the card recommends no output length (its vLLM examples set
+# MAX_TOK = 131072, the whole context), so the cap is the context rule.
+# That is max_model_len 131,072 minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py).
 # Context: config.json's max_position_embeddings, 131,072.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163
 # tokens.

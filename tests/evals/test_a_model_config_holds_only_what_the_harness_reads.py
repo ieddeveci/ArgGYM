@@ -27,3 +27,30 @@ def test_every_key_in_a_model_config_is_read(path):
     assert set(cfg) <= READ, f"{path.name} sets {sorted(set(cfg) - READ)}, which nothing reads"
     # And every sampling key is one the client forwards rather than refuses.
     Endpoint(model=cfg["model"], sampling=cfg.get("sampling") or {}).check()
+
+
+def test_the_timeout_outlasts_the_largest_cap_at_a_slow_decode():
+    """The cap, not the clock, has to end a long generation.
+
+    A request the clock stops is an API error and leaves the denominator; one the
+    cap stops is a truncation the score can see. So `endpoint.timeout_s` must let
+    the largest cap finish at 10 tokens/s, a deliberately slow single request.
+    """
+    root = Path(__file__).resolve().parents[2]
+    conf = yaml.safe_load((root / "evals" / "conf" / "config.yaml").read_text())
+    timeout = conf["endpoint"]["timeout_s"]
+    caps = {}
+    for p in CONFIGS:
+        s = yaml.safe_load(p.read_text()).get("sampling") or {}
+        caps[p.stem] = s.get("max_tokens", s.get("max_completion_tokens", 0))
+    worst = max(caps, key=caps.get)
+    assert timeout >= caps[worst] / 10, f"{worst}'s cap {caps[worst]} outlasts {timeout}s"
+    assert Endpoint(model="m").timeout_s == timeout, "the client default lags the config"
+
+
+@pytest.mark.parametrize("path", [p for p in CONFIGS if p.stem != "stub"],
+                         ids=lambda p: p.stem)
+def test_no_real_model_decodes_greedily(path):
+    """Every card we cite recommends sampling, and reasoning APIs refuse temperature 0."""
+    t = (yaml.safe_load(path.read_text()).get("sampling") or {}).get("temperature")
+    assert t is None or t > 0

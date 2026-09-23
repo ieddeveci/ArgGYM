@@ -6,11 +6,11 @@
 # runner serves with --generation-config vllm, so these reach the model
 # only by being sent.
 #
-# The card says the model generates up to 8,192 tokens ("generation 8192
-# tokens"); the cap follows the context rule and sits above that.
-#
-# Cap: max_model_len 32,768 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py).
+# Cap: the longest output the card recommends, 8,192:
+# "Context Length: Full 32,768 tokens and generation 8192 tokens"
+# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct).
+# It fits: max_model_len 32,768 leaves 24,576 after the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py).
 # Context: config.json's max_position_embeddings, 32,768, which the card also
 # states.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
@@ -20,7 +20,7 @@ model: Qwen/Qwen2.5-3B-Instruct
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 24576
+  max_tokens: 8192
   temperature: 0.7
   top_p: 0.8
   seed: 0

@@ -8,8 +8,10 @@
 # SYSTEM_PROMPT.txt, appended to any custom one; the harness sends only the
 # elicitation's (a prompt-layer choice, not changed here).
 #
-# Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py).
+# Cap: the card recommends no output length (its vLLM examples set
+# MAX_TOK = 262144, the whole context), so the cap is the context rule.
+# That is max_model_len 131,072 minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py).
 # Context: 262,144 native (config.json, card), served at 131,072 because
 # this profile runs on one GPU; the serving profile has the arithmetic.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163

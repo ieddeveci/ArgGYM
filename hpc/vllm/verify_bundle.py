@@ -27,10 +27,10 @@ ALLOWED_SAMPLING = {
     "reasoning_effort",
 }
 
-# Tokens held back for the prompt when a serving profile's max_model_len is split
-# into prompt and output. Every hf-* eval config sets
-# max_tokens = max_model_len - PROMPT_RESERVE, and the check below holds it to
-# that.
+# Tokens held back for the prompt out of a serving profile's max_model_len. Every
+# hf-* eval config's max_tokens must fit in what is left: the check below
+# requires max_tokens + PROMPT_RESERVE <= max_model_len. A config's cap is the
+# smaller of that room and the longest output its model card recommends.
 #
 # Measured on 2026-09-23 against tasksets/standard.yaml at commit 91307ae (7,070
 # of its 7,200 rows: 13 slow high-level cells of counter_argument,
@@ -159,10 +159,13 @@ for name in sorted(set(profiles) & set(endpoints)):
             max_tokens_i = int(max_tokens)
             max_model_len_i = int(p["max_model_len"])
 
-            if max_tokens_i + PROMPT_RESERVE != max_model_len_i:
+            # At most, not exactly: a cap may sit below what the context
+            # leaves when the model's card recommends a shorter output, and
+            # the server keeps the model's context either way.
+            if max_tokens_i + PROMPT_RESERVE > max_model_len_i:
                 errors.append(
                     f"{name}: max_tokens {max_tokens_i} + {PROMPT_RESERVE} "
-                    f"prompt reserve != max_model_len {max_model_len_i}"
+                    f"prompt reserve exceeds max_model_len {max_model_len_i}"
                 )
 
         except (KeyError, TypeError, ValueError):

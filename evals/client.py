@@ -111,18 +111,17 @@ class Endpoint:
     #: `thinking_config`. Nothing here is validated, because validating it would
     #: mean this module knowing every provider -- which is what we are avoiding.
     extra_body: Dict[str, Any] = field(default_factory=dict)
-    #: The same value `conf/config.yaml` sets, and for the same reason: on the
-    #: August sweep 1800s expired on 9.8%, 14.8% and 21.8% of `qwen3.6-27b`'s
-    #: requests at levels 3, 6 and 9, and each retry made the server generate
-    #: the whole completion again. The rate rising with level is the part that
-    #: sizes a timeout, since a harder item is a longer generation. A solver
-    #: built outside Hydra gets this default, so leaving it at 1800 shipped the
-    #: failure to exactly the caller who never saw the config that explains it.
-    #: Whether 5400 is enough is measured rather than assumed: `score.py` reports
-    #: the latency percentile, how many rows came near this value, and how many
-    #: requests went past it -- the last being the one that moves first, since
-    #: `retries` hides an expired request behind a successful retry.
-    timeout_s: float = 5400.0
+    #: The same value `conf/config.yaml` sets, and for the same reason: it is a
+    #: safety net for a hung connection, sized so the largest token cap in
+    #: `conf/model/` (253,952) finishes at 10 tokens/s, because the cap and not
+    #: the clock should end a long generation. A timeout turns a row into an API
+    #: error, which leaves the score's denominator; a truncation does not. A
+    #: solver built outside Hydra gets this default, so it must not lag the
+    #: config. `score.py` reports the latency percentile, how many rows came
+    #: near this value, and how many requests went past it -- the last being
+    #: the one that moves first, since `retries` hides an expired request
+    #: behind a successful retry.
+    timeout_s: float = 28800.0
     retries: int = 2
 
     def check(self) -> None:

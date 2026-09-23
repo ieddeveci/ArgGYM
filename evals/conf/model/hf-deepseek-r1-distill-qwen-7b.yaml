@@ -4,13 +4,15 @@
 # 0.5-0.7 (0.6 is recommended)", with the top-p 0.95 its benchmarks used;
 # generation_config.json says the same (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B).
 #
-# The card sets "the maximum generation length ... to 32,768 tokens" for
-# its own evaluations, and that is the cap here too. The card also advises no system prompt, which the cot elicitation
-# adds (a prompt-layer choice, not changed here). The chat template already
+# The card also advises no system prompt, which the cot elicitation adds
+# (a prompt-layer choice, not changed here). The chat template already
 # opens the response with "<think>\n", as the card asks.
 #
-# Cap: max_model_len 40,960 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py).
+# Cap: the longest output the card recommends, 32,768:
+# "For all our models, the maximum generation length is set to 32,768
+# tokens." (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B).
+# It fits: max_model_len 40,960 leaves 32,768 after the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py).
 # Context: config.json says 131,072, but with rope_theta 10000 and no rope
 # scaling, over a base (Qwen2.5-Math-7B) trained at 4,096; the tokenizer's
 # model_max_length is 16,384. Nothing supports lengths past the card's own

@@ -2,9 +2,10 @@
 #
 # A local-server twin of hf-qwen3.6-27b, which is the config the HPC sweep runs
 # (hpc/vllm/submit_truba.sh). Every setting is held equal to that one, so
-# the two differ only in name and base_url; serve with the profile's
-# --max-model-len or the cap below will not fit. They land in separate run
+# the two differ only in name and base_url. They land in separate run
 # directories because run_id is built from model.name.
+# Serve with --max-model-len 262144 as the profile does: vLLM refuses a
+# request whose prompt plus max_tokens exceeds the server's length.
 #
 # Sampling: the card's "Thinking mode for general tasks": temperature=1.0,
 # top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
@@ -12,15 +13,15 @@
 #
 # presence_penalty is 0.0 because this card says so. The 1.5 this config
 # used to carry is the Qwen3.6-35B-A3B card's value, not this one's (#130).
-# The card's own output-length advice is 32,768, or 81,920 for competition
-# math and code; the cap here is set by the context rule instead.
 #
-# Cap: max_model_len 262,144 minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py).
-# Context: config.json and the card: 262,144 native. Serve with
-# --max-model-len 262144: vLLM refuses any request whose prompt plus
-# max_tokens exceeds the server's length, so every row fails against a server
-# still started at the old 131,072.
+# Cap: the longest output the card recommends, 81,920:
+# "We recommend using an output length of 32,768 tokens for most queries.
+# For benchmarking on highly complex problems, such as those found in math and
+# programming competitions, we suggest setting the max output length to
+# 81,920 tokens." (https://huggingface.co/Qwen/Qwen3.6-27B).
+# It fits: max_model_len 262,144 leaves 253,952 after the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py).
+# Context: config.json and the card: 262,144 native.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,390
 # tokens.
 name: qwen3.6-27b-vllm
@@ -28,7 +29,7 @@ model: Qwen/Qwen3.6-27B
 base_url: ${oc.env:VLLM_BASE_URL,http://localhost:8927/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 253952
+  max_tokens: 81920
   temperature: 1.0
   top_p: 0.95
   presence_penalty: 0.0

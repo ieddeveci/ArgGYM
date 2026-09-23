@@ -156,11 +156,14 @@ answer. A mean over what survives that is a measurement of the token cap.
 
 ### Whether the timeout was big enough
 
-`endpoint.timeout_s` is 5400 seconds. It was 1800, and on the August sweep 1800
-expired on 9.8%, 14.8% and 21.8% of `qwen3.6-27b`'s requests at levels 3, 6 and
-9 -- the rate rising with the level, because a harder item is a longer
-generation. Nothing measured whether the new number was enough, so the report
-now does.
+`endpoint.timeout_s` is 28,800 seconds, and it is a safety net for a hung
+connection. What ends a long generation is the model's token cap. A completion
+stopped by the cap comes back truncated, and `truncated_rate` shows it. A
+completion stopped by the clock comes back as an API error, which leaves the
+denominator, so a model that loops slowly would score better for looping. The
+number is therefore the largest cap in `evals/conf/model/` (253,952 tokens) at a
+deliberately slow 10 tokens/s, rounded up to the hour. The report measures
+whether it held.
 
 `metrics.json` carries two kinds of number about it, and they are not
 substitutes.
