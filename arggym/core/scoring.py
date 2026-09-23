@@ -210,6 +210,15 @@ def subgoals_from(goals: Sequence[Dict], base_ops: Sequence[Operation]) -> List[
     return out
 
 
+def _base_status(base_ops: Sequence[Operation], ordering: str,
+                 literals: Sequence[str]) -> Dict[str, str]:
+    """Each literal's status on the theory before any answer."""
+    fw = ASPICFramework(ordering=ordering)
+    fw.apply_all(list(base_ops))
+    v = ASPICVerifier(fw, operations_applied=len(base_ops))
+    return {lit: str(v.status(lit)) for lit in dict.fromkeys(literals)}
+
+
 def parse(text: str, item: Dict) -> List[Operation]:
     """The directives an answer submits, as values.
 
@@ -307,29 +316,67 @@ def score_value(ops: Sequence[Operation], item: Dict) -> ScoreResult:
     success = all(met) and consistent
 
     diag["achieved_status"] = {g["claim"]: g["got"] for g in diag["goals_met"]}
-    diag["deadlock_not_defeat"] = sum(
-        1 for g in diag["goals_met"]
-        if g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED"))
+    # A goal left UNDECIDED where a pole was wanted is unmet, so on success this is 0.
+    diag["deadlock_not_defeat"] = 0
 
     if not success:
-        subgoals = item.get("subgoals") or []
+        # An answer that reached every goal and broke the theory is not a
+        # goal failure, and reporting it as one sends a reader looking at the
+        # wrong half of their answer. The prompt states this rule; the reason
+        # string has to name it.
+        why = "inconsistent_theory" if all(met) else "goal_not_met"
+        if not consistent:
+            # An inconsistent theory earns no partial credit, so there is no
+            # progress to measure and no reason to pay for the base pass below.
+            return failed(why)
+
+        # Partial credit pays for movement from where the theory started toward what
+        # was asked, so it needs the starting status, which the row does not store
+        # (`rows._enc_goals` drops it). One engine pass on the base theory gives it,
+        # and only an answer that failed pays for that pass. Read off the final theory
+        # alone, an answer that changed nothing collected credit for every goal that
+        # started UNDECIDED or started already met (#188).
+        start = _base_status(base_ops, ordering,
+                             [g["claim"] for g in goals] + list(item.get("subgoals") or []))
+        # A deadlock counts only where the answer made it: a goal that started
+        # UNDECIDED and is still UNDECIDED is not a conflict the answer created.
+        diag["deadlock_not_defeat"] = sum(
+            1 for g in diag["goals_met"]
+            if g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED")
+            and start.get(g["claim"]) != "UNDECIDED")
+
+        # A subgoal counts if it started JUSTIFIED, so the answer had a support to
+        # defeat, or if the answer moved it. It is defeated if it ends not JUSTIFIED.
+        # One that never stood and was left alone is not the answer's doing; one the
+        # answer pushed to JUSTIFIED counts against it.
+        sub_counted = sub_hit = 0
+        for lit in item.get("subgoals") or []:
+            try:
+                now = str(v.status(lit))
+            except Exception:
+                now = None
+            if start.get(lit) != "JUSTIFIED" and now == start.get(lit):
+                continue
+            sub_counted += 1
+            sub_hit += now is not None and now != "JUSTIFIED"
         sub_progress = None
-        if subgoals:
-            hit = 0
-            for lit in subgoals:
-                try:
-                    if str(v.status(lit)) != "JUSTIFIED":
-                        hit += 1
-                except Exception:
-                    pass
-            sub_progress = hit / len(subgoals)
-            diag["subgoals_defeated"] = f"{hit}/{len(subgoals)}"
+        if sub_counted:
+            sub_progress = sub_hit / sub_counted
+            diag["subgoals_defeated"] = f"{sub_hit}/{sub_counted}"
 
         per_goal = []
         for g in diag["goals_met"]:
+            if start.get(g["claim"]) == g["want"]:
+                # Met before the answer. Still met, the answer had no work to do on it,
+                # so it leaves the average rather than counting as 1.0. Broken, it
+                # stays in at 0.0: moving a goal away from its want earns nothing.
+                if g["got"] != g["want"]:
+                    per_goal.append(0.0)
+                continue
             if g["got"] == g["want"]:
                 per_goal.append(1.0)
-            elif g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED"):
+            elif (g["got"] == "UNDECIDED" and g["want"] in ("OVERRULED", "JUSTIFIED")
+                  and start.get(g["claim"]) != "UNDECIDED"):
                 per_goal.append(0.4)
             elif sub_progress is not None and g["want"] == "OVERRULED":
                 per_goal.append(0.3 * sub_progress)
@@ -337,13 +384,7 @@ def score_value(ops: Sequence[Operation], item: Dict) -> ScoreResult:
                 per_goal.append(0.0)
         progress = (sum(per_goal) / len(per_goal)) if per_goal else 0.0
         diag["progress"] = round(progress, 4)
-        partial = round(PARTIAL_CAP * progress, 4) if consistent else 0.0
-        # An answer that reached every goal and broke the theory is not a
-        # goal failure, and reporting it as one sends a reader looking at the
-        # wrong half of their answer. The prompt states this rule; the reason
-        # string has to name it.
-        why = "inconsistent_theory" if all(met) else "goal_not_met"
-        return failed(why, score=partial)
+        return failed(why, score=round(PARTIAL_CAP * progress, 4))
     if not minimum:
         # Every goal met, so the task is done; the minimum is unknown, so economy cannot
         # be measured. Success without the efficiency half of the score.
