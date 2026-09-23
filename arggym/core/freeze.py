@@ -107,7 +107,7 @@ PROMPT_VERSION = 13
 #: together for anything measured before 2026-09-22.
 #:
 #: Version 6 moves `formalization.score_value` twice, the construction scorer once,
-#: and `counter_argument`'s stated minimum.
+#: every parser once, and `counter_argument`'s stated minimum.
 #:
 #: `success` requires the answer's theory to give the same status as the reference to
 #: every atom the reference names, in both polarities, `UNSATISFIABLE` included
