@@ -21,7 +21,7 @@ PROFILE="$(python3 "$SCRIPT_DIR/pairing.py" "$CONFIG")" || exit 2
 GPU_TYPE="${GPU_TYPE:-H100}"
 ACCOUNT="${ACCOUNT:-$USER}"
 SETUP_TIME="${SETUP_TIME:-02:00:00}"
-# The kolyoz-cuda maximum (TRUBA_DIRECTIVE.md). One job runs the whole taskset,
+# The kolyoz-cuda maximum (hpc/truba-directive.md). One job runs the whole taskset,
 # and a large reasoning model can need more than three days for it. A job that
 # hits the wall loses only its in-flight generations: submit the same config
 # again with RESUME=1 and it continues from the rows already written, as many

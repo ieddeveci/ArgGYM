@@ -66,6 +66,7 @@ says what each request carries, the checkpoint id included; the serving
 profile says how to serve it (GPU counts, dtype, context length, parser, extra
 vLLM flags). They pair by file stem, and `hpc/vllm/verify_bundle.py` checks
 that they fit.
+Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
 
 A model that takes a reasoning-effort level has one config per level and no
 level-less one, named `<model>-<level>`: `claude-openrouter-high`,
