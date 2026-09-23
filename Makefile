@@ -29,7 +29,7 @@ freeze:
 freeze-lite:
 	uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
 
-# `make eval MODEL=claude-openrouter`. Scoring is a second step on purpose, so
+# `make eval MODEL=claude-openrouter-high`. Scoring is a second step on purpose, so
 # it can be rerun against these generations whenever the scorer moves.
 #
 # The run directory is derived from the config rather than read back off the

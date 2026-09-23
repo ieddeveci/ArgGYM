@@ -1,4 +1,5 @@
-# meta-llama/Llama-3.3-70B-Instruct on vLLM, served by hpc/vllm/models/hf-llama3.3-70b-instruct.yaml.
+# meta-llama/Llama-3.3-70B-Instruct on vLLM, served by
+# hpc/vllm/models/hf-llama3.3-70b-instruct.yaml.
 #
 # Sampling: the card gives none, so this is generation_config.json: temperature
 # 0.6, top_p 0.9. The meta-llama repo is gated to us; the file was read from
@@ -7,7 +8,8 @@
 # Cap: the card recommends no output length, so the cap is the context rule.
 # That is max_model_len 131,072 minus the 8,192-token prompt
 # reserve (hpc/vllm/verify_bundle.py).
-# Context: 128k on the card (https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct), 131,072 in
+# Context: 128k on the card
+# (https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct), 131,072 in
 # the mirrored config.json.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,088
 # tokens (tokenizer from unsloth/Llama-3.3-70B-Instruct; the original is gated).

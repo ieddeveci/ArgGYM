@@ -1,12 +1,20 @@
-# Qwen/Qwen3.8-27B on vLLM, served by hpc/vllm/models/hf-qwen3.8-27b.yaml.
+# Qwen/Qwen3.8-27B on a local vLLM.
+#
+# A local-server twin of hf-qwen3.8-27b-<level>, which is the config the HPC sweep runs
+# (hpc/vllm/submit_truba.sh). Every setting is held equal to that one, so
+# the two differ only in name and base_url. They land in separate run
+# directories because run_id is built from model.name.
+# Serve with --max-model-len 131072 as the profile does: vLLM refuses a
+# request whose prompt plus max_tokens exceeds the server's length.
 #
 # Sampling: the card's "Thinking Mode": temperature=1.0, top_p=0.95,
 # top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
 # (https://huggingface.co/Qwen/Qwen3.8-27B).
 #
-# reasoning_effort: the card offers xhigh (the default), medium and low, and
-# the chat template answers any other value with an error. medium is kept
-# from before; it is not the model's default.
+# reasoning_effort: xhigh. The card offers three levels, "xhigh (default)",
+# "medium" and "low" (https://huggingface.co/Qwen/Qwen3.8-27B), and the chat
+# template answers any other value with an error. One config per level:
+# qwen3.8-27b-vllm-low, qwen3.8-27b-vllm-medium, qwen3.8-27b-vllm-xhigh.
 #
 # Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
 # (hpc/vllm/verify_bundle.py), which is below the longest output the card
@@ -19,9 +27,9 @@
 # has the arithmetic.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,428
 # tokens.
-name: hf-qwen3.8-27b
+name: qwen3.8-27b-vllm-xhigh
 model: Qwen/Qwen3.8-27B
-base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+base_url: ${oc.env:VLLM_BASE_URL,http://localhost:8927/v1}
 api_key_env: VLLM_API_KEY
 sampling:
   max_tokens: 122880
@@ -29,7 +37,7 @@ sampling:
   top_p: 0.95
   presence_penalty: 0.0
   seed: 0
-  reasoning_effort: medium
+  reasoning_effort: xhigh
 extra_body:
   top_k: 20
   min_p: 0.0

@@ -8,7 +8,7 @@ no HTTP client.
 ```
 uv sync                                    # the evals group is included in dev
 uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
-uv run python -m evals.run   taskset=data/taskset.jsonl model=gpt-5-openrouter
+uv run python -m evals.run   taskset=data/taskset.jsonl model=gpt-5-openrouter-medium
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 ```
@@ -26,8 +26,8 @@ Azure's, Anthropic's shim, and any local vLLM. Switching between them is a
 config file and an environment variable.
 
 ```yaml
-# evals/conf/model/claude-openrouter.yaml
-name: claude-openrouter
+# evals/conf/model/claude-openrouter-high.yaml
+name: claude-openrouter-high
 model: anthropic/claude-sonnet-4.5
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEY
@@ -40,7 +40,7 @@ extra_body:
 
 ```bash
 export OPENROUTER_API_KEY=...
-uv run python -m evals.run model=claude-openrouter taskset=data/taskset.jsonl
+uv run python -m evals.run model=claude-openrouter-high taskset=data/taskset.jsonl
 ```
 
 `api_key_env` names the variable rather than holding the key, so the whole
@@ -51,9 +51,17 @@ OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 `thinking_config`. It is passed through untouched, because validating it would
 mean this harness knowing every provider, which is the thing we are avoiding.
 
-Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini on AI
-Studio, and Qwen3.6-27B and Qwen3.8-27B on a local vLLM, plus a stub for running
-the pipeline without spending a token. Adding another is copying one.
+Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini and
+Gemma on AI Studio, every model the HPC lane serves on vLLM (`hf-*`), and
+Qwen3.6-27B and Qwen3.8-27B on a local vLLM, plus a stub for running the
+pipeline without spending a token. Adding another is copying one.
+
+A model that takes a reasoning-effort level has one config per level and no
+level-less one, named `<model>-<level>`: `claude-openrouter-high`,
+`gpt-5-openai-minimal`, `hf-qwen3.8-27b-xhigh`. The level changes what the model
+is asked as much as the prompt does, so it is part of the name, and therefore of
+the run directory. A model whose only switch is thinking on or off (Qwen3,
+Qwen3.6, Gemma 4) has one config.
 
 ### What the compatibility layers cost
 
@@ -64,7 +72,7 @@ OpenAI SDK "doesn't return Claude's detailed thought process", and that
 `response_format`, `reasoning_effort`, `seed` and `logprobs` are ignored, `n`
 must be 1, `temperature` is capped at 1, and `usage.completion_tokens_details`
 is always empty. "Most unsupported fields are silently ignored rather than
-producing errors." That is why `claude-openrouter.yaml` goes through OpenRouter:
+producing errors." That is why `claude-openrouter-*.yaml` goes through OpenRouter:
 it returns the reasoning trace over a plain OpenAI-compatible call.
 
 **Gemini's compatibility endpoint** is still labelled beta and carries the same

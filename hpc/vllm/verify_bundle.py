@@ -79,27 +79,47 @@ endpoints = {
     for p in E.glob("hf-*.yaml")
 }
 
+# A model with reasoning-effort levels has one eval config per level, named
+# `<profile>-<level>`, and all of them are served by the one profile.
+EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh")
+
+
+def level_of(stem: str) -> str | None:
+    """The effort level a config's name carries, if it names one of a profile."""
+    for level in EFFORT_LEVELS:
+        if stem.endswith(f"-{level}") and stem[: -len(level) - 1] in profiles:
+            return level
+    return None
+
+
+def profile_of(stem: str) -> str | None:
+    if stem in profiles:
+        return stem
+    level = level_of(stem)
+    return stem[: -len(level) - 1] if level else None
+
 
 # ---------------------------------------------------------------------------
 # Model profile / endpoint pairing
 # ---------------------------------------------------------------------------
 
-if set(profiles) != set(endpoints):
-    missing_endpoints = sorted(set(profiles) - set(endpoints))
-    missing_profiles = sorted(set(endpoints) - set(profiles))
+served: dict[str, list[str]] = {name: [] for name in profiles}
+for stem in sorted(endpoints):
+    profile = profile_of(stem)
+    if profile is None:
+        errors.append(f"endpoint without a matching profile: {stem}")
+    else:
+        served[profile].append(stem)
 
-    errors.append("profile/endpoint name sets differ")
-
-    if missing_endpoints:
+for name, stems in sorted(served.items()):
+    if not stems:
+        errors.append(f"profile without a matching endpoint: {name}")
+    # Either one level-less config or one per level, never both: a leftover
+    # base file would run at whatever effort the template defaults to.
+    if name in stems and len(stems) > 1:
         errors.append(
-            "profiles without matching endpoints: "
-            + ", ".join(missing_endpoints)
-        )
-
-    if missing_profiles:
-        errors.append(
-            "endpoints without matching profiles: "
-            + ", ".join(missing_profiles)
+            f"{name}: has both a level-less config and per-level configs "
+            + ", ".join(s for s in stems if s != name)
         )
 
 
@@ -107,8 +127,11 @@ if set(profiles) != set(endpoints):
 # Generic model validation
 # ---------------------------------------------------------------------------
 
-for name in sorted(set(profiles) & set(endpoints)):
-    p = profiles[name]
+for name in sorted(endpoints):
+    profile = profile_of(name)
+    if profile is None:
+        continue
+    p = profiles[profile]
     e = endpoints[name]
 
     if not isinstance(p, dict):
@@ -119,8 +142,19 @@ for name in sorted(set(profiles) & set(endpoints)):
         errors.append(f"{name}: endpoint config is not a YAML object")
         continue
 
-    if p.get("endpoint_config") != name:
+    if p.get("endpoint_config") != profile:
         errors.append(f"{name}: endpoint_config mismatch")
+
+    if e.get("name") != name:
+        errors.append(f"{name}: name field differs from the file name")
+
+    level = level_of(name)
+    if level is not None:
+        effort = (e.get("sampling") or {}).get("reasoning_effort")
+        if effort != level:
+            errors.append(
+                f"{name}: file names effort {level}, config sends {effort}"
+            )
 
     if p.get("hf_model") != e.get("model"):
         errors.append(f"{name}: model ID mismatch")
@@ -229,6 +263,10 @@ for name in (
     if name not in profiles and name not in endpoints:
         continue
 
+    # Gemma 4 thinks or does not; there is no level to split it by.
+    if any(profile_of(s) == name and s != name for s in endpoints):
+        errors.append(f"{name}: Gemma 4 takes no effort levels")
+
     if profiles.get(name, {}).get("reasoning_parser") != "gemma4":
         errors.append(
             f"{name}: reasoning parser must be gemma4"
@@ -268,8 +306,9 @@ expected_presence_penalty = {
     "hf-qwen3.8-27b": 0.0,
 }
 
-for name, expected in expected_presence_penalty.items():
-    if name not in endpoints:
+for name in sorted(endpoints):
+    expected_pp = expected_presence_penalty.get(profile_of(name))
+    if profile_of(name) not in expected_presence_penalty:
         continue
 
     actual = (
@@ -278,10 +317,10 @@ for name, expected in expected_presence_penalty.items():
         .get("presence_penalty")
     )
 
-    if actual != expected:
+    if actual != expected_pp:
         errors.append(
             f"{name}: expected presence_penalty "
-            f"{expected}, got {actual}"
+            f"{expected_pp}, got {actual}"
         )
 
 
@@ -448,7 +487,8 @@ if errors:
 
 
 print(
-    f"PASS: {len(profiles)} model profiles/endpoints validated"
+    f"PASS: {len(profiles)} model profiles and their "
+    f"{len(endpoints)} endpoint configs validated"
 )
 print(
     "PASS: TRUBA Apptainer deployment closure validated statically"

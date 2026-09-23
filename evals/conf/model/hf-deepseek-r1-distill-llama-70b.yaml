@@ -1,8 +1,10 @@
-# deepseek-ai/DeepSeek-R1-Distill-Llama-70B on vLLM, served by hpc/vllm/models/hf-deepseek-r1-distill-llama-70b.yaml.
+# deepseek-ai/DeepSeek-R1-Distill-Llama-70B on vLLM, served by
+# hpc/vllm/models/hf-deepseek-r1-distill-llama-70b.yaml.
 #
 # Sampling: the card's usage recommendations, "temperature within the range of
 # 0.5-0.7 (0.6 is recommended)", with the top-p 0.95 its benchmarks used;
-# generation_config.json says the same (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B).
+# generation_config.json says the same
+# (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B).
 #
 # The card also advises no system prompt, which the cot elicitation adds
 # (a prompt-layer choice, not changed here). The chat template already

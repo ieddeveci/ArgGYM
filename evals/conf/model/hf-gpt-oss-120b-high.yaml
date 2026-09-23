@@ -1,0 +1,33 @@
+# openai/gpt-oss-120b on vLLM, served by hpc/vllm/models/hf-gpt-oss-120b.yaml.
+#
+# Sampling: "We recommend sampling with temperature=1.0 and top_p=1.0"
+# (https://github.com/openai/gpt-oss; the HF card gives none,
+# https://huggingface.co/openai/gpt-oss-120b).
+#
+# reasoning_effort: high. The card offers "Low / Medium / High" reasoning
+# levels (https://huggingface.co/openai/gpt-oss-120b), and the chat template renders
+# this value as "Reasoning: high". One config per level: hf-gpt-oss-120b-low,
+# hf-gpt-oss-120b-medium, hf-gpt-oss-120b-high.
+#
+# Cap: the card recommends no output length. OpenAI's model page gives a limit,
+# not a recommendation:
+# "131,072 max output tokens"
+# (https://developers.openai.com/api/docs/models/gpt-oss-120b), so the cap is the
+# context rule.
+# That is max_model_len 131,072 minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py).
+# Context: config.json's max_position_embeddings, 131,072.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 3,917
+# tokens.
+name: hf-gpt-oss-120b-high
+model: openai/gpt-oss-120b
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 122880
+  temperature: 1.0
+  top_p: 1.0
+  seed: 0
+  reasoning_effort: high
+extra_body:
+  include_reasoning: true

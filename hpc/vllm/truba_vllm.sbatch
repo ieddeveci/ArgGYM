@@ -95,6 +95,9 @@ ARGS=(
     --elicitation "${ELICITATION:-cot}"
     --port "$PORT"
 )
+if [[ -n "${ENDPOINT_CONFIG:-}" ]]; then
+    ARGS+=(--endpoint-config "$ENDPOINT_CONFIG")
+fi
 if [[ "${RESUME:-0}" == "1" ]]; then
     ARGS+=(--resume)
 fi

@@ -1,7 +1,9 @@
-# mistralai/Ministral-3-3B-Reasoning-2512 on vLLM, served by hpc/vllm/models/hf-ministral3-3b-reasoning.yaml.
+# mistralai/Ministral-3-3B-Reasoning-2512 on vLLM, served by
+# hpc/vllm/models/hf-ministral3-3b-reasoning.yaml.
 #
 # Sampling: the card's "Use a temperature of 0.7 for most environments", with the
-# top_p 0.95 its examples use (https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512).
+# top_p 0.95 its examples use
+# (https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512).
 # generation_config.json sets no sampling keys.
 #
 # The card says to use its own system prompt, the [THINK] template in

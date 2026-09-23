@@ -71,7 +71,7 @@ Vertex and Azure among them, is a config of its own naming a `base_url` and a ke
 not part of the wheel. `docs/evaluation.md` has it.
 
 ```
-uv run python -m evals.run   taskset=data/taskset.jsonl model=claude-openrouter
+uv run python -m evals.run   taskset=data/taskset.jsonl model=claude-openrouter-high
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 ```

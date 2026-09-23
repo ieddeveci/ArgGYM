@@ -25,6 +25,9 @@ READ = {"name", "model", "base_url", "api_key_env", "sampling", "extra_body"}
 def test_every_key_in_a_model_config_is_read(path):
     cfg = yaml.safe_load(path.read_text())
     assert set(cfg) <= READ, f"{path.name} sets {sorted(set(cfg) - READ)}, which nothing reads"
+    # `run_id` is built from `name` and `make eval` finds the run directory by the
+    # file's stem, so the two must agree.
+    assert cfg["name"] == path.stem
     # And every sampling key is one the client forwards rather than refuses.
     Endpoint(model=cfg["model"], sampling=cfg.get("sampling") or {}).check()
 

@@ -1,4 +1,5 @@
-# google/gemma-4-26B-A4B-it on vLLM, served by hpc/vllm/models/hf-gemma4-26b-a4b-it.yaml.
+# google/gemma-4-26B-A4B-it on vLLM, served by
+# hpc/vllm/models/hf-gemma4-26b-a4b-it.yaml.
 #
 # Sampling: the card's "standardized sampling configuration across all use
 # cases: temperature=1.0 top_p=0.95 top_k=64"

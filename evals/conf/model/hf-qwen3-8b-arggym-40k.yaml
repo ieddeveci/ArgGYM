@@ -8,7 +8,8 @@
 # repetition, so none is set; #130 is where that gets measured.
 #
 # The serving profile pins a revision; otherwise this is the plain
-# Qwen/Qwen3-8B checkpoint in thinking mode. hf-qwen3-8b is the same checkpoint unpinned,
+# Qwen/Qwen3-8B checkpoint in thinking mode. hf-qwen3-8b is the same checkpoint
+# unpinned,
 # with identical settings.
 #
 # Cap: max_model_len 40,960 minus the 8,192-token prompt reserve

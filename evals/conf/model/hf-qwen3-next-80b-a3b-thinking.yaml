@@ -1,4 +1,5 @@
-# Qwen/Qwen3-Next-80B-A3B-Thinking on vLLM, served by hpc/vllm/models/hf-qwen3-next-80b-a3b-thinking.yaml.
+# Qwen/Qwen3-Next-80B-A3B-Thinking on vLLM, served by
+# hpc/vllm/models/hf-qwen3-next-80b-a3b-thinking.yaml.
 #
 # Sampling: the card's "Temperature=0.6, TopP=0.95, TopK=20, and MinP=0"
 # (https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking).

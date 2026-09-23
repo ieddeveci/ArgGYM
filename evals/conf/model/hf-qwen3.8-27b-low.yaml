@@ -1,0 +1,40 @@
+# Qwen/Qwen3.8-27B on vLLM, served by hpc/vllm/models/hf-qwen3.8-27b.yaml.
+#
+# Sampling: the card's "Thinking Mode": temperature=1.0, top_p=0.95,
+# top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
+# (https://huggingface.co/Qwen/Qwen3.8-27B).
+#
+# reasoning_effort: low. The card offers three levels, "xhigh (default)",
+# "medium" and "low" (https://huggingface.co/Qwen/Qwen3.8-27B), and the chat
+# template answers any other value with an error. One config per level:
+# hf-qwen3.8-27b-low, hf-qwen3.8-27b-medium, hf-qwen3.8-27b-xhigh.
+#
+# Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py), which is below the longest output the card
+# recommends: "Reasoning Content: Set the maximum output length to 262,144 tokens.
+# Final Response: Set the maximum output length to 131,072 tokens."
+# (https://huggingface.co/Qwen/Qwen3.8-27B). Both exceed what the served
+# context leaves, so the context rule decides.
+# Context: 262,144 native (config.json, card), served at 131,072 because
+# one H100 cannot hold more alongside the weights; the serving profile
+# has the arithmetic.
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,428
+# tokens.
+name: hf-qwen3.8-27b-low
+model: Qwen/Qwen3.8-27B
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 122880
+  temperature: 1.0
+  top_p: 0.95
+  presence_penalty: 0.0
+  seed: 0
+  reasoning_effort: low
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  repetition_penalty: 1.0
+  chat_template_kwargs:
+    enable_thinking: true
+    preserve_thinking: true

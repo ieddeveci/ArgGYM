@@ -1,16 +1,19 @@
-# Qwen/Qwen2.5-3B-Instruct on vLLM, served by hpc/vllm/models/hf-qwen2.5-3b-instruct.yaml.
+# Qwen/Qwen2.5-3B-Instruct on vLLM, served by
+# hpc/vllm/models/hf-qwen2.5-3b-instruct.yaml.
 #
 # Sampling: the card gives none, so this is generation_config.json: temperature
 # 0.7, top_p 0.8, top_k 20, repetition_penalty 1.05
-# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/blob/main/generation_config.json). The
+# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/blob/main/generation_config.json).
+# The
 # runner serves with --generation-config vllm, so these reach the model
 # only by being sent.
 #
-# Cap: the longest output the card recommends, 8,192:
-# "Context Length: Full 32,768 tokens and generation 8192 tokens"
-# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct).
-# It fits: max_model_len 32,768 leaves 24,576 after the 8,192-token
-# prompt reserve (hpc/vllm/verify_bundle.py).
+# Cap: the card's "Context Length: Full 32,768 tokens and generation 8192 tokens"
+# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct)
+# describes what the model can generate, not advice for long reasoning,
+# so it is no recommendation, and the cap is the context rule.
+# That is max_model_len 32,768 minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py).
 # Context: config.json's max_position_embeddings, 32,768, which the card also
 # states.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
@@ -20,7 +23,7 @@ model: Qwen/Qwen2.5-3B-Instruct
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 8192
+  max_tokens: 24576
   temperature: 0.7
   top_p: 0.8
   seed: 0

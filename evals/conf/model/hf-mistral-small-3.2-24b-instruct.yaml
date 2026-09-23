@@ -1,4 +1,5 @@
-# mistralai/Mistral-Small-3.2-24B-Instruct-2506 on vLLM, served by hpc/vllm/models/hf-mistral-small-3.2-24b-instruct.yaml.
+# mistralai/Mistral-Small-3.2-24B-Instruct-2506 on vLLM, served by
+# hpc/vllm/models/hf-mistral-small-3.2-24b-instruct.yaml.
 #
 # Sampling: the card's "We recommend using a relatively low temperature, such as
 # temperature=0.15"; generation_config.json agrees and sets no top_p

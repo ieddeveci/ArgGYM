@@ -2,7 +2,7 @@
 # command line, and the whole resolved object is written into the run manifest.
 
 defaults:
-  - model: gpt-5-openrouter
+  - model: gpt-5-openrouter-medium
   - template: xml_tags
   - elicitation: none
   - _self_

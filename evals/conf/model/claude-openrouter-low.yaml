@@ -1,0 +1,36 @@
+# Claude Sonnet 4.5 through OpenRouter rather than through Anthropic's own
+# OpenAI-compatible endpoint, and the reason is the reasoning trace.
+# Anthropic's documentation says of that endpoint: "the OpenAI SDK doesn't
+# return Claude's detailed thought process", and its
+# `usage.completion_tokens_details` is always empty, so the thinking tokens
+# are billed and invisible. OpenRouter returns them in `message.reasoning`,
+# which `evals/client.py:reasoning_of` already reads.
+#
+# Limits: 200K context (1M in beta; OpenRouter's models API lists
+# 1,000,000), 64K max output, and thinking tokens count against max_tokens
+# (https://platform.claude.com/docs/en/models/sonnet-4-5/overview,
+# https://platform.claude.com/docs/en/build-with-claude/context-windows).
+# OpenRouter's models API lists max_completion_tokens 64000. The cap is that
+# output limit.
+#
+# No temperature. With thinking on, Sonnet 4.5 accepts neither `temperature`
+# nor `top_k` (https://platform.claude.com/docs/en/build-with-claude/thinking).
+#
+# Reasoning effort: low. OpenRouter accepts minimal, low, medium, high and
+# xhigh (plus `max`, the same as xhigh, and `none`, which turns thinking off)
+# and, for Anthropic models, turns the effort into a thinking budget:
+# budget_tokens = max(min(max_tokens * ratio, 128000), 1024), with ratios
+# 0.1 / 0.2 / 0.5 / 0.8 / 0.95 (https://openrouter.ai/docs/use-cases/reasoning-tokens).
+# So the output budget is tied to the level: at this 64,000 cap the thinking
+# budget is 12,800 tokens, and the answer gets what is left.
+# One config per level: claude-openrouter-minimal, claude-openrouter-low,
+# claude-openrouter-medium, claude-openrouter-high, claude-openrouter-xhigh.
+name: claude-openrouter-low
+model: anthropic/claude-sonnet-4.5
+base_url: https://openrouter.ai/api/v1
+api_key_env: OPENROUTER_API_KEY
+sampling:
+  max_tokens: 64000
+extra_body:
+  reasoning:
+    effort: low

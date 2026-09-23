@@ -16,6 +16,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILES = ROOT / "hpc" / "vllm" / "models"
+ENDPOINTS = ROOT / "evals" / "conf" / "model"
 OUT = ROOT / "outputs" / "runs"
 
 
@@ -27,6 +28,26 @@ def load_profile(name: str) -> dict:
     if cfg["dtype"] != "bfloat16":
         raise SystemExit("This benchmark lane requires BF16 weights.")
     return cfg
+
+
+def resolve_endpoint(cfg: dict, requested: str | None) -> str:
+    """The eval config to run against this profile's server.
+
+    A model with reasoning-effort levels has no level-less config: it has
+    `<profile>-<level>` files, one per level, and the caller names one.
+    """
+    name = requested or cfg["endpoint_config"]
+    path = ENDPOINTS / f"{name}.yaml"
+    if not path.is_file():
+        levels = sorted(p.stem for p in ENDPOINTS.glob(f'{cfg["endpoint_config"]}-*.yaml'))
+        hint = f" Pick one of: {', '.join(levels)}." if levels else ""
+        raise SystemExit(f"No eval config {name}.yaml for profile "
+                         f'{cfg["endpoint_config"]}.{hint}')
+    model = yaml.safe_load(path.read_text(encoding="utf-8")).get("model")
+    if model != cfg["hf_model"]:
+        raise SystemExit(f"{name}.yaml asks for {model}, but the profile serves "
+                         f'{cfg["hf_model"]}.')
+    return name
 
 
 def resolve_revision(repo: str) -> str:
@@ -135,6 +156,7 @@ def prepare_run_directory(
     revision: str,
     command: list[str],
     resume: bool,
+    endpoint: str,
 ) -> dict:
     manifest_path = run_dir / "hf_runtime_start.json"
     existing_payload = None
@@ -174,7 +196,7 @@ def prepare_run_directory(
 
     payload = {
         "profile": profile,
-        "endpoint_config": cfg["endpoint_config"],
+        "endpoint_config": endpoint,
         "hf_model": cfg["hf_model"],
         "hf_revision": revision,
         "dtype": "bfloat16",
@@ -198,6 +220,9 @@ def prepare_run_directory(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("profile")
+    parser.add_argument("--endpoint-config", default=None,
+                        help="eval config to run, e.g. hf-qwen3.8-27b-medium; "
+                             "defaults to the profile's endpoint_config")
     parser.add_argument("--template", default="xml_tags")
     parser.add_argument("--elicitation", default="cot")
     parser.add_argument("--port", type=int, default=8000)
@@ -206,15 +231,16 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_profile(args.profile)
+    endpoint = resolve_endpoint(cfg, args.endpoint_config)
     revision = str(
         cfg.get("revision") or resolve_revision(cfg["hf_model"])
     )
     base_url = f"http://127.0.0.1:{args.port}/v1"
     command = vllm_command(cfg, revision, args.port)
 
-    run_dir = OUT / f'{cfg["endpoint_config"]}__{args.template}__{args.elicitation}'
+    run_dir = OUT / f"{endpoint}__{args.template}__{args.elicitation}"
     runtime = prepare_run_directory(
-        run_dir, args.profile, cfg, revision, command, args.resume
+        run_dir, args.profile, cfg, revision, command, args.resume, endpoint
     )
 
     logs = ROOT / "outputs" / "vllm_logs"
@@ -245,7 +271,7 @@ def main() -> None:
             subprocess.run(
                 [
                     sys.executable, "-m", "evals.run",
-                    f'model={cfg["endpoint_config"]}',
+                    f"model={endpoint}",
                     f"template={args.template}",
                     f"elicitation={args.elicitation}",
                 ],

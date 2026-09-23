@@ -1,5 +1,5 @@
 config,hf_model,params_b,tier,default_gpus,dtype,max_model_len,reasoning_parser
-hf-qwen3.8-27b,Qwen/Qwen3.8-27B,27,large,1,bfloat16,131072,qwen3
+hf-qwen3.8-27b-<low|medium|xhigh>,Qwen/Qwen3.8-27B,27,large,1,bfloat16,131072,qwen3
 hf-qwen3.6-27b,Qwen/Qwen3.6-27B,28,large,1,bfloat16,262144,qwen3
 hf-qwen3.6-35b-a3b,Qwen/Qwen3.6-35B-A3B,35,large,2,bfloat16,262144,qwen3
 hf-qwen3-32b,Qwen/Qwen3-32B,32,large,1,bfloat16,40960,qwen3

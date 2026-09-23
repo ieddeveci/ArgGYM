@@ -11,11 +11,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARGGYM_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ARGGYM_ROOT"
 
-PROFILE="${1:?usage: $0 MODEL_PROFILE}"
+# The argument is the eval config to run, a stem under evals/conf/model/. For
+# most models that is also the serving profile's name (hf-qwen3-8b). A model
+# with reasoning-effort levels has one config per level and no level-less one,
+# so it is named with its level (hf-qwen3.8-27b-medium), and the profile is
+# the name with the level taken off.
+ENDPOINT_CONFIG="${1:?usage: $0 EVAL_CONFIG   (e.g. hf-qwen3-8b, hf-qwen3.8-27b-medium)}"
+PROFILE="$ENDPOINT_CONFIG"
+for level in minimal low medium high xhigh; do
+    if [[ ! -f "$SCRIPT_DIR/models/${PROFILE}.yaml" && "$ENDPOINT_CONFIG" == *"-$level" ]]; then
+        PROFILE="${ENDPOINT_CONFIG%-"$level"}"
+    fi
+done
 GPU_TYPE="${GPU_TYPE:-H100}"
 ACCOUNT="${ACCOUNT:-$USER}"
 SETUP_TIME="${SETUP_TIME:-02:00:00}"
-GPU_TIME="${GPU_TIME:-1-00:00:00}"
+# The kolyoz-cuda maximum (TRUBA_DIRECTIVE.md). One job runs the whole taskset,
+# and a large reasoning model can need more than three days for it. A job that
+# hits the wall loses only its in-flight generations: submit the same config
+# again with RESUME=1 and it continues from the rows already written, as many
+# times as the run needs.
+GPU_TIME="${GPU_TIME:-3-00:00:00}"
 
 case "$GPU_TYPE" in
     H100|H200) ;;
@@ -34,6 +50,12 @@ PROFILE_FILE="$SCRIPT_DIR/models/${PROFILE}.yaml"
 
 [[ -f "$PROFILE_FILE" ]] || {
     echo "ERROR: unknown model profile: $PROFILE" >&2
+    exit 2
+}
+
+[[ -f "evals/conf/model/${ENDPOINT_CONFIG}.yaml" ]] || {
+    echo "ERROR: no eval config evals/conf/model/${ENDPOINT_CONFIG}.yaml" >&2
+    ls evals/conf/model/ | sed -n "s/^\(${PROFILE}-.*\)\.yaml$/  one of: \1/p" >&2
     exit 2
 }
 
@@ -119,7 +141,7 @@ if [[ -n "$SETUP_JOB" ]]; then
     DEPENDENCY_ARGS=(--dependency="afterok:$SETUP_JOB")
 fi
 
-GPU_EXPORT="$EXPORT_COMMON,MODEL_PROFILE=$PROFILE,TP_SIZE=$GPUS,GPU_TYPE=$GPU_TYPE,TEMPLATE=${TEMPLATE:-xml_tags},ELICITATION=${ELICITATION:-cot},RESUME=${RESUME:-0},SKIP_SCORE=${SKIP_SCORE:-0}"
+GPU_EXPORT="$EXPORT_COMMON,MODEL_PROFILE=$PROFILE,ENDPOINT_CONFIG=$ENDPOINT_CONFIG,TP_SIZE=$GPUS,GPU_TYPE=$GPU_TYPE,TEMPLATE=${TEMPLATE:-xml_tags},ELICITATION=${ELICITATION:-cot},RESUME=${RESUME:-0},SKIP_SCORE=${SKIP_SCORE:-0}"
 
 GPU_JOB="$(
     sbatch --parsable \
@@ -143,6 +165,7 @@ if [[ -n "$SETUP_JOB" ]]; then
 fi
 
 echo "Model profile: $PROFILE"
+echo "Eval config: $ENDPOINT_CONFIG"
 echo "GPU type/count: $GPU_TYPE x $GPUS"
 echo "CPU cores for GPU job: $GPU_CPUS"
 echo "Account: $ACCOUNT"

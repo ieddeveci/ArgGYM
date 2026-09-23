@@ -4,13 +4,18 @@
 # output limit (https://ai.google.dev/gemini-api/docs/models/gemini-2.5-pro,
 # https://ai.google.dev/gemini-api/docs/thinking). The cap is the output limit.
 #
-# Thinking cannot be turned off on this model, and `medium` maps to an
-# 8,192-token thinking budget (https://ai.google.dev/gemini-api/docs/openai).
 # Google publishes no sampling recommendation for 2.5 Pro, so none is set.
-name: gemini-2.5-pro-api
+#
+# Reasoning effort: high. Thinking cannot be turned off on this model, which
+# takes low, medium and high (https://ai.google.dev/gemini-api/docs/thinking).
+# The compatibility layer turns the effort into a thinking budget, 1,024 /
+# 8,192 / 24,576 tokens for low / medium / high, so here that is 24,576
+# (https://ai.google.dev/gemini-api/docs/openai).
+# One config per level: gemini-2.5-pro-low, gemini-2.5-pro-medium, gemini-2.5-pro-high.
+name: gemini-2.5-pro-high
 model: gemini-2.5-pro
 base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
 api_key_env: GEMINI_API_KEY
 sampling:
   max_tokens: 65536
-  reasoning_effort: medium
+  reasoning_effort: high

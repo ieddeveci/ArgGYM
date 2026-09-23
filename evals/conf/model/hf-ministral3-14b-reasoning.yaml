@@ -1,7 +1,9 @@
-# mistralai/Ministral-3-14B-Reasoning-2512 on vLLM, served by hpc/vllm/models/hf-ministral3-14b-reasoning.yaml.
+# mistralai/Ministral-3-14B-Reasoning-2512 on vLLM, served by
+# hpc/vllm/models/hf-ministral3-14b-reasoning.yaml.
 #
 # Sampling: the card's "Use a temperature of 1 for most environments", with the
-# top_p 0.95 its examples use (https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512).
+# top_p 0.95 its examples use
+# (https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512).
 # The same card's code sets TEMP = 0.7, and the 3B card recommends 0.7.
 #
 # The card says to use its own system prompt, the [THINK] template in
