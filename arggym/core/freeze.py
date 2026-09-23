@@ -100,7 +100,8 @@ PROMPT_VERSION = 12
 #: under 5 was also asked differently, and the two constants have to be read
 #: together for anything measured before 2026-09-22.
 #:
-#: Version 6 moves `formalization.score_value` twice and the construction scorer once.
+#: Version 6 moves `formalization.score_value` twice, the construction scorer once,
+#: and `counter_argument`'s stated minimum.
 #:
 #: `success` requires the answer's theory to give the same status as the reference to
 #: every atom the reference names, in both polarities, `UNSATISFIABLE` included
@@ -121,6 +122,15 @@ PROMPT_VERSION = 12
 #: only if it started `JUSTIFIED` or the answer moved it. An answer that changes
 #: nothing now scores 0.0 where it earned up to 0.23. No construction score rises: a
 #: success scores as before, and a failed answer scores the same or lower.
+#:
+#: `counter_argument`'s `min_directives` moves on every weakest-link row, 300 of its
+#: 600 on the standard grid (#184). The generator offers a rebuttal plus one undercut
+#: per chain, which costs `1 + n` directives, or `n` from level 9, under every
+#: ordering; ranking a chain element by element had set the minimum as high as 14
+#: where 4 answer. The question text does not change, and a stated minimum is what the
+#: bloat gate and the economy score read, so an unchanged answer to an unchanged
+#: question now scores differently. Last-link rows and `counter_argument_strict` do
+#: not move.
 SCORING_VERSION = 6
 
 

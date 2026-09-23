@@ -56,8 +56,10 @@ levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 # independent evidence. On status_query a queried label differs between them on
 # 5 of 60 theories (#72). tests/test_the_last_link_orderings_are_one_ordering.py
 # fails the day a generator changes that. Under weakest-link the axis changes
-# answers on preference_construction and counter_argument, whose reference
-# directives put several defeasible rules into an argument (#72).
+# answers on preference_construction, whose reference directives put several
+# defeasible rules into an argument (#72). It does not reach counter_argument,
+# whose minimum, a rebuttal plus one undercut per chain, is the same under every
+# ordering.
 orderings:
   - last_link_elitist
   - last_link_democratic

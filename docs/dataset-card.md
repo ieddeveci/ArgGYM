@@ -178,19 +178,26 @@ how much of a model's score it decided (`docs/evaluation.md`).
 **`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
 independent measurement.** The two arms publish the same theory -- byte for byte
 on all 120 of their cells, every level and ordering at two seeds -- and vary one
-thing, whether the answer may add a strict rule. Permitting one buys a cheaper
-minimum on every cell. The plain arm's own reference, submitted to the strict
-item, earns full credit on none of them: on 89 of them it scores between 0.75
-and 0.92, docked on economy for directives the cheaper minimum no longer needs,
-and on the other 31 it runs past twice the strict minimum and scores zero for
-bloat. What the strict arm then asks is not argumentation. A strict rule cannot
-be attacked in ASPIC+, so a strict counter-argument defeats every defeasible
-chain with no preference, and the answer is a walk read off the question line: a
-strict rebuttal of the target, then one undercut for each strict rule concluding
-it. On all 120 cells that walk scores 1.0 in exactly the gold's number of lines,
-and the gold carries no preference directive (#139). Read the arm as the contrast
-against `counter_argument` -- what removing the preference machinery does to a
-model's score -- and not as a reasoning score of its own.
+thing, whether the answer may add a strict rule. Neither arm needs a preference.
+An undercut defeats its target whatever the ordering says, so the plain arm's
+cheapest answer is a walk read off the theory: rebut the target from an
+uncontested premise, then undercut each of the `n` chains reaching it, at the
+rule that reaches the target or, where that rule is strict, at the chain's first
+rule. It costs `1 + n` directives, or `n` from level 9, where the theory's decoy
+already rebuts the target. Under last-link, outranking a defeasible chain's
+final rule costs the same as undercutting it, and the gold keeps the preference
+answer; under weakest-link the gold is the walk. A strict rule cannot be
+attacked in ASPIC+, so a strict rebuttal defeats every defeasible chain for
+free, and only the `k` chains that reach the target strictly still need an
+undercut: `1 + k`, with `k` at least 1 and below `n`. On all 120 cells that
+strict walk scores 1.0 in exactly the gold's number of lines (#139). The gap
+between the arms therefore measures whether a model uses the unattackability of
+strict rules; preference reasoning is `preference_construction`'s task. The
+plain arm's own reference, submitted to the strict item, earns full credit on
+none of the cells: on 120 of them it scores between 0.75 and 0.92, docked on
+economy for directives the cheaper minimum no longer needs, and on 0 of them it
+runs past twice the strict minimum. Read the strict arm as the contrast against
+`counter_argument`, and not as a reasoning score of its own.
 
 **Preference direction is arbitrary, deliberately.** ASPIC+ takes the ordering
 as a parameter and derives nothing; Modgil and Prakken define the set orderings
@@ -210,11 +217,13 @@ eleven tasks the two last-link columns are two draws of one question, not
 independent evidence about the ordering; on `status_query` a queried label
 differs between them on 5 of 60 theories (#72).
 `tests/test_the_last_link_orderings_are_one_ordering.py` fails if a generator
-changes that. Under weakest-link the axis reaches an answer on two tasks: a
+changes that. Under weakest-link the axis reaches an answer on one task: a
 `preference_construction` reference re-scored under its partner ordering still
-scores 1.0 on only 6 of 30 items and a `counter_argument` one on 17 of 30,
-because the answer's own preference directives are what put several defeasible
-rules into an argument (#72).
+scores 1.0 on only 6 of 30 items, because the answer's own preference directives
+are what put several defeasible rules into an argument (#72). The axis does not
+reach `counter_argument`: its minimum is the same under all four orderings, and
+its weakest-link reference, a rebuttal plus one undercut per chain, scores 1.0
+under the partner ordering on 30 of 30.
 
 **A frozen row is re-scorable only against the pinned engine.** Scoring the
 construction tasks runs `python-argumentation==2.0.2` at scoring time, not just
