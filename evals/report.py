@@ -356,7 +356,7 @@ def write_csv(runs: List[Dict[str, Any]], path: str) -> None:
               "n_scorer_refused", "mean", "mean_untruncated",
               "success_rate", "floor", "floor_strategy", "corrected", "floor_error",
               "truncated_rate", "no_answer_region_rate",
-              "answer_in_cot_rate", "zero_with_region"]
+              "answer_in_cot_rate", "zero_with_region", "bloat_rate"]
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, restval="")

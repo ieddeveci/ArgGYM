@@ -163,6 +163,15 @@ proven globally minimal. An answer shorter than the reference is possible, and
 efficiency is clamped at 1.0, so it earns full credit rather than extra. The
 manifest records the caveat with the taskset.
 
+**Past twice the minimum, a construction answer scores zero.** Partial credit
+for economy covers only `(minimum, 2*minimum]`, and on small minima that band
+is narrow. On the standard grid 137 of the 600 `preference_construction` rows
+have a minimum of 2 or less (117 of 2, 20 of 1), as do a third of `defence`
+rows (200 of 600) and 40% of `counter_argument_strict` rows (240 of 600), so a
+long answer on those rows is zeroed rather than docked. Reports carry
+`bloat_rate`, the share of scored answers the gate zeroed, so a reader can see
+how much of a model's score it decided (`docs/evaluation.md`).
+
 **`counter_argument_strict` is an ablation of `counter_argument`, not a twelfth
 independent measurement.** The two arms publish the same theory -- byte for byte
 on all 120 of their cells, every level and ordering at two seeds -- and vary one

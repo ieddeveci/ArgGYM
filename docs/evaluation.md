@@ -174,6 +174,16 @@ Half of all 4,312 truncated generations ended in a repetition loop; one burned
 61,440 tokens repeating a single vacuous line 1,654 times and never wrote an
 answer. A mean over what survives that is a measurement of the token cap.
 
+**`bloat_rate` says how many zeros the directive budget decided.** The six
+construction tasks zero an answer that uses more than twice the minimum number
+of directives, and the record's `reason` then starts with `bloated:`.
+`metrics.json` gives the share of scored records with that reason for every
+task, level and ordering, `results.csv` carries it, and `score.py` prints it
+per task. API errors and refused rows are left out of the denominator, as for
+`no_answer_region_rate`, and a task with no directive budget reads 0. Where the
+minimum is 2 a correct answer of five lines scores zero, the same as a wrong
+one, so read this rate beside a construction task's mean.
+
 ### Whether the timeout was big enough
 
 `endpoint.timeout_s` is 28,800 seconds, and it is a safety net for a hung

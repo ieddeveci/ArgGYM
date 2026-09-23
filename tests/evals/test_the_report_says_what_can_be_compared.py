@@ -23,7 +23,8 @@ def a_metrics(label, taskset_hash="abc", versions=None, **overrides):
                          "n_scorer_refused": 0, "mean": 0.4, "mean_untruncated": 0.5,
                          "success_rate": 0.25, "floor": 0.375, "corrected": 0.04,
                          "truncated_rate": 0.25, "no_answer_region_rate": 0.0,
-                         "answer_in_cot_rate": 0.0, "zero_with_region": 1},
+                         "answer_in_cot_rate": 0.0, "zero_with_region": 1,
+                         "bloat_rate": 0.0},
     }
     return {"_meta": {"run_dir": f"/runs/{label}", "endpoint": {"model": label},
                       "template": "xml_tags", "elicitation": "none",
@@ -88,7 +89,8 @@ def test_the_csv_carries_every_stat_the_scorer_produces(tmp_path):
     write_csv(written(tmp_path, m), os.path.join(out, "results.csv"))
     header = open(os.path.join(out, "results.csv")).readline()
     for field in ("answer_in_cot_rate", "n_scorer_refused", "truncated_rate",
-                  "no_answer_region_rate", "zero_with_region", "n_scored"):
+                  "no_answer_region_rate", "zero_with_region", "bloat_rate",
+                  "n_scored"):
         assert field in header, field
 
 
