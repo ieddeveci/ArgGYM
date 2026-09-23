@@ -1,3 +1,20 @@
+"""Make a claim's contrary justified and the claim overruled, in the fewest directives.
+
+The theory has `n` chains reaching the target. An undercut defeats its target whatever the
+ordering says, so the plain arm's cheapest answer rebuts the target from an uncontested
+premise and undercuts each chain once: `1 + n` directives, or `n` from level 9, where the
+theory's decoy already rebuts the target. That minimum is the same under all four
+orderings, so the ordering axis does not reach this task's minimum. A weakest-link
+answer that ranks a chain element by element instead is correct but long, and can run
+past the bloat budget.
+
+`counter_argument_strict` builds the same theory and also permits strict rules. A strict
+rule cannot be attacked, so a strict rebuttal defeats the defeasible chains for free, and
+only the `k` chains that reach the target strictly still need an undercut: `1 + k`, with
+`1 <= k <= n - 1`, and `k <= n - 2` from level 9. The gap between the arms measures whether a model uses the
+unattackability of strict rules. Neither arm needs a preference; preference reasoning is
+`preference_construction`'s task.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -158,12 +175,11 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     # still did was ship 14 more one-directive cells and make the two arms build
     # different theories, which is the one thing an ablation may not do.
     n_strict = min(n_chain - 1, 1 + max(0, level - 3) // 4)
-    # From level 9 the decoy path answers the plain arm with one undercut per strict
-    # chain and none for the defeasible chain that carries the killer rule, so with one
-    # defeasible chain the plain arm costs 1 + k -- exactly the strict arm's 1 + k, and
-    # the two arms shipped one answer at level 11 seed 0 on all four orderings (#109).
-    # Two defeasible chains keep a preference in the plain arm's answer. Levels 9, 10
-    # and 12 to 15 already leave two or more, so this binds at 11 alone.
+    # From level 9 the decoy already rebuts the target, so the plain arm costs `n`, one
+    # undercut per chain, against the strict arm's `1 + k`. With one defeasible chain
+    # those are equal, and the two arms shipped one answer at level 11 seed 0 on all four
+    # orderings (#109). Two defeasible chains keep the plain arm a directive dearer.
+    # Levels 9, 10 and 12 to 15 already leave two or more, so this binds at 11 alone.
     if level >= 9:
         # The cap only reads as a cap because the curriculum leaves room for it:
         # `n_chain` is 4 at levels 9 to 11, 5 at 12 to 14 and 6 at 15. A curriculum
@@ -462,7 +478,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         # So break those chains first, one undercut of the chain's first rule each -- the
         # same move the plain path already makes for a strict-final chain. The answer then
         # costs 1 + k, and `k >= 1` on every item since #167. What the strict rule buys
-        # is the defeasible chains it rebuts without a preference apiece.
+        # is the defeasible chains it rebuts without an undercut apiece.
         strict_ops = [Operation(kind="strict", name="cs", antecedents=(seed_lit,),
                                 consequent="-" + target)]
         strict_lines = [f"[strict cs: {seed_lit} -> -{target}]"]
@@ -487,6 +503,24 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
                           Operation(kind="prefer_rule", stronger="cw", weaker=rl[0])],
                          [f"[defeasible cw: {seed_lit} => -{target}]",
                           f"[prefer_rule: cw > {rl[0]}]"]))
+    # The walk: rebut the target unless the decoy already does, then undercut each chain
+    # at its target-reaching rule, or at its first rule where that one is strict. An
+    # undercut defeats whatever the ordering says, so under weakest-link this costs one
+    # line per chain where ranking the chain costs one per element of it (#184). Under
+    # last-link it ties the searched reference, and the tie keeps the reference.
+    walk_ops: List[Operation] = []
+    walk_lines: List[str] = []
+    if not decoy_rule:
+        walk_ops.append(Operation(kind="defeasible", name="w", antecedents=(seed_lit,),
+                                  consequent="-" + target))
+        walk_lines.append(f"[defeasible w: {seed_lit} => -{target}]")
+    for ci, c in enumerate(target_chains):
+        rl = c["rules"][_tgt_idx(c)]
+        cut = c["rules"][0] if rl[2] else rl
+        walk_ops.append(Operation(kind="defeasible", name=f"z{ci}", antecedents=(seed_lit,),
+                                  consequent="-" + cut[0]))
+        walk_lines.append(f"[defeasible z{ci}: {seed_lit} => -{cut[0]}]")
+    bank.append((walk_ops, walk_lines))
     # Every candidate is minimised first and compared afterwards. A candidate is written
     # by hand rather than searched, so the length it arrives with says nothing about what
     # it costs, and ordering the bank by that length would hide a longer candidate that

@@ -107,7 +107,7 @@ PROMPT_VERSION = 13
 #: together for anything measured before 2026-09-22.
 #:
 #: Version 6 moves `formalization.score_value` twice, the construction scorer once,
-#: and every parser once.
+#: and `counter_argument`'s stated minimum.
 #:
 #: `success` requires the answer's theory to give the same status as the reference to
 #: every atom the reference names, in both polarities, `UNSATISFIABLE` included
@@ -129,12 +129,14 @@ PROMPT_VERSION = 13
 #: nothing now scores 0.0 where it earned up to 0.23. This part raises no score: a
 #: success scores as before, and a failed answer scores the same or lower.
 #:
-#: Every parser drops markdown code markup before it reads (#187, `scoring.unmark`):
-#: a line that is only a code fence, with or without a language tag, and every
-#: backtick. A correct answer wrapped in a fence or written with each line in
-#: backticks scored 0.0 on all 12 tasks under 5 and scores what the bare answer
-#: scores under 6. A stray word, backticked or not, still zeroes the answer. This
-#: part only admits answers.
+#: `counter_argument`'s `min_directives` moves on every weakest-link row, 300 of its
+#: 600 on the standard grid (#184). The generator offers a rebuttal plus one undercut
+#: per chain, which costs `1 + n` directives, or `n` from level 9, under every
+#: ordering; ranking a chain element by element had set the minimum as high as 14
+#: where 4 answer. The question text does not change, and a stated minimum is what the
+#: bloat gate and the economy score read, so an unchanged answer to an unchanged
+#: question now scores differently. Last-link rows and `counter_argument_strict` do
+#: not move.
 SCORING_VERSION = 6
 
 

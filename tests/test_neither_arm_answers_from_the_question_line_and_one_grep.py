@@ -26,7 +26,9 @@ blocks the shortcut exactly as a last-rule strict chain always did.
 answers the strict arm on every cell -- rebut the target strictly, then undercut each rule
 feeding a strict rule that concludes it -- and it did so on `main` too, so it is a defect
 this change neither causes nor closes. That is #116; do not read this file as saying the
-arm cannot be answered without reading an argument, because it can.
+arm cannot be answered without reading an argument, because it can. The plain arm has a
+walk of its own through undercuts: rebut the target, then undercut each chain once. It is
+the plain gold under weakest-link and ties it under last-link (#186).
 
 `not success` rather than `score < 1.0`. An answer that reaches both goals and loses only
 economy is the same defect wearing a smaller number: on `main` the plain sibling scored

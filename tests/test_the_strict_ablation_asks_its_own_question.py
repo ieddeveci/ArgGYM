@@ -24,8 +24,8 @@ flag names the target-reaching rule now, so the law has one branch rather than t
 The two arms shipping one answer between them is its own failure, and levels 10 and 11
 are where it happened: the decoy is in play there and the chain count is four, which left
 both arms costing 4 directives and writing the same reference (#109). The `n_chain - 2`
-cap leaves the plain arm a second defeasible chain, the preference that keeps it costs
-directives the strict minimum no longer needs, and the pair splits like every other level.
+cap leaves the plain arm a second defeasible chain, the undercut that breaks it costs a
+directive the strict minimum no longer needs, and the pair splits like every other level.
 Those two levels used to be off the grid and were parametrized separately to reach them;
 the grid exports them now, so the sweep covers them and `strict.reference !=
 plain.reference` is asserted at every cell.
@@ -33,8 +33,9 @@ plain.reference` is asserted at every cell.
 Sharing a theory is not sharing an answer, and `docs/dataset-card.md` reports how far
 apart the two arms land. Submit the plain arm's own reference to the strict item and it is
 legal there and reaches the same goal, so it scores -- but it is docked on economy for
-directives the cheaper minimum no longer needs, and where it runs past twice that minimum
-the bloat rule zeroes it instead.
+directives the cheaper minimum no longer needs. It would be zeroed for bloat where it ran
+past twice that minimum, and it does so on no cell: the plain minimum is `1 + n`, or `n`
+from level 9, against the strict `1 + k` with `k >= 1`.
 
 Two of the card's four claims about that are theorems, and are asserted here only as
 bounds. An answer that survives the bloat rule used at most twice the minimum, so
@@ -79,71 +80,26 @@ GRID = [(lv, o, s) for lv in LEVELS for o in ALL_ORDERINGS for s in SEEDS]
 #: level that predicts it: building both arms at all 120 cells takes 357 seconds, of which
 #: `weakest_link_democratic` is 328 and the dearest single cell, level 15 seed 0, is 63.
 #: Every other ordering builds both arms in under 5 seconds at every level, so splitting on
-#: the ordering puts 90 of the 120 cells in the default run for 30 seconds -- including all
-#: four cells that reach the top of the band, which the old level-based split left to
-#: `make test-all`. The 30 dear cells carry 29 of the 31 that bloat (#111).
+#: the ordering puts 90 of the 120 cells in the default run for 30 seconds -- including six
+#: of the eight cells that reach the top of the band, which the old level-based split left
+#: to `make test-all` (#111).
 DEAR_ORDERING = "weakest_link_democratic"
 CHEAP = [c for c in GRID if c[1] != DEAR_ORDERING]
 DEAR = [c for c in GRID if c[1] == DEAR_ORDERING]
-#: The 31 cells where the plain arm's reference runs past twice the strict minimum and is
-#: zeroed for bloat. The split reads off the ordering almost entirely.
-#:
-#: Weakest-link-democratic carries 29 of them: it is the family whose theories hold the
-#: most junctions, so its plain answers are the longest, and every one of its cells bloats
-#: except (15, .., 1), which spends 8 against a budget of 10 and is docked to 0.8125.
-#:
-#: The other 2 are weakest-link-elitist at level 6, where the plain answer costs 6 against
-#: a strict minimum of 2. Below that it costs 4 against 2 and lands exactly on the budget;
-#: from level 7 the minimum is 3 or more and the gap fits inside twice it.
-#:
-#: No last-link cell bloats at any level. There the plain reference costs one or two
-#: directives more than the strict minimum, and the minimum is never below 2.
-BLOATED_ON_THE_STRICT_ITEM = frozenset({
-    (1, "weakest_link_democratic", 0),
-    (1, "weakest_link_democratic", 1),
-    (2, "weakest_link_democratic", 0),
-    (2, "weakest_link_democratic", 1),
-    (3, "weakest_link_democratic", 0),
-    (3, "weakest_link_democratic", 1),
-    (4, "weakest_link_democratic", 0),
-    (4, "weakest_link_democratic", 1),
-    (5, "weakest_link_democratic", 0),
-    (5, "weakest_link_democratic", 1),
-    (6, "weakest_link_elitist", 0),
-    (6, "weakest_link_elitist", 1),
-    (6, "weakest_link_democratic", 0),
-    (6, "weakest_link_democratic", 1),
-    (7, "weakest_link_democratic", 0),
-    (7, "weakest_link_democratic", 1),
-    (8, "weakest_link_democratic", 0),
-    (8, "weakest_link_democratic", 1),
-    (9, "weakest_link_democratic", 0),
-    (9, "weakest_link_democratic", 1),
-    (10, "weakest_link_democratic", 0),
-    (10, "weakest_link_democratic", 1),
-    (11, "weakest_link_democratic", 0),
-    (11, "weakest_link_democratic", 1),
-    (12, "weakest_link_democratic", 0),
-    (12, "weakest_link_democratic", 1),
-    (13, "weakest_link_democratic", 0),
-    (13, "weakest_link_democratic", 1),
-    (14, "weakest_link_democratic", 0),
-    (14, "weakest_link_democratic", 1),
-    (15, "weakest_link_democratic", 0),
-})
+#: The cells where the plain arm's reference runs past twice the strict minimum and is
+#: zeroed for bloat. There are none. The plain reference costs `1 + n` at levels 1 to 8
+#: and `n` from level 9, against a strict minimum of `1 + k` with `1 <= k <= n - 1`; the
+#: widest ratio is level 6, 4 against 2, which lands exactly on the budget.
+BLOATED_ON_THE_STRICT_ITEM: frozenset = frozenset()
 #: The cells that reach the top of the band, and the only ones allowed to: the plain
-#: reference costs 6 there against a strict minimum of 5, so 0.5 + 0.5 * 5/6. Level 15
-#: under last-link is where the ratio is best, because the strict minimum is 1 +
-#: `n_strict_final` and `n_strict_final` peaks at 4 there while the last-link plain
-#: reference stays one directive above it. The four last-link cells at levels 12 to 14 sit
-#: just under, at 5/6 of a 5-directive minimum -- 0.9 against 0.9167 -- which is why the
-#: top is asserted as an equality on these four and a strict inequality everywhere else.
-AT_THE_TOP_OF_THE_BAND = frozenset({
-    (15, "last_link_elitist", 0),
-    (15, "last_link_elitist", 1),
-    (15, "last_link_democratic", 0),
-    (15, "last_link_democratic", 1),
-})
+#: reference costs 6 there against a strict minimum of 5, so 0.5 + 0.5 * 5/6. Level 15 is
+#: where the ratio is best, because the strict minimum is 1 + `n_strict_final` and
+#: `n_strict_final` peaks at 4 there while the plain minimum is the six chains. Levels 12
+#: to 14 sit just under, at 4/5 of a 5-directive plain minimum -- 0.9 against 0.9167 --
+#: which is why the top is asserted as an equality on these eight and a strict inequality
+#: everywhere else.
+AT_THE_TOP_OF_THE_BAND = frozenset(
+    (15, ordering, seed) for ordering in ALL_ORDERINGS for seed in SEEDS)
 #: A theorem, given BLOAT_FACTOR == 2 and a truthy minimum. See the module docstring.
 BAND_FLOOR = 0.75
 #: A measurement. The card prints it rounded, and this is what it rounds to.
@@ -231,7 +187,7 @@ def test_the_card_prints_the_split_this_file_measures():
     """`docs/dataset-card.md` is the only place these measurements are written as numbers.
 
     The card's ablation paragraph makes three of them -- all 120 cells publish one theory,
-    89 of them score the plain reference between 0.75 and 0.92, the other 31 zero it for
+    120 of them score the plain reference between 0.75 and 0.92, 0 of them zero it for
     bloat -- and every one can move under the prose when the generator changes, or
     when the grid does. All three already have, twice: here and in #94's visible-gap count
     when #117 changed the minimum, and again when the grid went to fifteen levels. Nothing
@@ -256,8 +212,8 @@ def test_the_card_prints_the_split_this_file_measures():
 
     What this does not catch: the sweep filling the tables is `slow` on one ordering, and
     nothing automated runs `slow`. CI runs `uv run pytest -q -n auto` and `pyproject.toml`
-    sets `addopts = "-m 'not slow'"`, so the 30 `weakest_link_democratic` cells -- 29 of
-    the 31 that bloat -- are checked only when someone runs `make test-all` by hand.
+    sets `addopts = "-m 'not slow'"`, so the 30 `weakest_link_democratic` cells are
+    checked only when someone runs `make test-all` by hand.
     Running them by default costs 328 seconds of build, 63 of them in one cell.
     """
     text = CARD.read_text()
@@ -279,8 +235,8 @@ def test_the_card_prints_the_split_this_file_measures():
         f"{BEST_CROSS_SCORE:.2f}":
             rf"on {shared - bloated} of them it scores between {BAND_FLOOR:.2f} and "
             rf"{BEST_CROSS_SCORE:.2f}",
-        f"the other {bloated} are zeroed for bloat":
-            rf"the other {bloated} it runs past twice the strict minimum",
+        f"{bloated} of them are zeroed for bloat":
+            rf"on {bloated} of them it runs past twice the strict minimum",
     }
     missing = [claim for claim, pattern in required.items()
                if not re.search(pattern, unwrapped)]

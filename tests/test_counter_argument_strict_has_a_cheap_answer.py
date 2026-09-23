@@ -83,7 +83,7 @@ def test_some_chain_stays_defeasible(level):
     for (o, s), it in _items(level, allow_strict=True):
         assert it.metadata["n_strict_final"] <= it.metadata["n_chains"] - 1, (
             f"L{level} {o} seed {s}: every chain ends strictly, so none is left for the "
-            f"plain arm to pay a preference on")
+            f"plain arm to pay an undercut on")
         plain = ca.make_item(level, s, o, allow_strict=False)
         assert it.min_directives < plain.min_directives, (
             f"L{level} {o} seed {s}: strict {it.min_directives} against plain "
