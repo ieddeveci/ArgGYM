@@ -464,11 +464,12 @@ reports 0.17 at `take: 2` and 0.26 at `take: 10`. Two exports whose reasons move
 hash holds mean a generator changed what it discards without changing what it
 ships. `min_acceptance` gates the seed rate, which falls below 1.00 only where
 a `preference_construction` seed is skipped for `minimality_unproven` (below).
-The lowest cell reads 0.83 at `take: 10` and 0.50 at `take: 2`, where the rate
-is over four seeds and one skip moves it by a sixth. The standard and lite specs
-share 0.3, which leaves that cell room for two more skips at `take: 2`. A
-generator that fails outright trips the build guard first, since a seed that
-runs out of tries discards every candidate it built; what the seed guard alone
+The lowest cell reads 0.83 at `take: 10` and 0.50 at `take: 2`, where it keeps
+2 seeds of 4. The standard and lite specs share 0.3: with two items the rate is
+2/n, so that cell can take two more skips (2/6 = 0.33) before it is refused
+(2/7 = 0.29). On a generator that fails outright the build guard refuses a
+smaller degradation than the seed guard, since a seed that runs out of tries
+discards every candidate it built; what the seed guard alone
 bounds is a pile-up of `minimality_unproven` skips, each one candidate and a
 whole search budget of freeze time. `min_build_acceptance` gates the candidate
 rate the retry loop reports. The two specs share 0.13, set under the thinnest

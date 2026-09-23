@@ -57,10 +57,11 @@ class TasksetSpec:
     profile: str = "FULL"
     #: Refuse a cell that keeps fewer than this share of the seeds it scanned. A
     #: degraded cell should be a decision, not a silent property of the file.
-    #: Where `min_build_acceptance` is on, it fires first on a generator that
-    #: fails outright, and this guard bounds the seeds the freeze skips for
-    #: `minimality_unproven`, which cost one candidate each. The default serves
-    #: a spec that names neither guard; `tasksets/standard.yaml` sets 0.3.
+    #: Where `min_build_acceptance` is on, it refuses a smaller degradation than
+    #: this guard on a generator that fails outright, and this guard bounds the
+    #: seeds the freeze skips for `minimality_unproven`, which cost one
+    #: candidate each. The default serves a spec that names neither guard;
+    #: `tasksets/standard.yaml` sets 0.3.
     min_acceptance: float = 0.5
     #: Refuse a cell that keeps fewer than this share of the candidates `build`
     #: produced. Seed acceptance cannot see the candidates the retry loop
