@@ -62,11 +62,12 @@ UNREADABLE = "A directive that cannot be read at all scores the whole answer zer
 # above, so the noun is written once and in that task's words. That is also why this is a
 # caller's argument rather than something `answer_format` appends -- see there.
 #
-# "word", not "line" or "token", is measured. All five discard two kinds of token before
+# "word", not "line" or "token", is measured. All five drop markdown code markup first
+# (`scoring.unmark`: fence lines and backticks), then discard two kinds of token before
 # they count: one left empty by `.strip(",;.-*•()[]")`, which `claim_chain` does
 # without the brackets, and one matching `\d+[.)]?`. So a reference rewritten as a
-# bulleted list or a numbered one still scores 1.0 on all 40 rows of all five, while a
-# leading `Answer:` zeroes all five.
+# bulleted list or a numbered one still scores 1.0 on all 40 rows of all five, a fenced
+# one scores what the bare one does, and a leading `Answer:` zeroes all five.
 #
 # "in your answer" is there because without it the sentence claims more than the scorer
 # does. A harness composes this question with a submission convention of its own and
@@ -108,7 +109,7 @@ _TAIL = ("Every rule needs a name, written after the kind and separated from it 
          "Several antecedents are joined with AND. Rule antecedents must be literals "
          "already present in the theory. A rule name in a consequent, written -<name>, "
          "switches that rule off.\n"
-         + MINIMALITY + " " + UNREADABLE + ".")
+         + MINIMALITY + " " + UNREADABLE + ", so write only directives.")
 
 # Two contraries are both JUSTIFIED under grounded semantics only if both are firm, and
 # firmness comes from an axiom through strict rules. No answer may add an axiom, so an

@@ -30,6 +30,29 @@ ARROW = {"defeasible": "=>", "strict": "->"}
 _PREF = re.compile(r"^\[prefer_(rule|premise)\s*:\s*(-?[A-Za-z]\w*)\s*>\s*(-?[A-Za-z]\w*)\]$")
 
 
+_FENCE_LINE = re.compile(r"^[ \t]*`{3,}\w*[ \t]*$", re.M)
+
+
+def unmark(text: str) -> str:
+    """The answer without markdown code markup: fence lines and backticks.
+
+    A chat model wraps anything that looks like code in a fence or in backticks, and
+    the prompts print the answer format in backticks themselves. That markup is
+    rendering, like a bullet or a list number, so every parser drops it before reading.
+    A line that is only a backtick fence goes, with or without a language tag; then
+    every backtick goes. The tag is one word (`\\w*`) by choice, so a line such as
+    ```` ```[premise: a] ```` is not a fence line and keeps its content; a tilde
+    fence, or a tag with a space in it, is not forgiven.
+
+    No legal token contains a backtick, so markup around a token comes off and
+    leaves the token: a stray word in backticks is still a stray word. A backtick
+    between two word characters, which is not markdown, glues them instead, so
+    `[premise: a`b]` reads as `[premise: ab]`. A space in its place would be
+    worse, since it would break `[defeasible k1: a => `b`]`.
+    """
+    return _FENCE_LINE.sub("", text or "").replace("`", "")
+
+
 @dataclass
 class ParsedAnswer:
     ops: List[Operation] = field(default_factory=list)
@@ -43,11 +66,13 @@ def parse_answer(text: str) -> ParsedAnswer:
 
     The input is the answer, not a completion. Composing the prompt and pulling the
     answer out of whatever the solver returned is the harness's job, so nothing here
-    unwraps a fence -- which is what lets a caller use any convention, or none at all
-    (`docs/dataset-contract.md` section 1).
+    strips answer delimiters -- which is what lets a caller use any convention, or
+    none at all (`docs/dataset-contract.md` section 1). Markdown code markup inside
+    the answer is another matter: `unmark` drops it, as the parsers drop bullets and
+    numbering.
     """
     out = ParsedAnswer()
-    body = text or ""
+    body = unmark(text)
     units = re.findall(r"\[[^\]]*\]", body)
     leftover = re.sub(r"\[[^\]]*\]", " ", body)
     stray = [t for t in leftover.split()

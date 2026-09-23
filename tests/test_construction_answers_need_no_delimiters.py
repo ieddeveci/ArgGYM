@@ -191,7 +191,8 @@ def test_the_prompt_still_states_what_a_legal_answer_is(task, cell):
                    "directive used.",
                    "A preference may name a defeasible rule or ordinary premise your "
                    "answer added.",
-                   "A directive that cannot be read at all scores the whole answer zero."):
+                   "A directive that cannot be read at all scores the whole answer "
+                   "zero, so write only directives."):
         assert clause in it.prompt, f"{task}: lost {clause!r}"
 
 
