@@ -446,7 +446,7 @@ seeds:
   start: 0
   take: 10           # items required per cell; lite.yaml asks for 2
   scan_limit: 40     # refuse the cell past this
-min_acceptance: 0.5  # refuse a cell needing more than 2 seeds per item
+min_acceptance: 0.3  # refuse a cell keeping under 3 seeds in 10
 min_build_acceptance: 0.13  # refuse a cell keeping under 13 candidates in 100
 profile: FULL
 ```
@@ -500,16 +500,23 @@ against another export of the same `seeds.take`: the scan stops as soon as the
 cell is full, so `semantics_query` at level 13 under weakest-link democratic
 reports 0.17 at `take: 2` and 0.26 at `take: 10`. Two exports whose reasons move while the
 hash holds mean a generator changed what it discards without changing what it
-ships. `min_acceptance` gates the seed rate, which falls below 1.00 on the
-standard grid only where a `preference_construction` seed is skipped for
-`minimality_unproven` (below), bottoming at 0.83; `min_build_acceptance` gates
-the candidate rate the retry loop reports. The standard and lite specs share
-0.13, set under the thinnest cell of either: `perturbation` at level 6 under
+ships. `min_acceptance` gates the seed rate, which falls below 1.00 only where
+a `preference_construction` seed is skipped for `minimality_unproven` (below).
+The lowest cell reads 0.83 at `take: 10` and 0.50 at `take: 2`, where it keeps
+2 seeds of 4. The standard and lite specs share 0.3: with two items the rate is
+2/n, so that cell can take two more skips (2/6 = 0.33) before it is refused
+(2/7 = 0.29). On a generator that fails outright the build guard refuses a
+smaller degradation than the seed guard, since a seed that runs out of tries
+discards every candidate it built; what the seed guard alone
+bounds is a pile-up of `minimality_unproven` skips, each one candidate and a
+whole search budget of freeze time. `min_build_acceptance` gates the candidate
+rate the retry loop reports. The two specs share 0.13, set under the thinnest
+cell of either: `perturbation` at level 6 under
 last-link elitist keeps 10 candidates of 44 at `take: 10`, and `semantics_query`
 at level 13 under weakest-link democratic keeps 2 of 12 at `take: 2` (#114).
 Those floors move with `seeds.take` for the reason above, so a spec that changes
 `take` has to measure its own floor rather than inherit these. A spec that names
-neither guard keeps the seed guard alone.
+neither guard keeps the seed guard alone, at 0.5.
 
 One more reason a seed is skipped comes after `build` rather than from it:
 `minimality_unproven`. The six construction generators write `minimality_proven`

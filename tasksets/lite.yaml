@@ -46,9 +46,9 @@ seeds:
   take: 2
   scan_limit: 40
 
-min_acceptance: 0.5
-
-# Shared with standard.yaml, which names the thinnest cell at each take.
+# Both guards are shared with standard.yaml, which names the thinnest cell at
+# each take.
+min_acceptance: 0.3
 min_build_acceptance: 0.13
 
 profile: FULL
