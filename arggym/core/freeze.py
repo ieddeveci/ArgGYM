@@ -100,7 +100,7 @@ PROMPT_VERSION = 12
 #: under 5 was also asked differently, and the two constants have to be read
 #: together for anything measured before 2026-09-22.
 #:
-#: Version 6 moves `formalization.score_value` twice.
+#: Version 6 moves `formalization.score_value` twice and the construction scorer once.
 #:
 #: `success` requires the answer's theory to give the same status as the reference to
 #: every atom the reference names, in both polarities, `UNSATISFIABLE` included
@@ -113,6 +113,14 @@ PROMPT_VERSION = 12
 #: recall (#191). An axiom or strict directive the gold does not have now costs
 #: precision, so promoting every premise to an axiom no longer keeps a type score of
 #: 1.0. Rows whose gold has no axiom and no strict rule still carry no type term.
+#:
+#: Partial credit on the six construction tasks pays for movement from each goal's
+#: starting status, not for the final theory (#188). A goal the answer left at the
+#: wanted status it started at leaves the average, and one it broke scores 0.0;
+#: `UNDECIDED` earns its 0.4 only where the goal did not start there; a subgoal counts
+#: only if it started `JUSTIFIED` or the answer moved it. An answer that changes
+#: nothing now scores 0.0 where it earned up to 0.23. No construction score rises: a
+#: success scores as before, and a failed answer scores the same or lower.
 SCORING_VERSION = 6
 
 

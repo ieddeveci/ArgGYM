@@ -368,6 +368,21 @@ every goal is a success at `score=0.5`; the efficiency term is a separate
 multiplier. Goal satisfaction is the task; economy is a second measurement on
 the same answer. `success_rate` and `mean_score` answer two questions.
 
+**Partial credit on a construction task pays for movement.** An answer that
+misses a goal and leaves the theory consistent can still earn up to
+`PARTIAL_CAP` (0.25), averaged over the goals the answer had work to do on. A
+goal already at its wanted status before the answer, and still there after it,
+leaves the average; one the answer moved away from its want stays in at 0.0.
+Any other goal earns 1.0 if the answer reaches its wanted status; 0.4 if it is
+left `UNDECIDED` where a pole was wanted and did not start `UNDECIDED`; and,
+where it should be `OVERRULED`, 0.3 times the share of its supports the answer
+defeated. A support counts if it started `JUSTIFIED` or the answer moved it, and
+is defeated if it ends not `JUSTIFIED`. The starting status comes from the
+engine on the theory before the answer, since the row does not store it. So an
+answer that changes nothing scores 0.0, as the empty answer does, and the floor
+search's 0.0 on these tasks describes every answer that changes nothing, not
+only the ones it tries (#188).
+
 ### Scoring policy is versioned, not configurable
 
 `scoring_version` covers everything that moves a score without moving a prompt:
