@@ -61,9 +61,11 @@ class AnswerTemplate:
         return found[-1] if found else None
 
 
-#: The default, matching reasoning-gym: its system prompts ask for
-#: `<answer>answer here</answer>` and `reasoning_gym/utils.py:25` reads the
-#: region back with `<{tag}>\s?(.*?)\s?</{tag}>`.
+#: The default, matching reasoning-gym's tag: its system prompts ask for
+#: `<answer>answer here</answer>`. Its reader departs from ours on purpose.
+#: `reasoning_gym/utils.py:25` uses `<{tag}>\s?(.*?)\s?</{tag}>`, which starts
+#: at the first opening tag, so a tag named in the reasoning pulls that prose
+#: into the answer; `AnswerTemplate.region` starts at the last one before the close.
 XML_TAGS = AnswerTemplate("xml_tags", "<answer>", "</answer>")
 DEFAULT_TEMPLATE = XML_TAGS
 

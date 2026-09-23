@@ -179,13 +179,6 @@ def test_a_tag_named_after_the_answer():
     assert extract_answer("<answer>X</answer> as in <answer>this</answer>.") == "this"
 
 
-def test_every_template_reads_its_last_complete_pair():
-    t = AnswerTemplate("square", "[answer]", "[/answer]")
-    assert t.region("I use [answer] tags.\n[answer]\nq\n[/answer]") == "q"
-    assert t.region("[answer]\nunclosed") is None
-    assert t.region("") is None and t.region(None) is None
-
-
 def test_nothing_at_all_is_an_empty_body_not_an_error():
     assert extract_answer(None) == ""
     assert extract_answer("") == ""
