@@ -11,7 +11,6 @@ each telling the reader to keep them in lockstep by hand.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -83,18 +82,14 @@ def region(text: str, template_name: Optional[str]) -> Tuple[str, bool]:
     that scores zero is a reasoning failure, and the second is the only one that
     is a result about the model's argumentation.
 
-    The *last* region, not the first: a reasoning model drafts a candidate
-    mid-thought and then revises it. `arggym.extract_answer` settles this the
-    same way for the `<answer>` convention, and
-    `test_the_harness_owns_the_submission_convention.py::
-    test_extraction_agrees_with_the_package_on_the_shared_convention` pins the
-    two together so this one cannot drift.
+    The region is the body of the last complete pair of delimiters
+    (`arggym.AnswerTemplate.region`), which is also what `arggym.extract_answer`
+    reads for `<answer>`. Every template goes through that one method, so the
+    harness and the package cannot disagree on where an answer starts.
 
     With no template the whole completion is the answer.
     """
     if template_name is None:
         return text, True
-    t = template(template_name)
-    found = re.findall(f"{re.escape(t.open)}\\s?(.*?)\\s?{re.escape(t.close)}",
-                       text or "", re.S | re.I)
-    return (found[-1], True) if found else (text or "", False)
+    body = template(template_name).region(text)
+    return (body, True) if body is not None else (text or "", False)
