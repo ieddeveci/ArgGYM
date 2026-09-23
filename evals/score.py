@@ -456,7 +456,12 @@ def aggregate(records: List[Dict[str, Any]], rows: Dict[str, Dict[str, Any]]
     for name, buckets in groups.items():
         out[name] = {}
         for key, got in sorted(buckets.items()):
-            mine = [rows[r["id"]] for r in got if r["id"] in rows]
+            # The rows the mean is over: `_stats` drops a record whose score
+            # is None, so the floor drops it too, or `corrected` would combine
+            # two numbers about different rows. A group with no scored row
+            # gets no floor, beside its mean of None.
+            mine = [rows[r["id"]] for r in got
+                    if r["id"] in rows and r["score"] is not None]
             floors, strategies, why = _floors_of(mine, list(rows.values()))
             task = key.split("|")[0]
             floor = floors.get(task)
