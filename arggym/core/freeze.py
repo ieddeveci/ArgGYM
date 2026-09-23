@@ -22,12 +22,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import multiprocessing
 import os
 import signal
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from arggym.core.build import reasons_text, top_reason
@@ -364,8 +365,9 @@ def usable_cores() -> int:
     """The cores this process may run on: its CPU affinity, lowered by a CPU quota.
 
     `docker --cpus=4` on a 128-core host leaves the affinity at 128 and writes the
-    quota to `/sys/fs/cgroup/cpu.max`, which is where a cgroup-v2 container sees
-    its own limit. On a host that file is absent and affinity decides.
+    quota to `cpu.max` in the container's cgroup; `CPUQuota=` on a systemd unit does
+    the same for its slice. The tightest quota on the path from this process's
+    cgroup to the root applies. Only cgroup v2 is read.
     """
     if hasattr(os, "process_cpu_count"):  # Python 3.13+
         cores = os.process_cpu_count() or 1
@@ -373,33 +375,41 @@ def usable_cores() -> int:
         cores = len(os.sched_getaffinity(0))
     else:
         cores = os.cpu_count() or 1
+    quota = _cgroup_cpu_quota()
+    return min(cores, quota) if quota else cores
+
+
+def _cgroup_cpu_quota() -> Optional[int]:
+    """The tightest cgroup-v2 CPU quota over this process's cgroup and its parents."""
+    root = Path("/sys/fs/cgroup")
     try:
-        with open("/sys/fs/cgroup/cpu.max") as f:
-            quota, period = f.read().split()
-        if quota != "max":
-            cores = min(cores, max(1, math.ceil(int(quota) / int(period))))
-    except (OSError, ValueError):
-        pass
-    return cores
+        lines = Path("/proc/self/cgroup").read_text().splitlines()
+    except OSError:
+        return None
+    own = next((line[3:] for line in lines if line.startswith("0::")), None)
+    if own is None:
+        return None
+    # `/` inside a container with its own cgroup namespace, where the root holds
+    # the container's quota; the full path under `--cgroupns=host` or on a host.
+    here = root / own.strip("/")
+    quotas = []
+    for d in (here, *here.parents):
+        try:
+            limit, period = (d / "cpu.max").read_text().split()
+            if limit != "max":
+                quotas.append(max(1, math.ceil(int(limit) / int(period))))
+        except (OSError, ValueError):
+            pass
+        if d == root:
+            break
+    return min(quotas) if quotas else None
 
 
 def _ignore_sigint() -> None:
     # Ctrl-C reaches every process in the terminal's group. The main process
-    # handles it by terminating the pool; a worker handling it too would print
+    # handles it by stopping the workers; a worker handling it too would print
     # one traceback per worker.
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-
-def _fill_in_worker(fill: Any, cell: Tuple[str, int, str], spec: TasksetSpec) -> Any:
-    """Run `fill` on one cell, returning a freeze guard's refusal instead of raising it.
-
-    The guards are `SystemExit`, and a pool worker catches only `Exception`: a
-    raised guard would end the worker and leave its result pending forever.
-    """
-    try:
-        return fill(*cell, spec), None
-    except SystemExit as refusal:
-        return None, refusal
 
 
 def _filled_cells(spec: TasksetSpec, workers: int
@@ -410,6 +420,8 @@ def _filled_cells(spec: TasksetSpec, workers: int
     local `random.Random` from the cell and the seed -- so the worker a cell runs
     in cannot change its rows. Results come back in spec order, so the first
     failing cell in spec order raises, with the message a serial freeze gives.
+    A worker that dies without returning, killed for memory for instance, raises
+    `BrokenProcessPool` rather than leaving its cell pending.
     """
     # A worker beyond one per cell would start and have nothing to do.
     workers = min(workers, len(spec.cells))
@@ -417,22 +429,27 @@ def _filled_cells(spec: TasksetSpec, workers: int
         for task, level, ordering in spec.cells:
             yield fill_cell(task, level, ordering, spec)
         return
-    pool = multiprocessing.Pool(workers, initializer=_ignore_sigint)
+    pool = ProcessPoolExecutor(max_workers=workers, initializer=_ignore_sigint)
     try:
         # `fill_cell` is looked up here and sent with each cell, so a worker runs
         # the function this process sees, whichever way the worker was started.
-        pending = {cell: pool.apply_async(_fill_in_worker, (fill_cell, cell, spec))
+        # A cell listed twice in the spec collapses to one key here (#198).
+        pending = {cell: pool.submit(fill_cell, *cell, spec)
                    for cell in sorted(spec.cells, key=_slow_first)}
         for cell in spec.cells:
-            result, refusal = pending[cell].get()
-            if refusal is not None:
-                raise refusal
-            yield result
-    finally:
-        # Every result has been read by now unless a cell failed or the run was
-        # interrupted, and then the cells still running are not wanted either.
-        pool.terminate()
-        pool.join()
+            yield pending[cell].result()
+    except BaseException:
+        # A failed cell, a dead worker, Ctrl-C, or a check in `freeze` closing
+        # this generator: nothing still running is wanted. `shutdown` alone would
+        # wait for every running cell, up to the slowest one, so the workers are
+        # terminated too. `_processes` is private; Python 3.14 has
+        # `terminate_workers()` for this, and 3.10 to 3.13 do not.
+        workers_now = list((pool._processes or {}).values())
+        pool.shutdown(wait=False, cancel_futures=True)
+        for process in workers_now:
+            process.terminate()
+        raise
+    pool.shutdown()
 
 
 def freeze(spec: TasksetSpec, path: str, verbose: bool = True,

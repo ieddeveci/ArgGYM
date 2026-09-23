@@ -7,7 +7,11 @@ being designed out.
 """
 import dataclasses
 import json
+import os
+import signal
+import threading
 import time
+from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
@@ -199,6 +203,44 @@ def test_a_parallel_freeze_names_the_first_failing_cell_in_spec_order_not_in_tim
     monkeypatch.setattr(F, "fill_cell", _refuse_the_first_cell_last)
     with pytest.raises(F.CellUnfilled, match=r"^claim_chain\|L3\|last_link_elitist refused"):
         F.freeze(two, str(tmp_path / "t.jsonl"), verbose=False, workers=2)
+
+
+def _die_in_the_first_cell(task, level, ordering, spec):
+    """A `fill_cell` whose first cell ends its process, the way an OOM kill does."""
+    if ordering == "last_link_elitist":
+        os._exit(1)
+    time.sleep(30)
+
+
+class _Hung(Exception):
+    pass
+
+
+def _raise_hung(signum, frame):
+    raise _Hung("the freeze was still waiting on a dead worker")
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="needs SIGALRM")
+def test_a_worker_that_dies_fails_the_freeze_rather_than_hanging_it(monkeypatch, tmp_path):
+    # A pool that replaces a dead worker without failing its task leaves the
+    # freeze waiting forever. The alarm turns that hang into a failure here; the
+    # other cell's 30 s shows the workers are stopped rather than waited for.
+    if threading.current_thread() is not threading.main_thread():
+        pytest.skip("signal handlers can only be set from the main thread")
+    two = TasksetSpec(tasks=("claim_chain",), levels=(3,),
+                      orderings=("last_link_elitist", "weakest_link_elitist"),
+                      seeds=SeedPolicy(start=0, take=2, scan_limit=10))
+    monkeypatch.setattr(F, "fill_cell", _die_in_the_first_cell)
+    previous = signal.signal(signal.SIGALRM, _raise_hung)
+    signal.alarm(15)
+    start = time.monotonic()
+    try:
+        with pytest.raises(BrokenProcessPool):
+            F.freeze(two, str(tmp_path / "t.jsonl"), verbose=False, workers=2)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert time.monotonic() - start < 10
 
 
 def test_skipping_a_seed_changes_the_hash(monkeypatch, tmp_path):
