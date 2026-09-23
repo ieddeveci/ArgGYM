@@ -85,11 +85,12 @@ with which tasks are in the basket, which is a property of the basket rather
 than of the model.
 
 **Against the chance floor.** An uninformed answer is worth measuring on every
-task, and on four of them it is worth a lot. Measured at level 3:
+task, and on four of them it is worth a lot. Measured on the level-3 rows of
+`tasksets/lite.yaml`:
 
 | task | floor | the answer that earns it |
 |---|---|---|
-| `semantics_query` | 0.806 | "undecided" under grounded, "justified" under credulous preferred |
+| `semantics_query` | 0.727 | "undecided" under grounded, "justified" under credulous preferred |
 | `status_query` | 0.375 | answer "justified" to every query |
 | `formalization` | 0.219 | `[premise: x]` for every literal the question queries |
 | `claim_chain` | 0.190 | hand the theory back |
@@ -108,11 +109,10 @@ scores zero, and the tie goes to `empty` because it is listed first.
 A model scoring 0.45 on `semantics_query` did worse than a fixed reply. Report
 floors beside the scores. They are a property of the scorer and of the search
 that measures them, so `arggym floors <taskset>` re-measures them from the rows,
-and they move when `scoring_version` moves or when `FLOORS_VERSION` does -- the
-change that gave `semantics_query` the map above moved its floor from 0.459 to
-0.671 with no scorer change at all. A scoring artifact records both. If a single
-headline number is wanted, chance-correct per task first:
-`(score - floor) / (1 - floor)`, which is `arggym.corrected`.
+and they move when `scoring_version` moves or when `FLOORS_VERSION` does, since
+a change to the search moves a floor with no scorer change at all. A scoring
+artifact records both. If a single headline number is wanted, chance-correct per
+task first: `(score - floor) / (1 - floor)`, which is `arggym.corrected`.
 
 **A program that computes no extension beats the floor on `semantics_query`.**
 That table measures a fixed map, one status per semantics. A short program that
@@ -136,8 +136,8 @@ No floor bounds that program, and none should: a floor may read the theory to
 enumerate the coordinates a question asks about, never to decide what to say
 about one (`docs/dataset-contract.md` section 10), and this program decides from
 it. What the floor does now carry is the spread between the columns, which a
-single constant pooled away: one status per semantics is worth 0.671
-over the shipped grid against 0.459 for the best single constant (#95).
+single constant pooled away: one status per semantics is worth 0.657 over the
+shipped grid against 0.461 for the best single constant (#95).
 
 **`success` and `mean_score` are not the same question.** For the construction
 tasks `success` means every goal met with the theory consistent; economy is a

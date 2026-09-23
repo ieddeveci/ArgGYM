@@ -418,9 +418,9 @@ and `prompt_version` and `scoring_version` may be pinned the same way as
   "reason_counts": {},           // over seeds_skipped
   "scan_end": 1,
   "acceptance_rate": 1.0,
-  "build_calls": 7,              // candidates build was asked for, across every seed
-  "build_rejections": {"one_status_over_its_share": 2, "theory_over_max_directives": 3},
-  "build_acceptance_rate": 0.2857
+  "build_calls": 5,              // candidates build was asked for, across every seed
+  "build_rejections": {"theory_over_max_directives": 3},
+  "build_acceptance_rate": 0.4
 }
 ```
 
@@ -452,8 +452,8 @@ the vocabulary.
 
 Read `build_acceptance_rate` when asking whether a cell is healthy, and only
 against another export of the same `seeds.take`: the scan stops as soon as the
-cell is full, so `semantics_query` at level 12 under last-link democratic
-reports 0.14 at `take: 2` and 0.24 at `take: 10`. Two exports whose reasons move while the
+cell is full, so `semantics_query` at level 13 under weakest-link democratic
+reports 0.17 at `take: 2` and 0.26 at `take: 10`. Two exports whose reasons move while the
 hash holds mean a generator changed what it discards without changing what it
 ships. `min_acceptance` gates the seed rate, which falls below 1.00 on the
 standard grid only where a `preference_construction` seed is skipped for
@@ -461,7 +461,7 @@ standard grid only where a `preference_construction` seed is skipped for
 the candidate rate the retry loop reports. The standard and lite specs share
 0.13, set under the thinnest cell of either: `perturbation` at level 6 under
 last-link elitist keeps 10 candidates of 44 at `take: 10`, and `semantics_query`
-at level 12 under last-link democratic keeps 2 of 14 at `take: 2` (#114).
+at level 13 under weakest-link democratic keeps 2 of 12 at `take: 2` (#114).
 Those floors move with `seeds.take` for the reason above, so a spec that changes
 `take` has to measure its own floor rather than inherit these. A spec that names
 neither guard keeps the seed guard alone.
@@ -566,8 +566,9 @@ separate repository for the same reason (`eval/README.md`).
 Two rules, both from #9, and the definition the first one rests on.
 
 **Publish chance floors beside the scores.** `arggym floors <taskset>` measures
-what the best uninformed answer gets on each task, and it is not small: at level
-3, `semantics_query` sits at 0.806, `status_query` at 0.375, `formalization` at
+what the best uninformed answer gets on each task, and it is not small: on the
+level-3 rows of `tasksets/lite.yaml`, `semantics_query` sits at 0.727 (0.786 over
+the 40 level-3 rows of the standard grid), `status_query` at 0.375, `formalization` at
 0.219, `claim_chain` at 0.190, `perturbation` at 0.153 and `defeat_diagnosis` at
 0.131, while the six engine-checked tasks sit at 0.000 because no fixed answer
 reaches a goal. A score of 0.45 on `semantics_query` is worse than answering the
@@ -578,8 +579,8 @@ first and read as the second until the search learned to write a directive.
 Ties go to `empty`, which is listed first, so the six zeroes above are the
 second case. A floor is a property of the scorer and of the search, so it is
 re-measured whenever `scoring_version` or `FLOORS_VERSION` moves, and a scoring
-artifact records both: the search that added the map above moved a floor by 0.21
-without touching a scorer.
+artifact records both, since a change to the search moves a floor without
+touching a scorer.
 
 What counts as uninformed is fixed here rather than left to whatever the search
 happens to try. A floor strategy fixes, once per task, the answer it gives to
@@ -604,8 +605,8 @@ is invariant under is the edits that leave the theory's claims alone.
 
 One constant per item is not the widest map that allows: `semantics_query` asks
 its claims under as many as five semantics at once, and one constant per
-semantics is fixed in the same sense, worth 0.671 over the shipped grid against
-0.459 for the best single constant (#95). Such a map is searched against labels,
+semantics is fixed in the same sense, worth 0.657 over the shipped grid against
+0.461 for the best single constant (#95). Such a map is searched against labels,
 so it is fitted
 once over a whole task and reused for every group the report corrects, and it is
 admitted only while it stays small: a handful of entries, each answering many

@@ -111,8 +111,8 @@ def test_the_checked_in_spec_describes_todays_grid():
     # them: set min_build_acceptance to 0.9 and every test in the suite still
     # passes while the next `make freeze` dies on the first cell it reaches that
     # falls under. The 0.13 is set under the thinnest cell at either take:
-    # semantics_query at L12 under last-link democratic keeps 2 candidates of 14
-    # at lite's take of 2.
+    # semantics_query at L13 under weakest-link democratic keeps 2 candidates of
+    # 12 at lite's take of 2.
     assert s.min_build_acceptance == 0.13
 
 
@@ -128,8 +128,8 @@ def test_lite_is_standard_at_two_seeds():
 
 @pytest.mark.parametrize("task,level,ordering", [
     # Cells whose retry loop discards candidates, which is where a scan could
-    # stop agreeing with itself: 34 of 44 at take 10 on the first, 31 of 41 on the
-    # second, 32 of 42 on the third.
+    # stop agreeing with itself: 34 of 44 at take 10 on the first, 29 of 39 on the
+    # second, 21 of 31 on the third.
     ("perturbation", 6, "last_link_elitist"),
     ("semantics_query", 13, "weakest_link_democratic"),
     ("semantics_query", 12, "last_link_democratic"),

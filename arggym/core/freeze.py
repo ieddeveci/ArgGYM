@@ -67,7 +67,13 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: instead of three levels running (#168). The ring moves on 14 cells at levels 7 to
 #: 10 and 13 to 15 and rewrites the theory and gold of their 28 rows. No other task
 #: moves.
-PROMPT_VERSION = 11
+#:
+#: Version 12 moves `semantics_query`: the status share is capped within each semantics
+#: an item asks four times or more, rather than over the whole item (#104). Of its 600
+#: rows on the standard grid, 522 ask different queries and 120 carry a different theory,
+#: because the retry loop accepts a different candidate for that seed. No other task
+#: moves.
+PROMPT_VERSION = 12
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:

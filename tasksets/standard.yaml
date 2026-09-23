@@ -96,8 +96,8 @@ min_acceptance: 0.5
 # a reading at a given `take`, not a property of the cell: the scan stops as soon
 # as the cell is full. At the `take: 10` above the thinnest cell is perturbation
 # at L6 under last-link elitist, 0.227 (10 kept of 44). lite.yaml shares this
-# value, and at its `take: 2` the thinnest is semantics_query at L12 under
-# last-link democratic, 0.143 (2 kept of 14), so 0.13 sits just under the lower
+# value, and at its `take: 2` the thinnest is semantics_query at L13 under
+# weakest-link democratic, 0.167 (2 kept of 12), so 0.13 sits under the lower
 # of the two. Change `take` and this floor has to be measured again.
 min_build_acceptance: 0.13
 

@@ -122,11 +122,11 @@ def test_some_items_ask_one_claim_under_both_names_and_answer_it_differently(gri
 
     Not every item: a claim from another cluster carries the pairing on some of them, so
     that "asked under both names" does not by itself mean "the cluster's literal, therefore
-    undecided under sceptical preferred". The coin is fair and the realised split is not --
-    the cluster's own literal still carries the pairing on 174 of 213 items, 82%, because
-    the retry loop accepts cluster-paired items more often and because the cluster's
-    literal often survives the trim under both names anyway. So this bounds the pattern
-    rather than removing it.
+    undecided under sceptical preferred". The coin is fair and the realised split is not,
+    because on a decoy item the cluster's literal often survives the trim under both names
+    anyway: on the release grid the cluster's own literal is among the paired claims on 202
+    of the 264 rows that pair one, and the only one on 77. So this bounds the pattern rather
+    than removing it.
     """
     shown = 0
     for cell in ASKS_BOTH:
@@ -145,19 +145,13 @@ def test_some_items_ask_one_claim_under_both_names_and_answer_it_differently(gri
 def test_no_semantics_answers_the_grid_with_one_word(grid):
     """The defect #77 reports, checked on every column rather than on the two it names.
 
-    `MAX_STATUS_SHARE` cannot see this: it pools all five semantics into one per-item
-    ratio, and the required queries are exempt from its per-step check. The first cut of
-    this change took sceptical preferred to 88% undecided while passing that gate, and
-    these bounds are set to catch a regression of that size.
+    `MAX_STATUS_SHARE` balances a semantics within an item only where the item asks it
+    four times or more, so a column can still lean over the grid through the items that
+    ask it fewer times. #77's first cut took sceptical preferred to 88% undecided, and
+    these bounds are set to catch a lean of that size.
 
-    They are not evidence that any column improved. Forty items give a column of about 35
-    answers, and the standard error on a difference of two such shares is around 12 points,
-    so a few points either way on this grid says nothing. Two known consequences of that:
-    the sceptical-preferred share reads better than main here and worse at n = 14,000, and
-    the generic 0.9 bound sits about 1.6 points above the credulous-preferred column, which
-    is the one column this change measurably worsened (85.3% to 88.9% over 1,920 items,
-    from the cluster taking a menu slot that would otherwise draw `_defeated`). The bound
-    lets that through by design; `docs/dataset-card.md` reports it instead.
+    They are bounds, not measurements: a column here is a few hundred answers from two
+    seeds a cell, so a few points either way says nothing about the release grid.
     """
     columns = collections.defaultdict(collections.Counter)
     for item in grid.values():
