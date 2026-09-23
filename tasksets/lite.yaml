@@ -1,0 +1,52 @@
+# The standard grid at two seeds a cell: 11 tasks x 15 levels x 3 orderings x
+# 2 seeds = 990 rows, a fifth of the eval cost.
+#
+#   uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
+#
+# Every field but `seeds.take` is standard.yaml's, and the reasons for each are
+# written there; tests/test_a_taskset_is_defined_by_its_spec.py fails if the two
+# files drift. A cell takes the first seeds that build, scanning from `start`, so
+# lite's rows are the first two of each standard cell: same ids, same questions,
+# same gold. A lite score is a score on a subset of the standard release, not on
+# another draw. Only `metadata.source_index`, a row's position in its file,
+# differs.
+#
+# Two seeds size the grid for a per-task model ranking (90 items a task) and a
+# level trend read as a slope or over bands of levels. A (task, level) mean over
+# 6 items moves in steps of 0.17, so read level curves off standard.yaml.
+
+arggym: "2.0.0"
+pyarg: "2.0.2"
+theory_schema: 1
+
+tasks:
+  - preference_construction
+  - counter_argument
+  - attack
+  - defence
+  - attack_defense
+  - formalization
+  - status_query
+  - semantics_query
+  - perturbation
+  - claim_chain
+  - defeat_diagnosis
+
+levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+orderings:
+  - last_link_elitist
+  - weakest_link_elitist
+  - weakest_link_democratic
+
+seeds:
+  start: 0
+  take: 2
+  scan_limit: 40
+
+min_acceptance: 0.5
+
+# Shared with standard.yaml, which names the thinnest cell at each take.
+min_build_acceptance: 0.15
+
+profile: FULL

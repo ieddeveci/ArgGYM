@@ -85,6 +85,8 @@ uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
 `tasksets/standard.yaml` is the evaluated grid, as an input you can check in, cite and diff. The
 manifest records the arggym and engine versions, which seeds produced the items and which were
 skipped, so two exports can be compared by what they skipped and not only by their hash.
+It is 11 tasks x 15 levels x 3 orderings x 10 seeds, 4950 rows. `tasksets/lite.yaml` is the same
+grid at 2 seeds, 990 rows, and its rows are the first two of every standard cell.
 
 ## A row
 

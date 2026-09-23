@@ -12,8 +12,8 @@ moved; different skips mean a generator moved. A hash alone cannot tell you
 which.
 
 Under the skip list sits the retry loop, and it is where the interesting number
-lives. On the standard grid no seed is skipped at all, while `semantics_query` at
-level 12 reaches its two items by discarding candidates six times in seven. So
+lives. On the standard grid five seeds of 4955 are skipped, while `perturbation`
+at level 6 reaches its ten items by discarding 34 candidates of 44. So
 the cell also records how many candidates `build` was asked for and why it
 refused them (#72), counted over every seed rather than only the failed ones.
 """
@@ -242,9 +242,9 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
             f"spec asks for {spec.min_acceptance}). A degraded cell should be a "
             f"decision: raise min_acceptance deliberately or fix the generator.")
     if report.build_acceptance < spec.min_build_acceptance:
-        # The guard above never fires on the standard grid, where every seed
-        # builds and the retry loop hides how many candidates it threw away
-        # (#114). This one reads the number the retry loop reports.
+        # The guard above cannot see a thin cell on the standard grid, where
+        # nearly every seed builds and the retry loop hides how many candidates
+        # it threw away (#114). This one reads the number the retry loop reports.
         raise CellUnfilled(
             f"{report.key()} filled, but kept {len(rows)} of {report.build_calls} "
             f"candidates (build acceptance {report.build_acceptance:.2f}, spec asks for "
@@ -345,7 +345,7 @@ def freeze(spec: TasksetSpec, path: str, verbose: bool = True) -> Dict[str, Any]
         "n_skipped": sum(len(c["seeds_skipped"]) for c in cells.values()),
         # Candidates `build` discarded, over every seed including the ones that
         # produced an item. `n_skipped` counts only seeds that ran out of tries,
-        # and on the standard grid that number is zero while this one is not.
+        # and on the standard grid that number is 5 while this one is 998.
         "n_rejected": sum(sum(c["build_rejections"].values()) for c in cells.values()),
         # Travels with the rows because rows get separated from manifests the
         # moment anyone loads the JSONL.

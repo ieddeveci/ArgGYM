@@ -5,13 +5,15 @@ CLI cannot override today, so a published taskset is identified by a commit
 rather than by an input anyone can read.
 """
 import json
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from arggym.core.spec import LEVELS, SeedPolicy, TasksetSpec, from_dict, load
 
 
-def test_a_minimal_spec_gets_the_evaluated_grid():
+def test_a_minimal_spec_gets_every_level_and_ordering():
     s = TasksetSpec(tasks=("status_query",))
     assert s.levels == LEVELS == tuple(range(1, 16))
     assert len(s.orderings) == 4
@@ -89,31 +91,66 @@ def test_a_spec_round_trips_through_a_file(tmp_path):
     assert load(str(p)) == s
 
 
-def test_the_checked_in_spec_describes_todays_grid():
-    # The standard spec replaces the function defaults in core/export.py, so it
-    # has to name the same grid: 12 tasks x 15 levels x 4 orderings x 2 seeds.
-    from pathlib import Path
+TASKSETS = Path(__file__).resolve().parent.parent / "tasksets"
 
-    s = load(str(Path(__file__).resolve().parent.parent / "tasksets" / "standard.yaml"))
-    assert len(s.tasks) == 12
+
+def test_the_checked_in_spec_describes_todays_grid():
+    # 11 tasks x 15 levels x 3 orderings x 10 seeds. counter_argument_strict and
+    # last_link_democratic are built and tested but not released; the reasons are
+    # in the file.
+    s = load(str(TASKSETS / "standard.yaml"))
+    assert len(s.tasks) == 11
+    assert "counter_argument_strict" not in s.tasks
     assert s.levels == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-    assert len(s.orderings) == 4
-    assert len(s.cells) * s.seeds.take == 1440
+    assert s.orderings == ("last_link_elitist", "weakest_link_elitist",
+                           "weakest_link_democratic")
+    assert s.seeds.take == 10
+    assert len(s.cells) * s.seeds.take == 4950
     # The guard thresholds describe the grid too, and nothing else here reads
     # them: set min_build_acceptance to 0.9 and every test in the suite still
     # passes while the next `make freeze` dies on the first cell it reaches that
-    # falls under. The 0.1 is set against the thinnest cell of the grid,
-    # semantics_query at L12 under last-link democratic, which keeps 2
-    # candidates of 14 (#114).
-    assert s.min_build_acceptance == 0.1
+    # falls under. The 0.15 is set under the thinnest cell of either release:
+    # semantics_query at L13 under weakest-link democratic keeps 2 candidates of
+    # 12 at lite's take of 2.
+    assert s.min_build_acceptance == 0.15
+
+
+def test_lite_is_standard_at_two_seeds():
+    # One grid at two sizes. Any other difference would make a lite score a
+    # score on another taskset rather than on a subset of this one.
+    standard = load(str(TASKSETS / "standard.yaml"))
+    lite = load(str(TASKSETS / "lite.yaml"))
+    assert lite.seeds.take == 2
+    assert replace(lite, seeds=replace(lite.seeds, take=standard.seeds.take)) == standard
+    assert len(lite.cells) * lite.seeds.take == 990
+
+
+@pytest.mark.parametrize("task,level,ordering", [
+    # Two cells whose retry loop discards candidates, which is where a scan could
+    # stop agreeing with itself: 34 of 44 at take 10 on the first, 30 of 41 on the
+    # second.
+    ("perturbation", 6, "last_link_elitist"),
+    ("semantics_query", 13, "weakest_link_democratic"),
+])
+def test_a_lite_cell_is_the_first_two_rows_of_its_standard_cell(task, level, ordering):
+    # A cell takes the first seeds that build, scanning from `start`, and an item
+    # is a function of (task, level, ordering, seed) alone. So lite's rows are a
+    # prefix of standard's -- same ids, same content. Checked here on two cells;
+    # the full grid was checked by freezing both files.
+    from arggym.core.freeze import fill_cell
+
+    standard = load(str(TASKSETS / "standard.yaml"))
+    lite = load(str(TASKSETS / "lite.yaml"))
+    big, _ = fill_cell(task, level, ordering, standard)
+    small, _ = fill_cell(task, level, ordering, lite)
+    assert json.dumps(small, sort_keys=True, default=str) == json.dumps(
+        big[:lite.seeds.take], sort_keys=True, default=str)
 
 
 def test_the_checked_in_spec_matches_this_tree():
     # The version fields are constraints, not records: a spec naming a pyarg
     # this tree does not have would produce a taskset the spec does not name.
-    from pathlib import Path
-
     from arggym.core.spec import check_versions
 
-    check_versions(load(str(Path(__file__).resolve().parent.parent
-                            / "tasksets" / "standard.yaml")))
+    for name in ("standard.yaml", "lite.yaml"):
+        check_versions(load(str(TASKSETS / name)))

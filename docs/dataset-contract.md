@@ -393,16 +393,15 @@ The spec is the whole input; the manifest records what happened.
 arggym: "2.0.0"
 pyarg: "2.0.2"
 theory_schema: 1
-tasks: [preference_construction, counter_argument, ...]
+tasks: [preference_construction, counter_argument, ...]   # 11 of the 12
 levels: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-orderings: [last_link_elitist, last_link_democratic,
-            weakest_link_elitist, weakest_link_democratic]
+orderings: [last_link_elitist, weakest_link_elitist, weakest_link_democratic]
 seeds:
   start: 0
-  take: 2            # items required per cell
+  take: 10           # items required per cell; lite.yaml asks for 2
   scan_limit: 40     # refuse the cell past this
 min_acceptance: 0.5  # refuse a cell needing more than 2 seeds per item
-min_build_acceptance: 0.1  # refuse a cell keeping under 1 candidate in 10
+min_build_acceptance: 0.15  # refuse a cell keeping under 3 candidates in 20
 profile: FULL
 ```
 
@@ -452,29 +451,33 @@ the vocabulary.
 
 Read `build_acceptance_rate` when asking whether a cell is healthy, and only
 against another export of the same `seeds.take`: the scan stops as soon as the
-cell is full, so the same cell reports 0.14 at `take: 2` and 0.13 at `take: 4`.
-Two exports whose reasons move while the hash holds mean a generator changed what
-it discards without changing what it ships. `min_acceptance` gates the seed rate,
-which is 1.00 on every cell of the standard grid, so it cannot fire there;
-`min_build_acceptance` gates the candidate rate the retry loop reports. The
-standard spec sets 0.1, just under the 0.14 of the thinnest cell measured at that
-file's `take: 2` -- semantics_query at level 12 under last-link democratic, which
-keeps 2 candidates of 14 (#114). That 0.14 moves with `seeds.take` for the reason
-above, so a spec that changes `take` has to measure its own floor rather than
-inherit this one. A spec that names neither guard keeps the seed guard alone.
+cell is full, so `perturbation` at level 6 under last-link elitist reports 0.18
+at `take: 2` and 0.23 at `take: 10`. Two exports whose reasons move while the
+hash holds mean a generator changed what it discards without changing what it
+ships. `min_acceptance` gates the seed rate, which falls below 1.00 on the
+standard grid only where a `preference_construction` seed is skipped for
+`minimality_unproven` (below), bottoming at 0.83; `min_build_acceptance` gates
+the candidate rate the retry loop reports. The standard and lite specs share
+0.15, set under the thinnest cell of either: `perturbation` at level 6 under
+last-link elitist keeps 10 candidates of 44 at `take: 10`, and `semantics_query`
+at level 13 under weakest-link democratic keeps 2 of 12 at `take: 2` (#114).
+Those floors move with `seeds.take` for the reason above, so a spec that changes
+`take` has to measure its own floor rather than inherit these. A spec that names
+neither guard keeps the seed guard alone.
 
 One more reason a seed is skipped comes after `build` rather than from it:
 `minimality_unproven`. The six construction generators write `minimality_proven`
 into the row's statistics, and a row whose minimum search ran out of budget
-carries an upper bound under the name of a minimum -- on the one such row of the
-standard grid it said 55 where 10 suffice, so its bloat gate admitted five times
-what it should (#124). The freeze skips that seed and names it, the way it names
-a seed that built nothing, and the skip carries the candidate rejections that
-seed had already recorded. It is counted in `build_rejections`, and so in
+carries an upper bound under the name of a minimum -- on the row #124 found it
+said 55 where 10 suffice, so its bloat gate admitted five times what it should.
+The freeze skips that seed and names it, the way it names a seed that built
+nothing, and the skip carries the candidate rejections that seed had already
+recorded. The standard grid skips five, all `preference_construction` under
+weakest-link democratic at levels 9, 12, 14 and 15. It is counted in `build_rejections`, and so in
 `n_rejected`, beside `build`'s own refusals: one histogram answers what the cell
 threw away and why, where two would make every reader add them up. The cost is
-that neither field is `build`'s alone any more -- of the 107 candidates
-`n_rejected` counts on the standard grid, 1 is a row `build` returned and the
+that neither field is `build`'s alone any more -- of the 998 candidates
+`n_rejected` counts on the standard grid, 5 are rows `build` returned and the
 freeze refused.
 
 ### `profile` is recorded, and refused
@@ -623,9 +626,9 @@ ring of undercuts off the theory beats this floor by several points
 understated floor inflates `corrected` -- but a floor that a theory-reading
 program can raise is no longer a floor.
 
-**Do not rank models by an unweighted mean.** Averaging twelve tasks whose
-floors span half the range, over metrics of four different kinds, produces a
-number that moves mostly with which tasks are in the basket. Report the per-task
+**Do not rank models by an unweighted mean.** Averaging the eleven released
+tasks, whose floors span half the range, over metrics of four different kinds,
+produces a number that moves mostly with which tasks are in the basket. Report the per-task
 table. If a single number is wanted, chance-correct per task first:
 `(score - floor) / (1 - floor)`, which is `arggym.corrected`.
 

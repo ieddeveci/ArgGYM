@@ -251,7 +251,7 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
     population than the rest, and a per-ordering mean would read that as an ordering effect.
 
     Not keyed on the seed, because `tasksets/standard.yaml` scans up to 40 seeds a cell and
-    keeps the first two that build, so a seed-keyed rule realises an uncontrolled fraction.
+    keeps the first ones that build, so a seed-keyed rule realises an uncontrolled fraction.
 
     The spread is even as well as complete: no ordering carries more than one ring above
     any other, and no two adjacent levels share one, so each ordering's rings sit four
@@ -286,6 +286,28 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
             continue
         assert not any(sq.wants_unshielded_ring(level, o) for o in ALL_ORDERINGS), (
             f"level {level} never asks about stable, so a ring there asks nothing")
+
+
+def test_every_released_ordering_carries_the_ring():
+    """The release ships three of the four orderings, so the ring's spread is re-read there.
+
+    `tasksets/standard.yaml` leaves out `last_link_democratic`, so the rings at levels 9
+    and 13 are never exported and the release carries 8 ring levels of 10. What the test
+    above guards still has to hold on what ships: every released ordering carries the ring
+    somewhere, and none carries most of it.
+    """
+    from pathlib import Path
+
+    from arggym.core.spec import load
+
+    shipped = load(str(Path(__file__).resolve().parent.parent / "tasksets"
+                       / "standard.yaml")).orderings
+    carried = collections.Counter(RING[lv] for lv in RING if RING[lv] in shipped)
+    assert set(carried) == set(shipped), (
+        f"released orderings {sorted(set(shipped) - set(carried))} carry the ring at no "
+        f"level, so their `stable` column is built from a different population: "
+        f"{dict(carried)}")
+    assert max(carried.values()) - min(carried.values()) <= 1, dict(carried)
 
 
 def test_the_grid_exports_every_level_that_carries_a_ring():
