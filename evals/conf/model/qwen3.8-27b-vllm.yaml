@@ -11,8 +11,9 @@
 # (https://huggingface.co/Qwen/Qwen3.8-27B).
 #
 # reasoning_effort: the card offers xhigh (the default), medium and low, and
-# the chat template answers any other value with an error. medium is kept
-# from before; it is not the model's default.
+# the chat template answers any other value with an error. medium is what
+# hf-qwen3.8-27b already ran; this twin sent no effort before, so it ran at
+# xhigh and moves to medium here. Which of the two to sweep at is open.
 #
 # Cap: max_model_len 131,072 minus the 8,192-token prompt reserve
 # (hpc/vllm/verify_bundle.py).

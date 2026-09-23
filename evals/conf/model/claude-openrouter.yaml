@@ -9,7 +9,7 @@
 # `response_format` and `reasoning_effort`. Going direct means going without all
 # of that; if you do it anyway, read the recorded request body afterwards.
 #
-# Limits: 200K context, 64K max output, and thinking tokens count against
+# Limits: 200K context (1M in beta; OpenRouter's models API lists 1,000,000), 64K max output, and thinking tokens count against
 # max_tokens (https://platform.claude.com/docs/en/models/sonnet-4-5/overview,
 # https://platform.claude.com/docs/en/build-with-claude/context-windows).
 # OpenRouter's models API lists max_completion_tokens 64000. The cap is that

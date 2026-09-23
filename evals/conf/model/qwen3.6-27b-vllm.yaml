@@ -17,7 +17,10 @@
 #
 # Cap: max_model_len 262,144 minus the 8,192-token prompt reserve
 # (hpc/vllm/verify_bundle.py).
-# Context: config.json and the card: 262,144 native.
+# Context: config.json and the card: 262,144 native. Serve with
+# --max-model-len 262144: vLLM refuses any request whose prompt plus
+# max_tokens exceeds the server's length, so every row fails against a server
+# still started at the old 131,072.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,390
 # tokens.
 name: qwen3.6-27b-vllm
