@@ -9,7 +9,7 @@ hf-deepseek-r1-distill-qwen-7b,deepseek-ai/DeepSeek-R1-Distill-Qwen-7B,7,7-8b,1,
 hf-qwen2.5-7b-instruct,Qwen/Qwen2.5-7B-Instruct,7,7-8b,1,bfloat16,32768,
 hf-mistral-7b-instruct-v0.3,mistralai/Mistral-7B-Instruct-v0.3,7,7-8b,1,bfloat16,32768,
 hf-qwen2.5-3b-instruct,Qwen/Qwen2.5-3B-Instruct,3,3b,1,bfloat16,32768,
-hf-llama3.2-3b-instruct,meta-llama/Llama-3.2-3B-Instruct,3,3b,1,bfloat16,131072,
-hf-ministral3-3b-reasoning,mistralai/Ministral-3-3B-Reasoning-2512,4,~3b-tier,1,bfloat16,262144,mistral
-hf-gemma4-31b-it,google/gemma-4-31B-it,31,large,2,bfloat16,262144,gemma4
-hf-gemma4-26b-a4b-it,google/gemma-4-26B-A4B-it,26,large-moe,1,bfloat16,262144,gemma4
+hf-llama-3.2-3b-instruct,meta-llama/Llama-3.2-3B-Instruct,3,3b,1,bfloat16,131072,
+hf-ministral-3-3b-reasoning-2512,mistralai/Ministral-3-3B-Reasoning-2512,4,~3b-tier,1,bfloat16,262144,mistral
+hf-gemma-4-31b-it,google/gemma-4-31B-it,31,large,2,bfloat16,262144,gemma4
+hf-gemma-4-26b-a4b-it,google/gemma-4-26B-A4B-it,26,large-moe,1,bfloat16,262144,gemma4

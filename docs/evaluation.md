@@ -8,7 +8,7 @@ no HTTP client.
 ```
 uv sync                                    # the evals group is included in dev
 uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
-uv run python -m evals.run   taskset=data/taskset.jsonl model=gpt-5-openrouter-medium
+uv run python -m evals.run   taskset=data/taskset.jsonl model=openrouter-gpt-5-medium
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 ```
@@ -26,8 +26,8 @@ Azure's, Anthropic's shim, and any local vLLM. Switching between them is a
 config file and an environment variable.
 
 ```yaml
-# evals/conf/model/claude-openrouter-high.yaml
-name: claude-openrouter-high
+# evals/conf/model/openrouter-claude-sonnet-4.5-high.yaml
+name: openrouter-claude-sonnet-4.5-high
 model: anthropic/claude-sonnet-4.5
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEY
@@ -40,7 +40,7 @@ extra_body:
 
 ```bash
 cp .env.example .env        # then fill in OPENROUTER_API_KEY
-uv run python -m evals.run model=claude-openrouter-high taskset=data/taskset.jsonl
+uv run python -m evals.run model=openrouter-claude-sonnet-4.5-high taskset=data/taskset.jsonl
 ```
 
 `api_key_env` names the variable rather than holding the key, so the whole
@@ -68,12 +68,23 @@ vLLM flags). They pair by file stem, and `hpc/vllm/verify_bundle.py` checks
 that they fit.
 Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
 
-A model that takes a reasoning-effort level has one config per level and no
-level-less one, named `<model>-<level>`: `claude-openrouter-high`,
-`gpt-5-openai-minimal`, `hf-qwen3.8-27b-xhigh`. The level changes what the model
-is asked as much as the prompt does, so it is part of the name, and therefore of
-the run directory. A model whose only switch is thinking on or off (Qwen3,
-Qwen3.6, Gemma 4) has one config.
+A config is named `<provider>-<model>[-<level>]`. The provider is the endpoint
+(`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`), the model is the
+checkpoint name after the last `/` in lowercase, and the level is the reasoning
+effort the config sends: `openrouter-claude-sonnet-4.5-high`,
+`openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`. An RL
+fine-tune is named after its base model with `-rl-<tag>` added,
+`hf-qwen3-8b-rl-arggym-40k`, and its serving profile pins the checkpoint.
+
+A model that takes a reasoning-effort level has one config per level it accepts
+and no level-less one. The level changes what the model is asked as much as the
+prompt does, so it is part of the name, and therefore of the run directory. A
+model whose only switch is thinking on or off (Qwen3, Qwen3.6, Gemma 4 on vLLM)
+has one config, with thinking on.
+
+Every config runs under the `cot` elicitation, which asks the model to reason
+before it answers. `elicitation=none` sends the question with nothing added; it
+is the ablation that measures what `cot` buys.
 
 ### What the compatibility layers cost
 
@@ -84,8 +95,9 @@ OpenAI SDK "doesn't return Claude's detailed thought process", and that
 `response_format`, `reasoning_effort`, `seed` and `logprobs` are ignored, `n`
 must be 1, `temperature` is capped at 1, and `usage.completion_tokens_details`
 is always empty. "Most unsupported fields are silently ignored rather than
-producing errors." That is why `claude-openrouter-*.yaml` goes through OpenRouter:
-it returns the reasoning trace over a plain OpenAI-compatible call.
+producing errors." That is why `openrouter-claude-sonnet-4.5-*.yaml` goes
+through OpenRouter: it returns the reasoning trace over a plain
+OpenAI-compatible call.
 
 **Gemini's compatibility endpoint** is still labelled beta and carries the same
 silent-drop warning.

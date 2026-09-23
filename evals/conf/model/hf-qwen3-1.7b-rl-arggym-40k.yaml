@@ -1,0 +1,36 @@
+# Qwen/Qwen3-1.7B on vLLM, served by hpc/vllm/models/hf-qwen3-1.7b-rl-arggym-40k.yaml.
+#
+# Sampling: the card's thinking-mode recommendation, "Temperature=0.6, TopP=0.95,
+# TopK=20, and MinP=0"
+# (https://huggingface.co/Qwen/Qwen3-1.7B).
+#
+# The card's tip to "set the presence_penalty to 1.5" is conditional on
+# "significant endless repetitions", so none is set; #130 is where that
+# gets measured.
+#
+# The serving profile pins a revision; otherwise this is the plain
+# Qwen/Qwen3-1.7B checkpoint in thinking mode.
+#
+# Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
+# output the card recommends:
+# "We recommend using an output length of 32,768 tokens for most queries.
+# For benchmarking on highly complex problems, such as those found in math and
+# programming competitions, we suggest setting the max output length to
+# 38,912 tokens." (https://huggingface.co/Qwen/Qwen3-1.7B).
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
+# tokens.
+name: hf-qwen3-1.7b-rl-arggym-40k
+model: Qwen/Qwen3-1.7B
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 32768
+  temperature: 0.6
+  top_p: 0.95
+  seed: 0
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  chat_template_kwargs:
+    enable_thinking: true

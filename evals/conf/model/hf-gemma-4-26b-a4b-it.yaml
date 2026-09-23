@@ -1,0 +1,34 @@
+# google/gemma-4-26B-A4B-it on vLLM, served by
+# hpc/vllm/models/hf-gemma-4-26b-a4b-it.yaml.
+#
+# Sampling: the card's "standardized sampling configuration across all use
+# cases: temperature=1.0 top_p=0.95 top_k=64"
+# (https://huggingface.co/google/gemma-4-26B-A4B-it).
+#
+# Thinking is on through enable_thinking, which is how the chat template
+# switches it. There is no reasoning_effort: the template never reads one,
+# so the `medium` this config used to send changed nothing.
+# skip_special_tokens stays false so the gemma4 reasoning parser can see
+# the channel markers that delimit the thought.
+#
+# Cap: the card recommends no output length (its examples use
+# max_new_tokens=1024 and 512), and neither does Google's Gemma 4 model card
+# (https://ai.google.dev/gemma/docs/core/model_card_4), so the cap is the context
+# rule. That is the serving profile's max_model_len minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,054
+# tokens.
+name: hf-gemma-4-26b-a4b-it
+model: google/gemma-4-26B-A4B-it
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 253952
+  temperature: 1.0
+  top_p: 0.95
+  seed: 0
+extra_body:
+  top_k: 64
+  chat_template_kwargs:
+    enable_thinking: true
+  skip_special_tokens: false

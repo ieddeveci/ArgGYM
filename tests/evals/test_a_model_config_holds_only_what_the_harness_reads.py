@@ -6,6 +6,7 @@ while the file said otherwise (#163).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,9 @@ import yaml
 
 from evals.client import Endpoint
 
-CONFIGS = sorted((Path(__file__).resolve().parents[2] / "evals" / "conf" / "model")
-                 .glob("*.yaml"))
+ROOT = Path(__file__).resolve().parents[2]
+CONFIGS = sorted((ROOT / "evals" / "conf" / "model").glob("*.yaml"))
+HPC_MODELS = ROOT / "hpc" / "vllm" / "models"
 
 #: What `evals/run.py:build_solver` reads off `cfg.model`, plus the `name` that
 #: `run_id` is built from.
@@ -87,3 +89,119 @@ def test_no_real_model_decodes_greedily(path):
     """Every card we cite recommends sampling, and reasoning APIs refuse temperature 0."""
     t = (yaml.safe_load(path.read_text()).get("sampling") or {}).get("temperature")
     assert t is None or t > 0
+
+
+# ---------------------------------------------------------------------------
+# One naming rule: `<provider>-<model>[-<level>]`, derived from fields the config
+# already holds, so no name is chosen by hand (#179).
+# ---------------------------------------------------------------------------
+
+#: The endpoint, read off the key the config sends.
+PROVIDER = {"VLLM_API_KEY": "hf", "OPENROUTER_API_KEY": "openrouter",
+            "OPENAI_API_KEY": "openai", "GEMINI_API_KEY": "aistudio"}
+
+#: The stub stands in for an endpoint in tests; it is not a model.
+NAMED = [p for p in CONFIGS if p.stem != "stub"]
+
+
+def level_sent(cfg: dict):
+    """The effort level a config sends, through whichever knob its provider reads.
+
+    `chat_template_kwargs.enable_thinking` is a switch, not a level, and is not
+    read here.
+    """
+    sampling = cfg.get("sampling") or {}
+    extra = cfg.get("extra_body") or {}
+    google = (extra.get("extra_body") or {}).get("google") or {}
+    return (sampling.get("reasoning_effort")
+            or (extra.get("reasoning") or {}).get("effort")
+            or (google.get("thinking_config") or {}).get("thinking_level"))
+
+
+def base_name(cfg: dict) -> str:
+    """`<provider>-<model>`: the checkpoint name after the last `/`, lowercased."""
+    return f"{PROVIDER[cfg['api_key_env']]}-{cfg['model'].rsplit('/', 1)[-1].lower()}"
+
+
+@pytest.mark.parametrize("path", NAMED, ids=lambda p: p.stem)
+def test_a_config_is_named_by_its_provider_model_and_level(path):
+    cfg = yaml.safe_load(path.read_text())
+    base, level = base_name(cfg), level_sent(cfg)
+    tail = f"-{level}" if level else ""
+    # An RL fine-tune keeps its base model's name and adds `-rl-<tag>`; its
+    # serving profile pins the checkpoint.
+    assert names_fit(path.stem, cfg), \
+        f"{path.stem} should be {base + tail} (or {base}-rl-<tag>{tail})"
+    assert re.fullmatch(r"[a-z0-9][a-z0-9.-]*", path.stem), path.stem
+    if path.stem != base + tail:
+        profile = HPC_MODELS / f"{path.stem[: len(path.stem) - len(tail)]}.yaml"
+        assert (yaml.safe_load(profile.read_text()) or {}).get("revision"), \
+            f"{path.stem} is an RL fine-tune, so {profile.name} must pin its revision"
+
+
+def names_fit(stem: str, cfg: dict) -> bool:
+    """`<provider>-<model>[-<level>]`, or `<provider>-<model>-rl-<tag>[-<level>]`."""
+    base, level = base_name(cfg), level_sent(cfg)
+    tail = f"-{level}" if level else ""
+    return stem == base + tail or bool(re.fullmatch(
+        re.escape(base) + r"-rl-[a-z0-9][a-z0-9.-]*" + re.escape(tail), stem))
+
+
+def test_the_rule_takes_the_rl_form_and_refuses_an_invented_name():
+    """The rule itself, on names no config carries."""
+    qwen = {"api_key_env": "VLLM_API_KEY", "model": "Qwen/Qwen3-8B"}
+    assert names_fit("hf-qwen3-8b", qwen)
+    assert names_fit("hf-qwen3-8b-rl-arggym-40k", qwen)
+    assert not names_fit("hf-qwen3-8b-arggym-40k", qwen)
+    gemma = {"api_key_env": "GEMINI_API_KEY", "model": "gemma-4-31b-it",
+             "extra_body": {"extra_body": {"google": {"thinking_config":
+                                                      {"thinking_level": "high"}}}}}
+    assert names_fit("aistudio-gemma-4-31b-it-high", gemma)
+    assert not names_fit("gemma4-31b-aistudio", gemma)
+    assert not names_fit("aistudio-gemma-4-31b-it", gemma)
+
+
+#: Every level each model's provider accepts, as the configs cite them. A model
+#: not listed sends no level (a thinking on/off switch is not a level).
+VALID_LEVELS = {
+    # https://huggingface.co/Qwen/Qwen3.8-27B ("xhigh (default)", "medium", "low")
+    "Qwen/Qwen3.8-27B": {"low", "medium", "xhigh"},
+    # https://huggingface.co/openai/gpt-oss-20b and .../gpt-oss-120b
+    # ("Low / Medium / High")
+    "openai/gpt-oss-20b": {"low", "medium", "high"},
+    "openai/gpt-oss-120b": {"low", "medium", "high"},
+    # https://developers.openai.com/api/docs/models/gpt-5
+    "gpt-5": {"minimal", "low", "medium", "high"},
+    "openai/gpt-5": {"minimal", "low", "medium", "high"},
+    # https://openrouter.ai/docs/use-cases/reasoning-tokens (`max` is xhigh,
+    # `none` turns thinking off)
+    "anthropic/claude-sonnet-4.5": {"minimal", "low", "medium", "high", "xhigh"},
+    # https://ai.google.dev/gemini-api/docs/thinking
+    "gemini-2.5-pro": {"low", "medium", "high"},
+    "gemini-3.5-flash-lite": {"minimal", "low", "medium", "high"},
+    "gemini-3.6-flash": {"minimal", "low", "medium", "high"},
+    "gemini-3.7-flash": {"low", "medium", "high"},
+    "gemini-3.8-flash": {"low", "medium", "high"},
+    # https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api ("high" for
+    # enabled, "minimal" for disabled)
+    "gemma-4-31b-it": {"minimal", "high"},
+    "gemma-4-26b-a4b-it": {"minimal", "high"},
+}
+
+
+def test_every_model_with_levels_has_a_config_at_each_level_and_no_other():
+    sent: dict = {}
+    for p in NAMED:
+        cfg = yaml.safe_load(p.read_text())
+        # Keyed by the endpoint as well: one checkpoint through two providers is
+        # two sets of configs.
+        sent.setdefault((cfg["api_key_env"], cfg["model"]), []).append(level_sent(cfg))
+    for (key, model), levels in sorted(sent.items()):
+        if model in VALID_LEVELS:
+            assert sorted(levels) == sorted(VALID_LEVELS[model]), \
+                f"{model} via {key}: configs at {sorted(map(str, levels))}, " \
+                f"provider accepts {sorted(VALID_LEVELS[model])}"
+        else:
+            assert levels == [None] * len(levels), \
+                f"{model} via {key} sends a level but has no level set listed"
+    assert {m for _, m in sent} >= set(VALID_LEVELS), "a listed model has no config"

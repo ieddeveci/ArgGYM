@@ -2,9 +2,9 @@
 # command line, and the whole resolved object is written into the run manifest.
 
 defaults:
-  - model: gpt-5-openrouter-medium
+  - model: openrouter-gpt-5-medium
   - template: xml_tags
-  - elicitation: none
+  - elicitation: cot
   - _self_
 
 # A frozen taskset, by path. Named rather than globbed: the previous harness
@@ -29,10 +29,11 @@ endpoint:
   # loops slowly would then gain score from its own loops.
   #
   # So this is sized for the largest cap in evals/conf/model/, 253,952 tokens
-  # (hf-gemma4-26b-a4b-it, hf-gemma4-31b-it and hf-ministral3-3b-reasoning,
-  # whose cards recommend no output length), at 10 tokens/s, a deliberately slow
-  # single-request decode: 25,395 s, rounded up to the whole hour. Raise it with
-  # any cap, never lower it to fit one server's speed.
+  # (hf-gemma-4-26b-a4b-it, hf-gemma-4-31b-it and
+  # hf-ministral-3-3b-reasoning-2512, whose cards recommend no output length),
+  # at 10 tokens/s, a deliberately slow single-request decode: 25,395 s,
+  # rounded up to the whole hour. Raise it with any cap, never lower it to fit
+  # one server's speed.
   #
   # The client does not stream, so this bounds the whole request. metrics.json
   # reports the latency percentiles, how many requests came within 80% of this

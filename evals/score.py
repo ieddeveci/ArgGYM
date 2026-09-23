@@ -509,6 +509,9 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
             "run_dir": os.path.abspath(run_dir),
             "endpoint": run.get("endpoint"), "template": template,
             "elicitation": run.get("elicitation"),
+            # The text as well as the name: a reworded `cot` keeps its name, and
+            # the report needs the text to tell two such runs apart.
+            "elicitation_config": run.get("elicitation_config"),
             "taskset": path, "taskset_hash": got,
             "taskset_versions": ts_manifest.get("versions", {}),
             "run_status": run.get("status"),

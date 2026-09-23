@@ -36,9 +36,9 @@ import arggym
 # three can never disagree.
 TEMPLATE = arggym.XML_TAGS
 
-# This only tells the model it may think first, which the question does not say
-# either way.
-SYSTEM = "Work the problem out, then answer in the format the question asks for."
+# The harness's cot elicitation (evals/conf/elicitation/cot.yaml). It asks only
+# for reasoning before the answer; the question states the format itself.
+SYSTEM = "Think the problem through step by step before you answer."
 
 
 def prompt_for(question: str) -> str:
