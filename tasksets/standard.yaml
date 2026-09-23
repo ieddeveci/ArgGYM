@@ -80,14 +80,18 @@ seeds:
   # worth looking at.
   scan_limit: 40
 
-# Refuse a cell that needs more than two seeds per item, so a degraded cell is a
-# decision rather than a silent property of the file. Five seeds of this grid are
-# skipped, all preference_construction under weakest-link democratic at levels 9,
-# 12, 14 and 15, where the minimum search ran out of its call budget
-# (minimality_unproven, #124). The lowest rate is 0.83, at L14 (10 kept of 12).
-# The same cell is the edge of lite.yaml: its first four seeds hold both of its
-# skips, so it keeps 2 of 4 and sits exactly on this bound.
-min_acceptance: 0.5
+# Refuse a cell that skips most of the seeds it scans. A generator that fails
+# outright trips min_build_acceptance below first, since a seed that runs out of
+# tries discards every candidate it built. What this guard alone bounds is a
+# pile-up of seeds skipped because the minimum search ran out of its call budget
+# (minimality_unproven, #124): each costs one candidate, and the whole budget in
+# freeze time. Five seeds of this grid are skipped that way, all
+# preference_construction under weakest-link democratic at levels 9, 12, 14 and
+# 15, and the lowest rate is 0.83, at L14 (10 kept of 12). lite.yaml reads the
+# same cell over its first four seeds, which hold both of its skips, so it keeps
+# 2 of 4 at 0.50. At two seeds a cell one skip moves the rate by a sixth, and 0.3
+# leaves that cell room for two more.
+min_acceptance: 0.3
 
 # The guard above counts seeds; what varies far more is how many candidates the
 # retry loop discards on the way, from none on eight tasks to more than three in

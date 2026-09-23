@@ -246,7 +246,8 @@ def fill_cell(task: str, level: int, ordering: str, spec: TasksetSpec
             f"{report.key()} filled, but took {report.scan_end - spec.seeds.start + 1} "
             f"seeds for {spec.seeds.take} items (acceptance {report.acceptance:.2f}, "
             f"spec asks for {spec.min_acceptance}). A degraded cell should be a "
-            f"decision: raise min_acceptance deliberately or fix the generator.")
+            f"decision: lower min_acceptance deliberately or fix what the skipped "
+            f"seeds name.")
     if report.build_acceptance < spec.min_build_acceptance:
         # The guard above cannot see a thin cell on the standard grid, where
         # nearly every seed builds and the retry loop hides how many candidates

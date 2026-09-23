@@ -75,9 +75,9 @@ def test_a_level_that_is_not_an_integer_is_refused():
 
 
 def test_the_build_acceptance_guard_takes_a_share_and_is_off_by_default():
-    # Seed acceptance is 1.00 on every cell of the standard grid, so the seed
-    # guard cannot fire there; the candidate guard can, and a spec that does not
-    # name it keeps the old behaviour (#114).
+    # Seed acceptance cannot see the candidates the retry loop discards on a seed
+    # that builds; the candidate guard reads them, and a spec that does not name
+    # it keeps the seed guard alone (#114).
     assert TasksetSpec(tasks=("status_query",)).min_build_acceptance == 0.0
     with pytest.raises(ValueError, match="min_build_acceptance"):
         TasksetSpec(tasks=("status_query",), min_build_acceptance=1.5)
@@ -112,8 +112,11 @@ def test_the_checked_in_spec_describes_todays_grid():
     # passes while the next `make freeze` dies on the first cell it reaches that
     # falls under. The 0.13 is set under the thinnest cell at either take:
     # semantics_query at L13 under weakest-link democratic keeps 2 candidates of
-    # 12 at lite's take of 2.
+    # 12 at lite's take of 2. The 0.3 is set under the lowest seed rate the same
+    # way: preference_construction at L14 under weakest-link democratic keeps 2
+    # seeds of 4 at lite's take of 2.
     assert s.min_build_acceptance == 0.13
+    assert s.min_acceptance == 0.3
 
 
 def test_lite_is_standard_at_two_seeds():

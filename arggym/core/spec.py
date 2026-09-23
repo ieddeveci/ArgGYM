@@ -55,15 +55,19 @@ class TasksetSpec:
     orderings: Tuple[str, ...] = ALL_ORDERINGS
     seeds: SeedPolicy = field(default_factory=SeedPolicy)
     profile: str = "FULL"
-    #: Refuse a cell that needs more than 1/min_acceptance seeds per item. A
+    #: Refuse a cell that keeps fewer than this share of the seeds it scanned. A
     #: degraded cell should be a decision, not a silent property of the file.
+    #: Where `min_build_acceptance` is on, it fires first on a generator that
+    #: fails outright, and this guard bounds the seeds the freeze skips for
+    #: `minimality_unproven`, which cost one candidate each. The default serves
+    #: a spec that names neither guard; `tasksets/standard.yaml` sets 0.3.
     min_acceptance: float = 0.5
     #: Refuse a cell that keeps fewer than this share of the candidates `build`
-    #: produced. Seed acceptance is at least 0.83 on every cell of the standard
-    #: grid, so `min_acceptance` alone cannot fire there; the retry loop absorbs
-    #: the rejections, and `perturbation` at level 6 reaches its items by
-    #: discarding 34 candidates of 44 (#114). Off by default, so a spec that
-    #: does not name it keeps the old behaviour; `tasksets/standard.yaml` names it.
+    #: produced. Seed acceptance cannot see the candidates the retry loop
+    #: discards on a seed that builds: `perturbation` at level 6 reaches its
+    #: items from every seed it scans by discarding 34 candidates of 44 (#114).
+    #: Off by default, so a spec that does not name it keeps the seed guard
+    #: alone; `tasksets/standard.yaml` names it.
     min_build_acceptance: float = 0.0
     #: Optional constraints, checked before generating. See the module docstring.
     arggym: Optional[str] = None
