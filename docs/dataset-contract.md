@@ -329,11 +329,30 @@ The queried literals alone would not do. The question prints their statuses
 ("Under a correct formalization: ..."), and one or two directives per printed
 status reproduce them without reading the text. An undercut written as a
 rebuttal also agrees on them, while it makes the rebutting literal justified
-where the reference has no argument for it. Every theory with no defeat in it
-is behaviourally its atoms, though, so on a small reference with no attack an
-answer that lists the atoms as premises can still succeed; the shape term is
-what separates it there. `diagnostics.mismatched_literals` names the first six
-literals on which a failed answer differs.
+where the reference has no argument for it. `diagnostics.mismatched_literals`
+names the first six literals on which a failed answer differs.
+
+Behaviour cannot see a directive that changes no status, and success does not
+require one. The largest case is an undercut of a strict rule, which ASPIC+
+makes inert (`NOTATION.md`, "an undercut cannot be aimed at a strict rule"):
+the generator aims half its undercut units at a strict rule
+(`arggym/tasks/formalization.py:347`), so on 82 of the 120 `formalization`
+rows of `tasksets/lite.yaml` the success test cannot tell whether that
+undercut was written. A support rule with a second route to its conclusion, or
+an undercut of such a rule, is the same case. Dropping the reference's last
+rule still succeeds on 44 of those 120 items: 19 drop an inert undercut, 20 a
+support rule with a second route, and 5 an undercut of a defeasible rule with
+a second route. Only the shape term sees those omissions. By the same
+argument, a theory with no effective attack is behaviourally its atoms, so on a
+small reference an answer that lists the atoms as premises can still succeed
+(11 of the 120, all at levels 1 and 2).
+
+The other side of this holds. An answer that makes an inert undercut work by
+demoting its strict target to a defeasible rule fails success on 58 of the 82
+items with such an undercut, at a mean score of 0.807. On each of the 58 the
+question prints the target's conclusion as justified and the demoted rule loses
+it, so the test calls the demotion wrong, which it is. On the other 24 no status
+the reference names moves, and the demotion costs only type and shape credit.
 
 The score adds what behaviour cannot see. It is `0.25 * behavioural + 0.35 *
 shape_f1 + 0.40 * type_score`, or `0.4 * behavioural + 0.6 * shape_f1` where

@@ -81,3 +81,32 @@ def test_promoting_premises_to_axioms_lowers_type_score(typed_item, how_many):
         f"promoting {how_many} premise(s) to axioms cost nothing in type_score"
     assert result.diagnostics["type_precision"] < 1.0
     assert result.diagnostics["type_recall"] == pytest.approx(1.0)
+
+
+def _demote(o):
+    if o.kind == "axiom":
+        return Operation(kind="premise", content=o.content)
+    return Operation(kind="defeasible", name=o.name, antecedents=o.antecedents,
+                     consequent=o.consequent)
+
+
+def test_demoting_an_axiom_lowers_type_recall(typed_item):
+    ops = list(typed_item.reference_ops)
+    i = next(j for j, o in enumerate(ops) if o.kind == "axiom")
+    ops[i] = _demote(ops[i])
+
+    result = formalization.score(render(ops), typed_item)
+    assert result.diagnostics["type_recall"] < 1.0
+    assert result.diagnostics["type_precision"] == pytest.approx(1.0)
+    assert result.diagnostics["type_score"] < 1.0
+
+
+def test_an_answer_with_no_axiom_or_strict_rule_scores_zero_type(typed_item):
+    ops = [_demote(o) if o.kind in ("axiom", "strict") else o for o in typed_item.reference_ops]
+
+    result = formalization.score(render(ops), typed_item)
+    assert result.reason == "ok"
+    assert result.diagnostics["type_decisions_written"] == 0
+    assert result.diagnostics["type_score"] == 0.0
+    assert result.diagnostics["type_precision"] == 0.0
+    assert result.diagnostics["type_recall"] == 0.0
