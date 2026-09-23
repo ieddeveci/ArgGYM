@@ -809,7 +809,7 @@ def score(answer_text: str, item: SemItem) -> ScoreResult:
     """Grade an answer written as text: read the value out of it, then grade the value.
 
     The text arrives already extracted: composing the prompt and pulling the answer out
-    of whatever came back is the harness's job, so the dataset never unwraps a fence.
+    of whatever came back is the harness's job, so the dataset never strips the answer delimiters.
     That is what lets a caller use any convention at all -- or none, with a solver that
     submits the value itself (`docs/dataset-contract.md` sections 1 and 4).
     """

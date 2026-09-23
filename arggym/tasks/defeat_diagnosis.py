@@ -432,8 +432,8 @@ def parse(text: str, item: DDItem) -> DefeatDiagnosisAnswer:
     """The status an answer states and the failure points it lists, in its own order.
 
     The text arrives already extracted: composing the prompt and pulling the answer
-    out of whatever came back is the harness's job, so the dataset never unwraps a
-    fence. That is what lets a caller use any convention at all -- or none, with a
+    out of whatever came back is the harness's job, so the dataset never strips the
+    answer delimiters. That is what lets a caller use any convention at all -- or none, with a
     solver that submits the value directly (`docs/dataset-contract.md` section 4).
 
     A record runs from its `defeated_at` to the next one, so `survives_because` on a
