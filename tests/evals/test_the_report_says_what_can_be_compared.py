@@ -123,6 +123,17 @@ def test_every_score_column_carries_its_floor(tmp_path):
     assert "Chance-corrected" in text
 
 
+def test_the_report_shows_the_bloat_rate_without_a_floor(tmp_path):
+    """The rate the docs say to read beside a construction task's mean."""
+    m = a_metrics("model-a")
+    m["by_task"]["status_query"]["bloat_rate"] = 0.125
+    text = render(written(tmp_path, m))
+    section = text[text.index("## Bloat rate, by task"):]
+    table = [line for line in section.splitlines() if line.startswith("|")]
+    assert table[0] == "| task | model-a |"
+    assert "| status_query | 0.125 (4) |" in table
+
+
 def test_coverage_is_printed_before_any_score(tmp_path):
     """A run that lost its items to the token cap has not been measured."""
     text = render(written(tmp_path, a_metrics("model-a")))

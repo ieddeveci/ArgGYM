@@ -162,8 +162,10 @@ means `false` or means "not applicable".
 | `requests_timed_out` | how many of the row's requests expired, including on a row that then answered. |
 
 The last two of the first group are the ones to look at. `zero_with_region` is
-either a real reasoning failure -- which is a result -- or a scorer bug, and
-counting them is how the second gets noticed. `scorer_refused` means a
+a real reasoning failure -- which is a result -- or a scorer bug, and counting
+them is how the second gets noticed. On the construction tasks it also counts
+a third kind, an answer the bloat gate zeroed, which `bloat_rate` below
+separates out. `scorer_refused` means a
 mismatched engine version or a missing field; the previous harness caught that
 case with a broad `except`, called it `0.0`, and published a cell of forty items
 scoring exactly 0.000.
@@ -178,11 +180,12 @@ answer. A mean over what survives that is a measurement of the token cap.
 construction tasks zero an answer that uses more than twice the minimum number
 of directives, and the record's `reason` then starts with `bloated:`.
 `metrics.json` gives the share of scored records with that reason for every
-task, level and ordering, `results.csv` carries it, and `score.py` prints it
-per task. API errors and refused rows are left out of the denominator, as for
-`no_answer_region_rate`, and a task with no directive budget reads 0. Where the
-minimum is 2 a correct answer of five lines scores zero, the same as a wrong
-one, so read this rate beside a construction task's mean.
+task, level and ordering; `results.csv` and `report.md` carry it, and
+`score.py` prints it per task. API errors and refused rows are left out of the
+denominator, as for `no_answer_region_rate`, and a task with no directive
+budget reads 0. Where the minimum is 2 a correct answer of five lines scores
+zero, the same as a wrong one, so read this rate beside a construction task's
+mean.
 
 ### Whether the timeout was big enough
 
