@@ -73,7 +73,13 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: rows on the standard grid, 522 ask different queries and 120 carry a different theory,
 #: because the retry loop accepts a different candidate for that seed. No other task
 #: moves.
-PROMPT_VERSION = 12
+#:
+#: Version 13 moves the five tasks whose prompt carries `permitted_block`: `attack`,
+#: `defence`, `attack_defense`, `counter_argument` and `counter_argument_strict`. The
+#: sentence on unreadable directives now ends ", so write only directives", as it
+#: already did in the blocks of `preference_construction` and `formalization` (#187).
+#: Theories, ids and gold are unchanged; only the question's wording moves.
+PROMPT_VERSION = 13
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.
 #:
@@ -120,7 +126,7 @@ PROMPT_VERSION = 12
 #: wanted status it started at leaves the average, and one it broke scores 0.0;
 #: `UNDECIDED` earns its 0.4 only where the goal did not start there; a subgoal counts
 #: only if it started `JUSTIFIED` or the answer moved it. An answer that changes
-#: nothing now scores 0.0 where it earned up to 0.23. No construction score rises: a
+#: nothing now scores 0.0 where it earned up to 0.23. This part raises no score: a
 #: success scores as before, and a failed answer scores the same or lower.
 #:
 #: `counter_argument`'s `min_directives` moves on every weakest-link row, 300 of its

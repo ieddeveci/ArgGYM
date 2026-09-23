@@ -24,6 +24,7 @@ from arggym.core.invariants import (
     split_atoms_and_rules,
 )
 from arggym.core.prompting import STRAY_TEXT, answer_format
+from arggym.core.scoring import unmark
 
 TASK = "claim_chain"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -384,8 +385,8 @@ def parse(text: str, item: CCItem) -> ClaimChainAnswer:
     """The directive lines an answer quotes, in the order it wrote them.
 
     The text arrives already extracted: composing the prompt and pulling the answer
-    out of whatever came back is the harness's job, so the dataset never unwraps a
-    fence. That is what lets a caller use any convention at all -- or none, with a
+    out of whatever came back is the harness's job, so the dataset never strips the
+    answer delimiters. That is what lets a caller use any convention at all -- or none, with a
     solver that submits the value directly (`docs/dataset-contract.md` section 4).
 
     An answer with no brackets is read a line at a time, so a solver that drops the
@@ -396,7 +397,7 @@ def parse(text: str, item: CCItem) -> ClaimChainAnswer:
     An empty answer parses to an empty sequence. It is an answer with nothing in
     it, not an answer that failed to arrive.
     """
-    body = text or ""
+    body = unmark(text)
     quoted = _QUOTED.findall(body)
     if not quoted:
         return [line.strip() for line in body.splitlines() if line.strip()]

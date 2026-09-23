@@ -46,6 +46,14 @@ particular pair of delimiters has quietly required its users to imitate it.
 
 So the question states the task and what a legal answer must contain, and stops.
 No sentence in it says where to put the answer, and no scorer unwraps anything.
+The markup a chat model adds to anything that looks like code is a different
+thing from a submission convention, and every parser drops it the way it drops
+bullets and numbering: a line that is only a markdown code fence, with or
+without a language tag, and every backtick (`scoring.unmark`). No legal token
+contains a backtick, so markup around a token comes off and leaves the token,
+and a stray word in backticks still zeroes the answer. A backtick between two
+word characters, which is not markdown, glues them: ``[premise: a`b]`` reads as
+`[premise: ab]`.
 
 ### Why `AnswerTemplate` and `extract_answer` exist anyway
 

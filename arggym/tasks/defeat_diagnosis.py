@@ -20,6 +20,7 @@ from arggym.core.curriculum import (
 )
 from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
 from arggym.core.prompting import STRAY_TEXT, answer_format
+from arggym.core.scoring import unmark
 
 TASK = "defeat_diagnosis"
 LAST_LINK, WEAKEST_LINK = "last_link_elitist", "weakest_link_elitist"
@@ -431,8 +432,8 @@ def parse(text: str, item: DDItem) -> DefeatDiagnosisAnswer:
     """The status an answer states and the failure points it lists, in its own order.
 
     The text arrives already extracted: composing the prompt and pulling the answer
-    out of whatever came back is the harness's job, so the dataset never unwraps a
-    fence. That is what lets a caller use any convention at all -- or none, with a
+    out of whatever came back is the harness's job, so the dataset never strips the
+    answer delimiters. That is what lets a caller use any convention at all -- or none, with a
     solver that submits the value directly (`docs/dataset-contract.md` section 4).
 
     A record runs from its `defeated_at` to the next one, so `survives_because` on a
@@ -444,7 +445,7 @@ def parse(text: str, item: DDItem) -> DefeatDiagnosisAnswer:
     An empty answer parses to a status of nothing and no records. It is an answer
     with nothing in it, not an answer that failed to arrive.
     """
-    body = text or ""
+    body = unmark(text)
     for k in _KIND.findall(body):
         written = k.strip()
         if written.strip(",;.").lower() not in (UNDERMINE, UNDERCUT, REBUT):

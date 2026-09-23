@@ -149,7 +149,12 @@ axiom and strict decisions, graded for both promotion and demotion.
 
 **Format failures are reported separately from reasoning failures.** An answer
 that could not be read and an answer that was wrong are different events, and
-collapsing them reports measurement error as a result.
+collapsing them reports measurement error as a result. The parsers ignore
+rendering a chat model adds on its own: whitespace, bullets, numbering, CRLF
+line endings, lines that are only a code fence, and backticks. So a correct
+answer in a markdown code block scores what the bare answer scores. A word
+outside the answer's lines, such as a leading `Answer:`, still zeroes the whole
+answer, backticked or not.
 
 ## What a score does not license
 
