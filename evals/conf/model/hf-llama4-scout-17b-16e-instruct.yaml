@@ -1,0 +1,21 @@
+# meta-llama/Llama-4-Scout-17B-16E-Instruct on vLLM, served by
+# hpc/vllm/models/hf-llama4-scout-17b-16e-instruct.yaml.
+#
+# Sampling: the card gives none, so this is generation_config.json: temperature
+# 0.6, top_p 0.9. The meta-llama repo is gated to us; the file was read from
+# the ungated copy https://huggingface.co/unsloth/Llama-4-Scout-17B-16E-Instruct.
+#
+# Cap: the card recommends no output length, so the cap is the context rule. That
+# is the serving profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks the cap fits).
+# Longest prompt in tasksets/standard.yaml with this tokenizer: 3,859
+# tokens (tokenizer from unsloth/Llama-4-Scout-17B-16E-Instruct; the original is gated).
+name: hf-llama4-scout-17b-16e-instruct
+model: meta-llama/Llama-4-Scout-17B-16E-Instruct
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 122880
+  temperature: 0.6
+  top_p: 0.9
+  seed: 0

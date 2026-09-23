@@ -2,7 +2,7 @@
 # command line, and the whole resolved object is written into the run manifest.
 
 defaults:
-  - model: gpt-5-openrouter
+  - model: gpt-5-openrouter-medium
   - template: xml_tags
   - elicitation: none
   - _self_
@@ -22,19 +22,23 @@ filter:
   limit: null
 
 endpoint:
-  # Sized above the slowest generation we have seen rather than at a round
-  # number. On the August sweep a 1800s timeout expired on 9.8%, 14.8% and 21.8%
-  # of qwen3.6-27b's requests at levels 3, 6 and 9, and each retry made the
-  # server generate the whole completion again: wasted inference, not lost data.
-  # The rate rose with level, which is the direction that sizes a timeout -- a
-  # harder item is a longer generation -- so the worst cell is what this has to
-  # clear, not the best one.
+  # A safety net for a hung connection. The token cap, not the clock, is what
+  # ends a long generation: a completion that stops at `max_tokens` comes back
+  # as a truncation the score can see, while one the clock stops comes back as
+  # an API error, which drops the row from the score's denominator. A model that
+  # loops slowly would then gain score from its own loops.
   #
-  # Whether 5400 clears it is now measured rather than argued: metrics.json
-  # reports the 95th-percentile request latency, the slowest request, how many
-  # came within 80% of this number, and how many requests expired outright --
-  # counted apart from the other API errors.
-  timeout_s: 5400
+  # So this is sized for the largest cap in evals/conf/model/, 253,952 tokens
+  # (hf-gemma4-26b-a4b-it, hf-gemma4-31b-it and hf-ministral3-3b-reasoning,
+  # whose cards recommend no output length), at 10 tokens/s, a deliberately slow
+  # single-request decode: 25,395 s, rounded up to the whole hour. Raise it with
+  # any cap, never lower it to fit one server's speed.
+  #
+  # The client does not stream, so this bounds the whole request. metrics.json
+  # reports the latency percentiles, how many requests came within 80% of this
+  # number and how many expired outright; any expiry here is a hang or a
+  # server slower than 10 tokens/s, and either is worth reading.
+  timeout_s: 28800
 
   # Each retry regenerates the whole completion, so `retries` is also what
   # decides when a timeout becomes visible as an error: a row is only reported

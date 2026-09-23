@@ -1,13 +1,9 @@
-endpoint_config: hf-qwen3-4b-arggym-40k
-hf_model: Qwen/Qwen3-4B
 revision: 1cfa9a7208912126459214e8b04321603b3df60c
-
-params_b: 4
-tier: 4b
 
 dtype: bfloat16
 
-tensor_parallel_size: 1
+# Context: config.json's max_position_embeddings, 40,960, which the card says
+# is sized as 32,768 output + 8,192 prompt.
 max_model_len: 40960
 gpu_memory_utilization: 0.9
 

@@ -29,6 +29,8 @@ evals = [
     "openai>=3.8",
     "hydra-core>=1.3",
     "tqdm>=4.66",
+    # Reads `.env` into the environment before Hydra resolves `${oc.env:...}`.
+    "python-dotenv>=1.0",
 ]
 dev = [
     # The harness has tests, so a dev checkout needs what it imports. Same

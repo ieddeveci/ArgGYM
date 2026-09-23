@@ -70,7 +70,7 @@ A message saying the runtime image is not ready is normal on the first run.
 For a gated Hugging Face model:
 
 ```bash
-export HF_TOKEN='AIzaSyD6mJDiA4jy8JPl53rkm-VNC4Y4Whvk8Cc'
+export HF_TOKEN='hf_...'   # your own Hugging Face read token
 ```
 
 The Slurm account defaults to `$USER`. If your project uses a different account:
@@ -84,7 +84,7 @@ export ACCOUNT='YOUR_PROJECT_ACCOUNT'
 Example, H100:
 
 ```bash
-GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh hf-qwen3.8-27b
+GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh hf-qwen3.8-27b-medium
 ```
 
 Example, H200:
@@ -93,10 +93,19 @@ Example, H200:
 GPU_TYPE=H200 ./hpc/vllm/submit_truba.sh hf-gemma4-31b-it
 ```
 
+The argument is an eval config under `evals/conf/model/`. A model with
+reasoning-effort levels (Qwen3.8, gpt-oss) has one config per level and no
+level-less one, so name the level: `hf-qwen3.8-27b-low`, `-medium` or `-xhigh`.
+The serving profile is the name without the level.
+
+A run that outlasts the 3-day wall time loses only its in-flight generations.
+Submit the same config again with `RESUME=1` to continue from the rows already
+written.
+
 The script automatically:
 
-1. reads the model profile;
-2. chooses its H100/H200 GPU count;
+1. finds the serving profile for the eval config (`hpc/vllm/pairing.py`);
+2. chooses the profile's H100/H200 GPU count;
 3. requests 16 CPU cores per GPU;
 4. checks the Apptainer runtime fingerprint;
 5. builds the runtime in a scheduled compute job if needed;
@@ -144,12 +153,10 @@ cat outputs/runs/<RUN>/metrics.json
 - GPU partition: `kolyoz-cuda`
 - GPU type: H100 or H200
 - CPU request: 16 cores per requested GPU
-- Default evaluation walltime: 1 day; TRUBA documents a 3-day maximum for kolyoz-cuda
+- Default evaluation walltime: 3 days, the kolyoz-cuda maximum; a run that needs more is resubmitted with `RESUME=1`, which continues from the rows already written
 - Runtime/cache: `/arf/scratch/$USER/arggym_runtime`
 - HF cache: `/arf/scratch/$USER/arggym_hf_cache`
-- Runtime base: `vllm/vllm-openai:v0.29.0-x86_64-cu129`
-- Runtime Python: 3.12
-- vLLM: 0.29.0
-- Transformers: 5.17.0
+- Runtime base image, Python, vLLM and Transformers versions: pinned in
+  `hpc/vllm/arggym-vllm.def` and `hpc/vllm/requirements-vllm.txt`
 
 `/arf/scratch` is temporary storage. If TRUBA removes the cached SIF later, the next submission automatically rebuilds it.

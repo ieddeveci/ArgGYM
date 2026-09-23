@@ -1,28 +1,33 @@
-# Gemma 4 26B A4B IT through the Gemini API's OpenAI-compatible endpoint.
+# Gemma 4 26B A4B IT through the Gemini API's OpenAI-compatible endpoint, under
+# the model identifier gemma-4-26b-a4b-it
+# (https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api). The
+# mixture-of-experts Gemma 4 variant.
 #
-# This is the mixture-of-experts Gemma 4 variant exposed by Google AI Studio
-# under the model identifier gemma-4-26b-a4b-it.
+# Thinking is off, as for gemma4-31b-aistudio: the hosted API offers "high" or
+# "minimal", and this config asks for "minimal", with ArgGYM's own elicitation
+# doing the step-by-step asking. The vLLM config for the same checkpoint,
+# hf-gemma4-26b-a4b-it, runs with thinking on, so the two are different
+# conditions.
 #
-# We use minimal native thinking while retaining ArgGYM's explicit CoT
-# elicitation. This matches the practical evaluation condition used for the
-# Gemma 4 31B run.
+# Sampling is Google's recommendation for Gemma 4, "temperature=1.0,
+# top_p=0.95, top_k=64" (https://ai.google.dev/gemma/docs/core/model_card_4).
+# top_k is not an OpenAI parameter and this endpoint documents no way to pass
+# it, so it is left to the provider.
 #
-# Sampling parameters are left at the provider/model defaults.
+# The model's context is 256K (same card). Google documents no output limit for
+# hosted Gemma 4; 32,768 is kept from before and is not verified against the
+# API's `outputTokenLimit`.
 #
-# Keep concurrency conservative because the Google AI Studio quota can be
-# constrained by both requests per minute and input tokens per minute.
-
+# Keep concurrency conservative: the AI Studio quota limits both requests per
+# minute and input tokens per minute.
 name: gemma4-26b-a4b-aistudio
 model: gemma-4-26b-a4b-it
 base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
 api_key_env: GEMINI_API_KEY
-
-timeout_s: 300
-retries: 2
-
 sampling:
   max_tokens: 32768
-
+  temperature: 1.0
+  top_p: 0.95
 extra_body:
   extra_body:
     google:

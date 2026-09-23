@@ -1,4 +1,6 @@
 __pycache__/
+# Credentials. `.env.example` lists what goes in it.
+.env
 *.py[cod]
 .venv/
 venv/

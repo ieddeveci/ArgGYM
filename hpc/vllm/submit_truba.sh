@@ -11,11 +11,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARGGYM_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ARGGYM_ROOT"
 
-PROFILE="${1:?usage: $0 MODEL_PROFILE}"
+# The argument is the eval config to run, a stem under evals/conf/model/. For
+# most models that is also the serving profile's name (hf-qwen3-8b). A model
+# with reasoning-effort levels has one config per level and no level-less one,
+# so it is named with its level (hf-qwen3.8-27b-medium). pairing.py finds the
+# profile; it is the one place that rule is written.
+CONFIG="${1:?usage: $0 EVAL_CONFIG   (e.g. hf-qwen3-8b, hf-qwen3.8-27b-medium)}"
+PROFILE="$(python3 "$SCRIPT_DIR/pairing.py" "$CONFIG")" || exit 2
 GPU_TYPE="${GPU_TYPE:-H100}"
 ACCOUNT="${ACCOUNT:-$USER}"
 SETUP_TIME="${SETUP_TIME:-02:00:00}"
-GPU_TIME="${GPU_TIME:-1-00:00:00}"
+# The kolyoz-cuda maximum (hpc/truba-directive.md). One job runs the whole taskset,
+# and a large reasoning model can need more than three days for it. A job that
+# hits the wall loses only its in-flight generations: submit the same config
+# again with RESUME=1 and it continues from the rows already written, as many
+# times as the run needs.
+GPU_TIME="${GPU_TIME:-3-00:00:00}"
 
 case "$GPU_TYPE" in
     H100|H200) ;;
@@ -25,17 +36,18 @@ case "$GPU_TYPE" in
         ;;
 esac
 
-command -v sbatch >/dev/null 2>&1 || {
-    echo "ERROR: sbatch is not available. Submit from TRUBA cuda-ui." >&2
-    exit 1
-}
-
 PROFILE_FILE="$SCRIPT_DIR/models/${PROFILE}.yaml"
 
-[[ -f "$PROFILE_FILE" ]] || {
-    echo "ERROR: unknown model profile: $PROFILE" >&2
-    exit 2
-}
+# SUBMIT_DRY_RUN=1 resolves everything and prints the sbatch command instead of
+# running it, so the argument handling can be checked off TRUBA.
+if [[ "${SUBMIT_DRY_RUN:-0}" == "1" ]]; then
+    sbatch() { echo "sbatch $*" >&2; echo "DRYRUN"; }
+else
+    command -v sbatch >/dev/null 2>&1 || {
+        echo "ERROR: sbatch is not available. Submit from TRUBA cuda-ui." >&2
+        exit 1
+    }
+fi
 
 [[ -f pyproject.toml ]] || {
     echo "ERROR: incomplete ArgGYM checkout; pyproject.toml is missing." >&2
@@ -62,7 +74,8 @@ GPU_KEY="tensor_parallel_size_$(printf '%s' "$GPU_TYPE" | tr '[:upper:]' '[:lowe
 DEFAULT_GPUS="$(profile_scalar "$GPU_KEY")"
 
 if [[ -z "$DEFAULT_GPUS" ]]; then
-    DEFAULT_GPUS="$(profile_scalar tensor_parallel_size)"
+    echo "ERROR: $PROFILE_FILE has no $GPU_KEY" >&2
+    exit 2
 fi
 
 GPUS="${TP_SIZE:-$DEFAULT_GPUS}"
@@ -119,7 +132,7 @@ if [[ -n "$SETUP_JOB" ]]; then
     DEPENDENCY_ARGS=(--dependency="afterok:$SETUP_JOB")
 fi
 
-GPU_EXPORT="$EXPORT_COMMON,MODEL_PROFILE=$PROFILE,TP_SIZE=$GPUS,GPU_TYPE=$GPU_TYPE,TEMPLATE=${TEMPLATE:-xml_tags},ELICITATION=${ELICITATION:-cot},RESUME=${RESUME:-0},SKIP_SCORE=${SKIP_SCORE:-0}"
+GPU_EXPORT="$EXPORT_COMMON,MODEL_CONFIG=$CONFIG,TP_SIZE=$GPUS,GPU_TYPE=$GPU_TYPE,TEMPLATE=${TEMPLATE:-xml_tags},ELICITATION=${ELICITATION:-cot},RESUME=${RESUME:-0},SKIP_SCORE=${SKIP_SCORE:-0}"
 
 GPU_JOB="$(
     sbatch --parsable \
@@ -132,7 +145,7 @@ GPU_JOB="$(
         --time="$GPU_TIME" \
         "${DEPENDENCY_ARGS[@]}" \
         --export="$GPU_EXPORT" \
-        "$SCRIPT_DIR/truba_vllm.sbatch" "$PROFILE"
+        "$SCRIPT_DIR/truba_vllm.sbatch" "$CONFIG"
 )"
 
 echo "GPU evaluation job: $GPU_JOB"
@@ -142,7 +155,8 @@ if [[ -n "$SETUP_JOB" ]]; then
     echo "First-time setup uses one $GPU_TYPE allocation because ARF-ACC is a separate Slurm system."
 fi
 
-echo "Model profile: $PROFILE"
+echo "Eval config: $CONFIG"
+echo "Serving profile: $PROFILE"
 echo "GPU type/count: $GPU_TYPE x $GPUS"
 echo "CPU cores for GPU job: $GPU_CPUS"
 echo "Account: $ACCOUNT"

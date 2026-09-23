@@ -8,7 +8,7 @@ no HTTP client.
 ```
 uv sync                                    # the evals group is included in dev
 uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
-uv run python -m evals.run   taskset=data/taskset.jsonl model=gpt-5-openrouter
+uv run python -m evals.run   taskset=data/taskset.jsonl model=gpt-5-openrouter-medium
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 ```
@@ -26,35 +26,54 @@ Azure's, Anthropic's shim, and any local vLLM. Switching between them is a
 config file and an environment variable.
 
 ```yaml
-# evals/conf/model/claude-openrouter.yaml
-name: claude-openrouter
+# evals/conf/model/claude-openrouter-high.yaml
+name: claude-openrouter-high
 model: anthropic/claude-sonnet-4.5
 base_url: https://openrouter.ai/api/v1
 api_key_env: OPENROUTER_API_KEY
 sampling:
-  temperature: 0.0
-  max_tokens: 32768
+  max_tokens: 64000
 extra_body:
   reasoning:
     effort: high
 ```
 
 ```bash
-export OPENROUTER_API_KEY=...
-uv run python -m evals.run model=claude-openrouter taskset=data/taskset.jsonl
+cp .env.example .env        # then fill in OPENROUTER_API_KEY
+uv run python -m evals.run model=claude-openrouter-high taskset=data/taskset.jsonl
 ```
 
 `api_key_env` names the variable rather than holding the key, so the whole
-config can be written into a run manifest without writing down a secret.
+config can be written into a run manifest without writing down a secret. The
+harness loads `.env` from the working directory upward at startup; a variable
+already exported in the shell wins over the file. `.env.example` lists the
+credentials and endpoints the shipped model configs read.
 
 `extra_body` is for anything one provider understands and the rest do not:
 OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 `thinking_config`. It is passed through untouched, because validating it would
 mean this harness knowing every provider, which is the thing we are avoiding.
 
-Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini on AI
-Studio, and Qwen3.6-27B and Qwen3.8-27B on a local vLLM, plus a stub for running
-the pipeline without spending a token. Adding another is copying one.
+Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini and
+Gemma on AI Studio, and every model the HPC lane serves on vLLM (`hf-*`), plus a
+stub for running the pipeline without spending a token. Adding another is
+copying one. An `hf-*` config also runs against a vLLM you started yourself:
+set `VLLM_BASE_URL`, and serve with the `max_model_len` of the profile of the
+same name under `hpc/vllm/models/`, or the config's `max_tokens` will not fit.
+
+The two layers hold different facts and never the same one. The eval config
+says what each request carries, the checkpoint id included; the serving
+profile says how to serve it (GPU counts, dtype, context length, parser, extra
+vLLM flags). They pair by file stem, and `hpc/vllm/verify_bundle.py` checks
+that they fit.
+Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
+
+A model that takes a reasoning-effort level has one config per level and no
+level-less one, named `<model>-<level>`: `claude-openrouter-high`,
+`gpt-5-openai-minimal`, `hf-qwen3.8-27b-xhigh`. The level changes what the model
+is asked as much as the prompt does, so it is part of the name, and therefore of
+the run directory. A model whose only switch is thinking on or off (Qwen3,
+Qwen3.6, Gemma 4) has one config.
 
 ### What the compatibility layers cost
 
@@ -65,7 +84,7 @@ OpenAI SDK "doesn't return Claude's detailed thought process", and that
 `response_format`, `reasoning_effort`, `seed` and `logprobs` are ignored, `n`
 must be 1, `temperature` is capped at 1, and `usage.completion_tokens_details`
 is always empty. "Most unsupported fields are silently ignored rather than
-producing errors." That is why `claude-openrouter.yaml` goes through OpenRouter:
+producing errors." That is why `claude-openrouter-*.yaml` goes through OpenRouter:
 it returns the reasoning trace over a plain OpenAI-compatible call.
 
 **Gemini's compatibility endpoint** is still labelled beta and carries the same
@@ -157,11 +176,14 @@ answer. A mean over what survives that is a measurement of the token cap.
 
 ### Whether the timeout was big enough
 
-`endpoint.timeout_s` is 5400 seconds. It was 1800, and on the August sweep 1800
-expired on 9.8%, 14.8% and 21.8% of `qwen3.6-27b`'s requests at levels 3, 6 and
-9 -- the rate rising with the level, because a harder item is a longer
-generation. Nothing measured whether the new number was enough, so the report
-now does.
+`endpoint.timeout_s` is 28,800 seconds, and it is a safety net for a hung
+connection. What ends a long generation is the model's token cap. A completion
+stopped by the cap comes back truncated, and `truncated_rate` shows it. A
+completion stopped by the clock comes back as an API error, which leaves the
+denominator, so a model that loops slowly would score better for looping. The
+number is therefore the largest cap in `evals/conf/model/` (253,952 tokens) at a
+deliberately slow 10 tokens/s, rounded up to the hour. The report measures
+whether it held.
 
 `metrics.json` carries two kinds of number about it, and they are not
 substitutes.

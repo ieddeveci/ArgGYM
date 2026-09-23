@@ -5,8 +5,9 @@
 
 set -euo pipefail
 
-PROFILE="${1:-${MODEL_PROFILE:-}}"
-[[ -n "$PROFILE" ]] || { echo "ERROR: model profile is missing" >&2; exit 2; }
+# The eval config to run; run_vllm_arggym.py finds the profile that serves it.
+CONFIG="${1:-${MODEL_CONFIG:-}}"
+[[ -n "$CONFIG" ]] || { echo "ERROR: eval config is missing" >&2; exit 2; }
 : "${ARGGYM_ROOT:?ARGGYM_ROOT was not exported by submit_truba.sh}"
 cd "$ARGGYM_ROOT"
 
@@ -90,7 +91,7 @@ export APPTAINERENV_ARGGYM_RUNTIME_IMAGE="$IMAGE"
 # Keep localhost ports distinct if Slurm co-locates independent one-GPU jobs.
 PORT="${VLLM_PORT:-$((20000 + (SLURM_JOB_ID % 20000)))}"
 ARGS=(
-    "$PROFILE"
+    "$CONFIG"
     --template "${TEMPLATE:-xml_tags}"
     --elicitation "${ELICITATION:-cot}"
     --port "$PORT"
@@ -103,7 +104,7 @@ if [[ "${SKIP_SCORE:-0}" == "1" ]]; then
 fi
 
 echo "Starting ArgGYM evaluation"
-echo "Profile: $PROFILE"
+echo "Eval config: $CONFIG"
 echo "Runtime image: $IMAGE"
 echo "Runtime SHA256: $RUNTIME_SHA256"
 echo "HF cache: $HF_HOME"

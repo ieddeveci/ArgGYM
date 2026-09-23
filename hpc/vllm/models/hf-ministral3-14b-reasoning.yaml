@@ -1,11 +1,10 @@
-endpoint_config: hf-ministral3-14b-reasoning
-hf_model: mistralai/Ministral-3-14B-Reasoning-2512
-params_b: 14
-tier: mid
-
 dtype: bfloat16
-tensor_parallel_size: 1
-max_model_len: 65536
+# Native context is 262,144 (config.json; the card says 256k). Served at half
+# that because this profile runs on one GPU: a 262,144-token sequence needs
+# 40 GiB of KV (40 layers x 8 KV heads x 128 dims x K,V x 2 B), about all an
+# H100 has left after the weights. The card itself recommends 2x H200 for the
+# full context and one GPU when a large context is not needed.
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 reasoning_parser: mistral
 trust_remote_code: false

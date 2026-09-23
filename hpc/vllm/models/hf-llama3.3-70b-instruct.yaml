@@ -1,13 +1,9 @@
-endpoint_config: hf-llama3.3-70b-instruct
-hf_model: meta-llama/Llama-3.3-70B-Instruct
-params_b: 70
-tier: xlarge
-
 dtype: bfloat16
-allow_over_40b_bf16: true
 
-tensor_parallel_size: 4
-max_model_len: 65536
+# Context: 128k on the card
+# (https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct), 131,072 in
+# the mirrored config.json.
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 trust_remote_code: false
 extra_args: []

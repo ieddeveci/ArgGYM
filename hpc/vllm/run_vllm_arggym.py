@@ -13,20 +13,35 @@ import urllib.request
 from pathlib import Path
 
 import yaml
+from pairing import CONFIGS, PROFILES, ROOT, configs_of, profile_of
 
-ROOT = Path(__file__).resolve().parents[2]
-PROFILES = ROOT / "hpc" / "vllm" / "models"
 OUT = ROOT / "outputs" / "runs"
 
 
-def load_profile(name: str) -> dict:
-    path = PROFILES / f"{name}.yaml"
+def load_run(config: str) -> tuple[str, dict, str]:
+    """The profile that serves an eval config, its settings, and the checkpoint.
+
+    The checkpoint id lives in the eval config's `model` and nowhere else; the
+    profile says only how to serve it. Every config a profile serves must name
+    the same checkpoint, since one server answers all of them.
+    """
+    path = CONFIGS / f"{config}.yaml"
     if not path.is_file():
-        raise SystemExit(f"Unknown vLLM profile: {name}")
-    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+        near = sorted(p.stem for p in CONFIGS.glob(f"{config}-*.yaml"))
+        hint = f" Pick one of: {', '.join(near)}." if near else ""
+        raise SystemExit(f"No eval config evals/conf/model/{config}.yaml.{hint}")
+    profile = profile_of(config)
+    if profile is None:
+        raise SystemExit(f"No serving profile under hpc/vllm/models/ serves {config}.")
+    cfg = yaml.safe_load((PROFILES / f"{profile}.yaml").read_text(encoding="utf-8"))
     if cfg["dtype"] != "bfloat16":
         raise SystemExit("This benchmark lane requires BF16 weights.")
-    return cfg
+    models = {yaml.safe_load((CONFIGS / f"{c}.yaml").read_text(encoding="utf-8"))["model"]
+              for c in configs_of(profile)}
+    if len(models) != 1:
+        raise SystemExit(f"The configs {profile} serves name different models: "
+                         f"{sorted(models)}")
+    return profile, cfg, models.pop()
 
 
 def resolve_revision(repo: str) -> str:
@@ -44,17 +59,20 @@ def resolve_revision(repo: str) -> str:
 
 
 def selected_tp(cfg: dict) -> int:
-    return int(os.getenv("TP_SIZE", cfg["tensor_parallel_size"]))
+    """TP_SIZE if set (submit_truba.sh always sets it), else the profile's count
+    for GPU_TYPE."""
+    gpu = os.getenv("GPU_TYPE", "H100").lower()
+    return int(os.getenv("TP_SIZE", cfg[f"tensor_parallel_size_{gpu}"]))
 
 
-def vllm_command(cfg: dict, revision: str, port: int) -> list[str]:
+def vllm_command(cfg: dict, model: str, revision: str, port: int) -> list[str]:
     cmd = [
         os.getenv("VLLM_BIN", "vllm"),
         "serve",
-        cfg["hf_model"],
+        model,
         "--revision", revision,
-        "--served-model-name", cfg["hf_model"],
-        "--dtype", "bfloat16",
+        "--served-model-name", model,
+        "--dtype", cfg["dtype"],
         "--tensor-parallel-size", str(selected_tp(cfg)),
         "--max-model-len", str(cfg["max_model_len"]),
         "--gpu-memory-utilization", str(cfg["gpu_memory_utilization"]),
@@ -132,9 +150,11 @@ def prepare_run_directory(
     run_dir: Path,
     profile: str,
     cfg: dict,
+    model: str,
     revision: str,
     command: list[str],
     resume: bool,
+    config: str,
 ) -> dict:
     manifest_path = run_dir / "hf_runtime_start.json"
     existing_payload = None
@@ -147,7 +167,7 @@ def prepare_run_directory(
                     "Refusing to mix Hugging Face revisions in one ArgGYM run directory: "
                     f"{existing_payload.get('hf_revision')} != {revision}"
                 )
-            if existing_payload.get("hf_model") != cfg["hf_model"]:
+            if existing_payload.get("hf_model") != model:
                 raise SystemExit("Refusing to mix model identities in one run directory.")
         elif not resume:
             raise SystemExit(
@@ -174,10 +194,10 @@ def prepare_run_directory(
 
     payload = {
         "profile": profile,
-        "endpoint_config": cfg["endpoint_config"],
-        "hf_model": cfg["hf_model"],
+        "eval_config": config,
+        "hf_model": model,
         "hf_revision": revision,
-        "dtype": "bfloat16",
+        "dtype": cfg["dtype"],
         "tensor_parallel_size": selected_tp(cfg),
         "max_model_len": cfg["max_model_len"],
         "reasoning_parser": cfg.get("reasoning_parser"),
@@ -197,7 +217,10 @@ def prepare_run_directory(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("profile")
+    parser.add_argument("config", help="eval config under evals/conf/model/, "
+                                         "e.g. hf-qwen3-8b or hf-qwen3.8-27b-medium")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print the vLLM command and run directory, then stop")
     parser.add_argument("--template", default="xml_tags")
     parser.add_argument("--elicitation", default="cot")
     parser.add_argument("--port", type=int, default=8000)
@@ -205,22 +228,27 @@ def main() -> None:
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
-    cfg = load_profile(args.profile)
-    revision = str(
-        cfg.get("revision") or resolve_revision(cfg["hf_model"])
-    )
+    profile, cfg, model = load_run(args.config)
+    run_dir = OUT / f"{args.config}__{args.template}__{args.elicitation}"
+    if args.dry_run:
+        revision = str(cfg.get("revision") or "<resolved at start>")
+        print("Profile:", profile)
+        print("Model:", model)
+        print("vLLM command:", " ".join(vllm_command(cfg, model, revision, args.port)))
+        print("Run directory:", run_dir)
+        return
+    revision = str(cfg.get("revision") or resolve_revision(model))
     base_url = f"http://127.0.0.1:{args.port}/v1"
-    command = vllm_command(cfg, revision, args.port)
+    command = vllm_command(cfg, model, revision, args.port)
 
-    run_dir = OUT / f'{cfg["endpoint_config"]}__{args.template}__{args.elicitation}'
     runtime = prepare_run_directory(
-        run_dir, args.profile, cfg, revision, command, args.resume
+        run_dir, profile, cfg, model, revision, command, args.resume, args.config
     )
 
     logs = ROOT / "outputs" / "vllm_logs"
     logs.mkdir(parents=True, exist_ok=True)
     job_id = os.getenv("SLURM_JOB_ID", "local")
-    log_path = logs / f"{args.profile}-{job_id}.log"
+    log_path = logs / f"{args.config}-{job_id}.log"
 
     print("HF revision:", revision, flush=True)
     print("vLLM command:", " ".join(command), flush=True)
@@ -235,7 +263,7 @@ def main() -> None:
             start_new_session=True,
         )
         try:
-            wait_until_ready(base_url, proc, cfg["hf_model"])
+            wait_until_ready(base_url, proc, model)
 
             env = os.environ.copy()
             env["VLLM_BASE_URL"] = base_url
@@ -245,7 +273,7 @@ def main() -> None:
             subprocess.run(
                 [
                     sys.executable, "-m", "evals.run",
-                    f'model={cfg["endpoint_config"]}',
+                    f"model={args.config}",
                     f"template={args.template}",
                     f"elicitation={args.elicitation}",
                 ],

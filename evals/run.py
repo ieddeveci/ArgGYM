@@ -5,8 +5,8 @@ writes what came back. Scoring is `score.py`, offline, from these files -- so a
 parser fix, a template change or a scorer bug costs a rerun of a few seconds
 rather than the hours of inference that produced the completions.
 
-    uv run python -m evals.run taskset=data/taskset.jsonl model=gpt-5-openai
-    uv run python -m evals.run model=qwen3.8-27b-vllm filter.levels=[3,9] filter.limit=20
+    uv run python -m evals.run taskset=data/taskset.jsonl model=gpt-5-openai-medium
+    VLLM_BASE_URL=http://localhost:8000/v1 uv run python -m evals.run model=hf-qwen3.8-27b-medium filter.levels=[3,9] filter.limit=20
 """
 from __future__ import annotations
 
@@ -28,6 +28,19 @@ from evals.client import Endpoint
 from evals.prompt import Elicitation
 from evals.solver import ChatSolver
 from evals.types import SOLVER_RAISED, SOLVER_VALUE_NOT_JSON, Attempt, Solver
+
+try:
+    from dotenv import find_dotenv, load_dotenv
+except ImportError:
+    # The HPC image installs nothing beyond its pinned requirements; there the
+    # credentials come in through the sbatch environment instead.
+    load_dotenv = None
+
+if load_dotenv is not None:
+    # At import, so before Hydra resolves a single `${oc.env:...}`: every variable
+    # a model config names can come from `.env` (see `.env.example`), found from the
+    # working directory upward. A variable already set in the shell wins.
+    load_dotenv(find_dotenv(usecwd=True), override=False)
 
 
 def _plain(node: Any) -> Dict[str, Any]:

@@ -1,11 +1,6 @@
-endpoint_config: hf-mistral-small-3.2-24b-instruct
-hf_model: mistralai/Mistral-Small-3.2-24B-Instruct-2506
-params_b: 24
-tier: large
-
 dtype: bfloat16
-tensor_parallel_size: 2
-max_model_len: 65536
+# Context: config.json's max_position_embeddings, 131,072.
+max_model_len: 131072
 gpu_memory_utilization: 0.9
 trust_remote_code: false
 
