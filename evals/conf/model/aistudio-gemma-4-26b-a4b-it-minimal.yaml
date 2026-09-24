@@ -18,10 +18,11 @@
 # gives an outputTokenLimit of 32,768 for gemma-4-26b-a4b-it (GET
 # https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it,
 # read 2026-09-24); whether thinking tokens count against it is not documented.
-# The cap is that limit, 32,768. The roster shares one output cap, 65,536, so
-# every model gets the same token budget (65,536 is the Gemini API's output
-# limit, thinking included, so no larger cap can hold across the roster); this
-# model's limit is lower, so the cap is its limit.
+# The cap is that limit, 32,768. Every config caps its output at 65,536 tokens
+# at most, less where its context or provider limit is smaller, so token budgets
+# match wherever the limits allow. 65,536 is the Gemini API's output limit,
+# thinking included, so no larger cap can hold across the roster. This model's
+# limit is smaller, so the cap is its limit.
 #
 # Keep concurrency conservative: the AI Studio quota limits both requests per
 # minute and input tokens per minute.

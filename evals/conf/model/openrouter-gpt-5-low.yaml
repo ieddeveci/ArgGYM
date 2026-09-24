@@ -3,10 +3,11 @@
 #
 # Limits: OpenRouter's models API lists context 400000, max_completion_tokens
 # 128000 and max_prompt_tokens 272000 for openai/gpt-5
-# (https://openrouter.ai/api/v1/models). The cap is 65,536, below that limit:
-# one output cap across the roster so every model gets the same token budget.
-# 65,536 is the Gemini API's output limit, thinking included, so no larger cap
-# can hold across the roster.
+# (https://openrouter.ai/api/v1/models). The cap is 65,536, below that limit.
+# Every config caps its output at 65,536 tokens at most, less where its context
+# or provider limit is smaller, so token budgets match wherever the limits
+# allow. 65,536 is the Gemini API's output limit, thinking included, so no
+# larger cap can hold across the roster.
 #
 # No temperature: OpenRouter does not list `temperature` or `top_p` among the
 # parameters this model supports, and OpenAI's guidance is to omit them for its

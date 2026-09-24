@@ -9,8 +9,9 @@
 # level: the chat template reads enable_thinking and no reasoning_effort
 # (https://huggingface.co/Qwen/Qwen3.5-27B/blob/main/chat_template.jinja).
 #
-# Cap: 65,536, one output cap across the roster so every model gets the same
-# token budget. 65,536 is the Gemini API's output limit, thinking included, so
+# Cap: 65,536. Every config caps its output at 65,536 tokens at most, less where
+# its context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
 # no larger cap can hold across the roster. The card recommends 81,920: "For
 # benchmarking on highly complex problems, such as those found in math and
 # programming competitions, we suggest setting the max output length to 81,920

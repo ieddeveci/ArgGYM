@@ -10,8 +10,9 @@
 # (a prompt-layer choice, not changed here). The chat template already
 # opens the response with "<think>\n", as the card asks.
 #
-# Cap: 65,536, one output cap across the roster so every model gets the same
-# token budget. 65,536 is the Gemini API's output limit, thinking included, so
+# Cap: 65,536. Every config caps its output at 65,536 tokens at most, less where
+# its context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
 # no larger cap can hold across the roster. The card recommends 32,768: "For all
 # our models, the maximum generation length is set to 32,768 tokens."
 # (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B). The cap

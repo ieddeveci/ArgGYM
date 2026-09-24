@@ -22,8 +22,7 @@ from pairing import (CONFIGS, EFFORT_LEVELS, NO_THINKING, PROFILES, ROOT, level_
 
 # Tokens held back for the prompt out of a serving profile's max_model_len. What
 # is left is the room for the output, and every hf-* eval config's max_tokens is
-# min(ROSTER_CAP, room): one output cap across the roster so every model gets the
-# same token budget, lowered only where the served context leaves less. The
+# min(ROSTER_CAP, room), so token budgets match wherever the context allows. The
 # check below requires exactly that value.
 #
 # Measured on 2026-09-24 against the shipped data/taskset.jsonl (7,200 rows), each
@@ -40,8 +39,10 @@ from pairing import (CONFIGS, EFFORT_LEVELS, NO_THINKING, PROFILES, ROOT, level_
 # changes its question text.
 PROMPT_RESERVE = 8192
 
-# The one output cap every eval config shares. 65,536 is the Gemini API's output
-# limit, thinking included, so no larger cap can hold across the roster.
+# Every eval config caps its output at 65,536 tokens at most, less where its
+# context or provider limit is smaller. 65,536 is the Gemini API's output limit,
+# thinking included, so no larger cap can hold across the roster. The hosted
+# configs' caps are checked in tests/evals, against their providers' limits.
 ROSTER_CAP = 65536
 
 errors: list[str] = []
