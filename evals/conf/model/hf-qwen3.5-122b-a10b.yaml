@@ -9,12 +9,16 @@
 # level: the chat template reads enable_thinking and no reasoning_effort
 # (https://huggingface.co/Qwen/Qwen3.5-122B-A10B/blob/main/chat_template.jinja).
 #
-# Cap: the longest output the card recommends, 81,920:
-# "For benchmarking on highly complex problems, such as those found in math
-# and programming competitions, we suggest setting the max output length to
-# 81,920 tokens." (https://huggingface.co/Qwen/Qwen3.5-122B-A10B/blob/main/README.md#L1323).
-# It fits within the serving profile's max_model_len minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 65,536. Every config caps its output at 65,536 tokens at most, less where
+# its context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. The card recommends 81,920: "For
+# benchmarking on highly complex problems, such as those found in math and
+# programming competitions, we suggest setting the max output length to 81,920
+# tokens."
+# (https://huggingface.co/Qwen/Qwen3.5-122B-A10B/blob/main/README.md#L1323). The
+# cap fits within the serving profile's max_model_len minus the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py checks both).
 # Longest prompt in data/taskset.jsonl with this tokenizer: 5,336
 # tokens.
 name: hf-qwen3.5-122b-a10b
@@ -22,7 +26,7 @@ model: Qwen/Qwen3.5-122B-A10B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 81920
+  max_tokens: 65536
   temperature: 1.0
   top_p: 0.95
   presence_penalty: 1.5

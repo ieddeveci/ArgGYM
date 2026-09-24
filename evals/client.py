@@ -113,7 +113,7 @@ class Endpoint:
     extra_body: Dict[str, Any] = field(default_factory=dict)
     #: The same value `conf/config.yaml` sets, and for the same reason: it is a
     #: safety net for a hung connection, sized so the largest token cap in
-    #: `conf/model/` (253,952) finishes at 10 tokens/s, because the cap and not
+    #: `conf/model/` (65,536) finishes at 10 tokens/s, because the cap and not
     #: the clock should end a long generation. A timeout turns a row into an API
     #: error, which leaves the score's denominator; a truncation does not. A
     #: solver built outside Hydra gets this default, so it must not lag the
@@ -121,7 +121,7 @@ class Endpoint:
     #: near this value, and how many requests went past it -- the last being
     #: the one that moves first, since `retries` hides an expired request
     #: behind a successful retry.
-    timeout_s: float = 28800.0
+    timeout_s: float = 10800.0
     retries: int = 2
 
     def check(self) -> None:

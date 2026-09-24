@@ -20,10 +20,10 @@ import yaml
 from pairing import (CONFIGS, EFFORT_LEVELS, NO_THINKING, PROFILES, ROOT, level_of,
                      profile_of)
 
-# Tokens held back for the prompt out of a serving profile's max_model_len. Every
-# hf-* eval config's max_tokens must fit in what is left: the check below
-# requires max_tokens + PROMPT_RESERVE <= max_model_len. A config's cap is the
-# smaller of that room and the longest output its model card recommends.
+# Tokens held back for the prompt out of a serving profile's max_model_len. What
+# is left is the room for the output, and every hf-* eval config's max_tokens is
+# min(ROSTER_CAP, room), so token budgets match wherever the context allows. The
+# check below requires exactly that value.
 #
 # Measured on 2026-09-24 against the shipped data/taskset.jsonl (7,200 rows), each
 # prompt composed as evals/prompt.py:compose does with the xml_tags template and
@@ -38,6 +38,12 @@ from pairing import (CONFIGS, EFFORT_LEVELS, NO_THINKING, PROFILES, ROOT, level_
 # prompts that grow when a task states another rule. Re-measure when a generator
 # changes its question text.
 PROMPT_RESERVE = 8192
+
+# Every eval config caps its output at 65,536 tokens at most, less where its
+# context or provider limit is smaller. 65,536 is the Gemini API's output limit,
+# thinking included, so no larger cap can hold across the roster. The hosted
+# configs' caps are checked in tests/evals, against their providers' limits.
+ROSTER_CAP = 65536
 
 errors: list[str] = []
 
@@ -172,11 +178,11 @@ for name in sorted(configs):
     sampling = e.get("sampling") or {}
     max_tokens = sampling.get("max_tokens", sampling.get("max_completion_tokens"))
     try:
-        # At most, not exactly: a cap may sit below what the context leaves
-        # when the model's card recommends a shorter output.
-        if int(max_tokens) + PROMPT_RESERVE > int(p["max_model_len"]):
-            errors.append(f"{name}: max_tokens {max_tokens} + {PROMPT_RESERVE} prompt "
-                          f"reserve exceeds {profile}'s max_model_len {p['max_model_len']}")
+        cap = min(ROSTER_CAP, int(p["max_model_len"]) - PROMPT_RESERVE)
+        if int(max_tokens) != cap:
+            errors.append(f"{name}: max_tokens {max_tokens}, but min({ROSTER_CAP}, "
+                          f"{profile}'s max_model_len {p['max_model_len']} - "
+                          f"{PROMPT_RESERVE} prompt reserve) is {cap}")
     except (KeyError, TypeError, ValueError):
         errors.append(f"{name}: needs max_tokens, and {profile} needs max_model_len")
 

@@ -6,12 +6,16 @@
 # are billed and invisible. OpenRouter returns them in `message.reasoning`,
 # which `evals/client.py:reasoning_of` already reads.
 #
-# Limits: 200K context (1M in beta; OpenRouter's models API lists
-# 1,000,000), 64K max output, and thinking tokens count against max_tokens
+# Limits: 200K context (1M in beta; OpenRouter's models API lists 1,000,000),
+# 64K max output, and thinking tokens count against max_tokens
 # (https://platform.claude.com/docs/en/models/sonnet-4-5/overview,
 # https://platform.claude.com/docs/en/build-with-claude/context-windows).
 # OpenRouter's models API lists max_completion_tokens 64000. The cap is that
-# output limit.
+# output limit, 64,000. Every config caps its output at 65,536 tokens at most,
+# less where its context or provider limit is smaller, so token budgets match
+# wherever the limits allow. 65,536 is the Gemini API's output limit, thinking
+# included, so no larger cap can hold across the roster. This model's limit is
+# smaller, so the cap is its limit.
 #
 # No temperature. With thinking on, Sonnet 4.5 accepts neither `temperature`
 # nor `top_k` (https://platform.claude.com/docs/en/build-with-claude/thinking).

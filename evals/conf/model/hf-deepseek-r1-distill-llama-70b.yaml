@@ -10,11 +10,14 @@
 # (a prompt-layer choice, not changed here). The chat template already
 # opens the response with "<think>\n", as the card asks.
 #
-# Cap: the longest output the card recommends, 32,768:
-# "For all our models, the maximum generation length is set to 32,768
-# tokens." (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B).
-# It fits within the serving profile's max_model_len minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 65,536. Every config caps its output at 65,536 tokens at most, less where
+# its context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. The card recommends 32,768: "For all
+# our models, the maximum generation length is set to 32,768 tokens."
+# (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B). The cap
+# fits within the serving profile's max_model_len minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py checks both).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 3,708
 # tokens.
 name: hf-deepseek-r1-distill-llama-70b
@@ -22,7 +25,7 @@ model: deepseek-ai/DeepSeek-R1-Distill-Llama-70B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 32768
+  max_tokens: 65536
   temperature: 0.6
   top_p: 0.95
   seed: 0

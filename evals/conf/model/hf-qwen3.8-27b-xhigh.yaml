@@ -9,13 +9,15 @@
 # template answers any other value with an error. One config per level:
 # hf-qwen3.8-27b-low, hf-qwen3.8-27b-medium, hf-qwen3.8-27b-xhigh.
 #
-# Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
-# output the card recommends:
-# "Reasoning Content: Set the maximum output length to 262,144 tokens.
-# Final Response: Set the maximum output length to 131,072 tokens."
-# (https://huggingface.co/Qwen/Qwen3.8-27B). Both exceed what the served
-# context leaves, so the context rule decides.
+# Cap: 65,536. Every config caps its output at 65,536 tokens at most, less where
+# its context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. The card recommends: "Reasoning
+# Content: Set the maximum output length to 262,144 tokens. Final Response: Set
+# the maximum output length to 131,072 tokens."
+# (https://huggingface.co/Qwen/Qwen3.8-27B). The cap fits within the serving
+# profile's max_model_len minus the 8,192-token prompt reserve
+# (hpc/vllm/verify_bundle.py checks both).
 # Longest prompt in data/taskset.jsonl with this tokenizer: 5,374 tokens at
 # xhigh, 5,336 at medium, 5,362 at low (the template writes the level into the
 # prompt).
@@ -24,7 +26,7 @@ model: Qwen/Qwen3.8-27B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 122880
+  max_tokens: 65536
   temperature: 1.0
   top_p: 0.95
   presence_penalty: 0.0

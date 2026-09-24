@@ -33,18 +33,17 @@ endpoint:
   # an API error, which drops the row from the score's denominator. A model that
   # loops slowly would then gain score from its own loops.
   #
-  # So this is sized for the largest cap in evals/conf/model/, 253,952 tokens
-  # (hf-gemma-4-26b-a4b-it, hf-gemma-4-31b-it and
-  # hf-ministral-3-3b-reasoning-2512, whose cards recommend no output length),
-  # at 10 tokens/s, a deliberately slow single-request decode: 25,395 s,
-  # rounded up to the whole hour. Raise it with any cap, never lower it to fit
-  # one server's speed.
+  # So this is sized for the largest cap in evals/conf/model/, the 65,536
+  # tokens every config shares where its context allows, at 10 tokens/s, a
+  # deliberately slow single-request decode: 6,554 s. Three hours, 10,800 s,
+  # leaves margin above that. Raise it with any cap, never lower it to fit one
+  # server's speed.
   #
   # The client does not stream, so this bounds the whole request. metrics.json
   # reports the latency percentiles, how many requests came within 80% of this
   # number and how many expired outright; any expiry here is a hang or a
   # server slower than 10 tokens/s, and either is worth reading.
-  timeout_s: 28800
+  timeout_s: 10800
 
   # Each retry regenerates the whole completion, so `retries` is also what
   # decides when a timeout becomes visible as an error: a row is only reported

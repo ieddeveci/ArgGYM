@@ -5,9 +5,13 @@
 # keys (https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3), so the
 # values are left as they were, without a source.
 #
-# Cap: the card recommends no output length, so the cap is the context rule. That
-# is the serving profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 24,576, the serving profile's max_model_len minus the 8,192-token prompt
+# reserve. Every config caps its output at 65,536 tokens at most, less where its
+# context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. This profile's context is smaller,
+# so the cap is what it leaves (hpc/vllm/verify_bundle.py checks both). The card
+# recommends no output length.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,773
 # tokens.
 name: hf-mistral-7b-instruct-v0.3

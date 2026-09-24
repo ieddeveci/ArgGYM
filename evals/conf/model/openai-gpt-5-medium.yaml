@@ -2,8 +2,11 @@
 #
 # Limits: 400,000 context, 128,000 max output, reasoning tokens included
 # (https://developers.openai.com/api/docs/models/gpt-5,
-# https://developers.openai.com/api/docs/guides/reasoning). The cap is the
-# output limit.
+# https://developers.openai.com/api/docs/guides/reasoning). The cap is 65,536,
+# below that limit. Every config caps its output at 65,536 tokens at most, less
+# where its context or provider limit is smaller, so token budgets match
+# wherever the limits allow. 65,536 is the Gemini API's output limit, thinking
+# included, so no larger cap can hold across the roster.
 #
 # No temperature. OpenAI's guidance for its reasoning models is to remove
 # `temperature` and `top_p` whenever reasoning effort is not `none`, and gpt-5
@@ -18,5 +21,5 @@ model: gpt-5
 base_url: null
 api_key_env: OPENAI_API_KEY
 sampling:
-  max_completion_tokens: 128000
+  max_completion_tokens: 65536
   reasoning_effort: medium

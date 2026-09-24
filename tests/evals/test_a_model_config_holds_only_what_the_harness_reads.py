@@ -55,6 +55,66 @@ def test_the_timeout_outlasts_the_largest_cap_at_a_slow_decode():
     assert Endpoint(model="m").timeout_s == timeout, "the client default lags the config"
 
 
+#: The largest output cap any config may set. 65,536 is the Gemini API's output
+#: limit, thinking included, so no larger cap can hold across the roster.
+ROSTER_CAP = 65536
+
+#: Each hosted model's documented output limit, by the `model` its configs send.
+#: The hf-* configs' limit is their serving profile's context, which
+#: `hpc/vllm/verify_bundle.py` checks.
+PROVIDER_OUTPUT_LIMIT = {
+    # 65,536 output, thinking included, for every Gemini model on the roster
+    # (https://ai.google.dev/gemini-api/docs/models/<model>, cited in each config).
+    "gemini-2.5-pro": 65536,
+    "gemini-3.5-flash-lite": 65536,
+    "gemini-3.6-flash": 65536,
+    "gemini-3.7-flash": 65536,
+    "gemini-3.8-flash": 65536,
+    # 128,000 max output (https://developers.openai.com/api/docs/models/gpt-5);
+    # OpenRouter lists the same max_completion_tokens (https://openrouter.ai/api/v1/models).
+    "gpt-5": 128000,
+    "openai/gpt-5": 128000,
+    # 64K max output (https://platform.claude.com/docs/en/models/sonnet-4-5/overview);
+    # OpenRouter lists max_completion_tokens 64000.
+    "anthropic/claude-sonnet-4.5": 64000,
+    # outputTokenLimit 32,768 from the Gemini API's models endpoint,
+    # GET https://generativelanguage.googleapis.com/v1beta/models/<model>, read 2026-09-24.
+    "gemma-4-26b-a4b-it": 32768,
+    "gemma-4-31b-it": 32768,
+}
+
+
+def cap_of(path):
+    s = yaml.safe_load(path.read_text()).get("sampling") or {}
+    cap = s.get("max_tokens", s.get("max_completion_tokens"))
+    assert cap is not None, f"{path.stem} sets no max_tokens, so its output is uncapped"
+    return cap
+
+
+@pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)
+def test_no_config_caps_its_output_above_the_roster_cap(path):
+    """Every config caps its output at 65,536 at most, and every config sets a cap."""
+    cap = cap_of(path)
+    assert cap <= ROSTER_CAP, f"{path.stem} caps its output at {cap}, above {ROSTER_CAP}"
+
+
+HOSTED = [p for p in CONFIGS if not p.stem.startswith("hf-") and p.stem != "stub"]
+
+
+@pytest.mark.parametrize("path", HOSTED, ids=lambda p: p.stem)
+def test_a_hosted_config_caps_its_output_at_the_roster_cap_or_its_limit(path):
+    """A hosted config's cap is min(65,536, the provider's output limit), exactly.
+
+    Token budgets match wherever the limits allow, so a cap below that is as
+    wrong as one above it.
+    """
+    model = yaml.safe_load(path.read_text())["model"]
+    assert model in PROVIDER_OUTPUT_LIMIT, (
+        f"{path.stem} sends {model}, whose output limit is not in PROVIDER_OUTPUT_LIMIT")
+    want = min(ROSTER_CAP, PROVIDER_OUTPUT_LIMIT[model])
+    assert cap_of(path) == want, f"{path.stem} caps its output at {cap_of(path)}, not {want}"
+
+
 LEVELS = ("minimal", "low", "medium", "high", "xhigh")
 
 

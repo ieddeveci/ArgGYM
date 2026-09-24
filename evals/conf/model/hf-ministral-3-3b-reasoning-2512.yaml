@@ -10,10 +10,13 @@
 # SYSTEM_PROMPT.txt, appended to any custom one; the harness sends only the
 # elicitation's (a prompt-layer choice, not changed here).
 #
-# Cap: the card recommends no output length (its vLLM examples set
-# MAX_TOK = 262144, the whole context), so the cap is the context rule. That is
-# the serving profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 65,536. Every config caps its output at 65,536 tokens at most, less where
+# its context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. The card recommends no output length
+# (its vLLM examples set MAX_TOK = 262144, the whole context). The cap fits
+# within the serving profile's max_model_len minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py checks both).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163
 # tokens.
 name: hf-ministral-3-3b-reasoning-2512
@@ -21,7 +24,7 @@ model: mistralai/Ministral-3-3B-Reasoning-2512
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 253952
+  max_tokens: 65536
   temperature: 0.7
   top_p: 0.95
   seed: 0
