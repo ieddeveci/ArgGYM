@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -28,12 +29,18 @@ def freeze(
                                 help="Taskset spec to build."),
     out: Path = typer.Option(Path("data/taskset.jsonl"), "--out", "-o",
                              help="Output JSONL."),
+    workers: Optional[int] = typer.Option(
+        None, "--workers", "-j", min=1, show_default=False,
+        help="Processes filling cells. 1 is a serial freeze. The output is the "
+             "same file whatever the count. Defaults to the cores this process "
+             "may use."),
 ) -> None:
     """Build a taskset from a spec, into one JSONL with a manifest line."""
     from arggym.core.freeze import freeze as run
+    from arggym.core.freeze import usable_cores
     from arggym.core.spec import load
 
-    run(load(str(config)), str(out))
+    run(load(str(config)), str(out), workers=workers or usable_cores())
 
 
 @app.command()

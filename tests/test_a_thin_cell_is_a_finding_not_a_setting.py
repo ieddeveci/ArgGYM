@@ -5,13 +5,19 @@ failed seed; this is the one place that scans past a failure, so this is the one
 place that can record it. A cell that quietly ships short is the failure mode
 being designed out.
 """
+import dataclasses
 import json
+import os
+import signal
+import threading
+import time
+from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
 from arggym.core import freeze as F
 from arggym.core.build import BuildReport
-from arggym.core.spec import SeedPolicy, TasksetSpec
+from arggym.core.spec import SeedPolicy, TasksetSpec, load
 
 CHEAP = TasksetSpec(tasks=("claim_chain",), levels=(3,),
                     orderings=("last_link_elitist",),
@@ -151,6 +157,90 @@ def test_the_same_spec_twice_gives_the_same_hash(tmp_path):
     b = F.freeze(CHEAP, str(tmp_path / "b.jsonl"), verbose=False)
     assert a["taskset_hash"] == b["taskset_hash"]
     assert a["cells"] == b["cells"]
+
+
+def test_a_parallel_freeze_writes_the_serial_file_byte_for_byte(tmp_path):
+    # Six cells over three generators, filled out of spec order: the slow-first
+    # schedule starts the `weakest_link_democratic` cells before the others.
+    spec = load("tests/data/one-cheap-cell.yaml")
+    F.freeze(spec, str(tmp_path / "serial.jsonl"), verbose=False, workers=1)
+    F.freeze(spec, str(tmp_path / "parallel.jsonl"), verbose=False, workers=2)
+    assert (tmp_path / "serial.jsonl").read_bytes() == (tmp_path / "parallel.jsonl").read_bytes()
+
+
+def test_a_parallel_freeze_refuses_the_cell_a_serial_one_refuses(tmp_path):
+    # Two cells keep half their candidates, `status_query` fourth in spec order and
+    # `preference_construction` sixth. Serial stops at the fourth; parallel has to
+    # name the same cell whichever of the two finishes first.
+    spec = dataclasses.replace(load("tests/data/one-cheap-cell.yaml"),
+                               min_build_acceptance=0.9)
+    messages = []
+    for workers in (1, 2):
+        with pytest.raises(SystemExit) as err:
+            F.freeze(spec, str(tmp_path / "t.jsonl"), verbose=False, workers=workers)
+        assert err.type is F.CellUnfilled
+        messages.append(str(err.value))
+    assert messages[0].startswith("status_query|L3|weakest_link_democratic filled")
+    assert messages[0] == messages[1]
+
+
+def _refuse_the_first_cell_last(task, level, ordering, spec):
+    """A `fill_cell` that refuses every cell, the first in spec order a second late."""
+    if ordering == "last_link_elitist":
+        time.sleep(1.0)
+    raise F.CellUnfilled(f"{task}|L{level}|{ordering} refused by the test")
+
+
+def test_a_parallel_freeze_names_the_first_failing_cell_in_spec_order_not_in_time(
+        monkeypatch, tmp_path):
+    # The cheap cells above fail in spec order whichever way results are read, so
+    # they cannot tell spec order from completion order. Here the second cell
+    # fails a second before the first; reading results as they complete would
+    # name the second.
+    two = TasksetSpec(tasks=("claim_chain",), levels=(3,),
+                      orderings=("last_link_elitist", "weakest_link_elitist"),
+                      seeds=SeedPolicy(start=0, take=2, scan_limit=10))
+    monkeypatch.setattr(F, "fill_cell", _refuse_the_first_cell_last)
+    with pytest.raises(F.CellUnfilled, match=r"^claim_chain\|L3\|last_link_elitist refused"):
+        F.freeze(two, str(tmp_path / "t.jsonl"), verbose=False, workers=2)
+
+
+def _die_in_the_first_cell(task, level, ordering, spec):
+    """A `fill_cell` whose first cell ends its process, the way an OOM kill does."""
+    if ordering == "last_link_elitist":
+        os._exit(1)
+    time.sleep(30)
+
+
+class _Hung(Exception):
+    pass
+
+
+def _raise_hung(signum, frame):
+    raise _Hung("the freeze was still waiting on a dead worker")
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="needs SIGALRM")
+def test_a_worker_that_dies_fails_the_freeze_rather_than_hanging_it(monkeypatch, tmp_path):
+    # A pool that replaces a dead worker without failing its task leaves the
+    # freeze waiting forever. The alarm turns that hang into a failure here; the
+    # other cell's 30 s shows the workers are stopped rather than waited for.
+    if threading.current_thread() is not threading.main_thread():
+        pytest.skip("signal handlers can only be set from the main thread")
+    two = TasksetSpec(tasks=("claim_chain",), levels=(3,),
+                      orderings=("last_link_elitist", "weakest_link_elitist"),
+                      seeds=SeedPolicy(start=0, take=2, scan_limit=10))
+    monkeypatch.setattr(F, "fill_cell", _die_in_the_first_cell)
+    previous = signal.signal(signal.SIGALRM, _raise_hung)
+    signal.alarm(15)
+    start = time.monotonic()
+    try:
+        with pytest.raises(BrokenProcessPool):
+            F.freeze(two, str(tmp_path / "t.jsonl"), verbose=False, workers=2)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert time.monotonic() - start < 10
 
 
 def test_skipping_a_seed_changes_the_hash(monkeypatch, tmp_path):
