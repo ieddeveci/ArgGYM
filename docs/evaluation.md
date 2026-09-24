@@ -193,7 +193,7 @@ its map by a pair. `evals/values.py` has both directions.
 A run directory holds what happened, in the order it happened:
 
 ```
-run.json           the manifest; status running -> completed | failed
+run.json           the manifest; status running -> completed | failed | crashed | stopped_on_quota
 prompts.jsonl      written before any call, so a dead run still says what it asked
 generations.jsonl  appended as each result lands
 samples.jsonl      one scored record per item, written by score.py
@@ -222,9 +222,10 @@ means `false` or means "not applicable".
 | `answer_in_cot` | a fenced answer was found only in the reasoning, never submitted. |
 | `zero_with_region` | a well-formed answer that scored zero. |
 | `scorer_refused` | the scorer would not grade the row at all. |
-| `latency_s` | what the whole row cost in wall time, every retry and backoff included. `null` when nothing timed it -- a solver need not have a clock. |
+| `latency_s` | what the whole row cost in wall time, every retry, backoff and rate-limit wait included. `null` when nothing timed it -- a solver need not have a clock. |
 | `attempt_latency_s` | the slowest single request made for the row, which is what `timeout_s` bounds. `null` on the same terms. |
 | `requests_timed_out` | how many of the row's requests expired, including on a row that then answered. |
+| `attempts` | how many requests the row made, each 429 waited out on its `Retry-After` included. Those waits do not spend `endpoint.retries`, so this can exceed `retries + 1`. |
 
 The last two of the first group are the ones to look at. `zero_with_region` is
 a real reasoning failure -- which is a result -- or a scorer bug, and counting
@@ -395,6 +396,44 @@ success never discards work already paid for. `resume=false` deletes the
 directory's generations and starts over, because the writer appends and leaving
 them would be resuming under a flag that says otherwise.
 
+### Retries, rate limits and quotas
+
+A request that fails with a timeout, a dropped connection, a malformed 200, or
+HTTP 408, 409, 429, 500, 502, 503, 504 or 529 is retried `endpoint.retries`
+times (2 by default), after 5 s, then 10 s, then 15 s, up to 30 s. A row whose
+retries run out is written as an error row, and `max_error_rate` decides the
+run's status at the end. Any other status is not retried.
+
+Two kinds of 429 are handled apart from that:
+
+- **A rate limit.** A 429 with a `Retry-After` of at most
+  `endpoint.max_retry_after_s` (600 s by default, above Evren's 5-minute token
+  window) is waited out for that long, at least 1 s, plus up to a second of
+  jitter, and does not spend `retries`. A provider that allows one request a
+  minute, as Evren does per key, then slows the run down and fails no rows, at
+  any `generation.concurrency`. Extra workers only queue on the limit. A row
+  stops honouring these waits once they add up to `timeout_s`, and after that
+  the 429 is retried and recorded like any other. A `Retry-After` of zero or in
+  the past asks for no wait, so it gets the ordinary backoff. With no header, a
+  `resets_at` in the error body sets the wait instead.
+- **An exhausted quota.** A 429 whose error code is `daily_token_limit_exceeded`
+  (Evren's daily token limit, per account) or `insufficient_quota` (OpenAI's
+  billing quota), or whose wait is longer than `max_retry_after_s`, means no
+  retry will work until a reset hours away. A `resets_at` beside the code
+  `rate_limit_exceeded` never counts: the code says the window is short, so a
+  far-off reset there is read as a skewed clock and waited out for at most the
+  cap. The run starts no new item. It writes nothing
+  for the item that hit the quota or for any item not yet started, and the
+  requests already in flight finish on their own. Then `run.json` gets
+  `status: stopped_on_quota`, with `quota_error` and `quota_resets_at` when the
+  provider named a reset time, and the run exits non-zero with a line that says
+  when to rerun. Rerunning the same command after that resumes it.
+
+So on a provider with a daily limit, plan how many items a day's quota covers,
+start the run, and rerun it after each reset until it reports `completed`. The
+daily limit may cover every key on an account, so two runs on one account share
+it.
+
 Slice a frozen taskset by coordinate rather than freezing a second one:
 
 ```bash
@@ -447,6 +486,9 @@ right is worse than an error:
 - **A run whose API error rate passes `max_error_rate` is marked `failed`, not
   `completed`,** and exits non-zero. A dead endpoint and a model that answers
   badly produce the same low score, and only one of them is a finding.
+- **A run that ran out of provider quota is marked `stopped_on_quota`,** and
+  exits non-zero without writing error rows for the items it did not reach.
+  Those items are missing, not failed, and a rerun generates them.
 
 ## Testing it without spending anything
 

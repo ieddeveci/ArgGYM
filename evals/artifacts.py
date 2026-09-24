@@ -9,7 +9,7 @@ And keep the raw completion forever, because scoring reads it again every time
 the scorer changes.
 
     runs/<model>__<template>__<elicitation>/
-        run.json          manifest; status running -> completed | failed | crashed
+        run.json          manifest; status running -> completed | failed | crashed | stopped_on_quota
         run.lock          held for the length of a run
         prompts.jsonl     written before inference
         generations.jsonl appended as results land

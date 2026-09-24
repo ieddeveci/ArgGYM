@@ -53,6 +53,14 @@ endpoint:
   # what the wasted inference actually cost.
   retries: 2
 
+  # A 429 with a Retry-After up to this many seconds is waited out and does not
+  # spend `retries`, so a per-minute request limit slows a run instead of
+  # failing rows. A longer wait, or a quota code such as Evren's
+  # daily_token_limit_exceeded, stops the run with status stopped_on_quota;
+  # rerunning the command after the reset resumes it. Ten minutes, above
+  # Evren's 5-minute sliding token window, whose waits run to about 300 s.
+  max_retry_after_s: 600
+
 generation:
   # Threads, not processes: every worker is blocked on a socket. Match this to
   # whatever the endpoint will actually run in parallel -- a local vLLM's

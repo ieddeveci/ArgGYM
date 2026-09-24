@@ -31,7 +31,13 @@ from evals import artifacts, taskset, values
 from evals.client import Endpoint
 from evals.prompt import Elicitation
 from evals.solver import ChatSolver
-from evals.types import SOLVER_RAISED, SOLVER_VALUE_NOT_JSON, Attempt, Solver
+from evals.types import (
+    SOLVER_RAISED,
+    SOLVER_VALUE_NOT_JSON,
+    Attempt,
+    QuotaExhausted,
+    Solver,
+)
 
 try:
     from dotenv import find_dotenv, load_dotenv
@@ -166,6 +172,10 @@ class RunFailed(SystemExit):
     """More of the run failed to reach the provider than the config allows."""
 
 
+class StoppedOnQuota(SystemExit):
+    """The provider's quota ran out; the run stopped and resumes on a rerun."""
+
+
 def quiet_http() -> None:
     """One INFO line per request is thousands of lines of noise on a full taskset."""
     import logging
@@ -184,6 +194,7 @@ def build_solver(cfg: DictConfig) -> ChatSolver:
         extra_body=_plain(m.get("extra_body")),
         timeout_s=cfg.endpoint.timeout_s,
         retries=cfg.endpoint.retries,
+        max_retry_after_s=cfg.endpoint.max_retry_after_s,
     )
     elicit = Elicitation(**_plain(cfg.elicitation))
     return ChatSolver(endpoint, template=cfg.template.name, elicitation=elicit)
@@ -243,13 +254,28 @@ def manifest(cfg: DictConfig, solver: ChatSolver, ts_manifest: Dict[str, Any],
 
 def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
              concurrency: int, progress: bool = True) -> Dict[str, int]:
-    """Call the solver on every row, writing each result the moment it lands."""
+    """Call the solver on every row, writing each result the moment it lands.
+
+    A solver that raises `QuotaExhausted` stops the run: no row starts after
+    it, the rows already in flight finish, and then it is raised again here,
+    carrying this invocation's `counts`. Nothing is written for the row that
+    hit the quota or for any row that never started, so a rerun finds them
+    missing rather than failed.
+    """
     path = os.path.join(run_dir, artifacts.GENERATIONS)
     counts = {"generated": 0, "errors": 0, "truncated": 0}
+    stopped: List[QuotaExhausted] = []
     with artifacts.Appender(path) as out:
         def one(row: Dict[str, Any]) -> None:
+            # `pool.map` has queued every row already, so a row checks on
+            # starting; one that never starts writes nothing.
+            if stopped:
+                return
             try:
                 attempt = solver(row)
+            except QuotaExhausted as e:
+                stopped.append(e)
+                return
             except Exception as e:  # noqa: BLE001
                 # A solver that raises is still infrastructure. One bad row must
                 # not cost the rows already paid for.
@@ -286,6 +312,9 @@ def generate(rows: List[Dict[str, Any]], solver: Solver, run_dir: str,
                 except ImportError:
                     pass
             list(it)
+    if stopped:
+        stopped[0].counts = counts
+        raise stopped[0]
     return counts
 
 
@@ -339,8 +368,11 @@ def execute(cfg: DictConfig, run_dir: str, origin: str = ".") -> Dict[str, Any]:
 
         print(f"{len(todo)} of {len(rows)} items -> {run_dir}", file=sys.stderr)
         started = time.monotonic()
+        quota: Optional[QuotaExhausted] = None
         try:
             counts = generate(todo, solver, run_dir, cfg.generation.concurrency)
+        except QuotaExhausted as e:
+            quota, counts = e, e.counts
         except BaseException:
             # A manifest left at "running" cannot be told from a run still in
             # flight, so a crash reads as work in progress for as long as
@@ -377,12 +409,28 @@ def execute(cfg: DictConfig, run_dir: str, origin: str = ".") -> Dict[str, Any]:
         # "measured as failing" -- the previous harness lost two cells that way
         # and the report could not tell.
         meta["status"] = "failed" if error_rate > cfg.max_error_rate else "completed"
+        if quota is not None:
+            # Neither failed nor completed: the rows it did not reach are
+            # missing, not errors, and the error rate is over what it reached.
+            meta.update(status="stopped_on_quota", quota_error=str(quota),
+                        quota_resets_at=quota.resets_at)
         artifacts.write_json(os.path.join(run_dir, artifacts.RUN), meta)
 
         print(f"{meta['status']}: {len(final)} of {len(rows)} generated, "
               f"{n_errors} errors ({error_rate:.1%}), "
               f"{n_truncated} truncated, {elapsed:.0f}s "
               f"({counts['generated']} this run)", file=sys.stderr)
+        if quota is not None:
+            raise StoppedOnQuota(
+                f"stopped on the provider's quota ({quota}); "
+                f"{meta['n_missing']} items not generated. Rerun the same command "
+                + (f"after {quota.resets_at} " if quota.resets_at else
+                   "once the quota is restored ")
+                + "to resume."
+                + (f" The error rate so far, {error_rate:.1%}, is also above "
+                   f"max_error_rate {cfg.max_error_rate}; read the errors in "
+                   f"{artifacts.GENERATIONS} before rerunning."
+                   if error_rate > cfg.max_error_rate else ""))
         if meta["status"] == "failed":
             raise RunFailed(
                 f"error rate {error_rate:.1%} is above max_error_rate "

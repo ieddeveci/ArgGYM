@@ -134,6 +134,9 @@ class Attempt:
     #: anywhere else. That row still cost two full generations of server time,
     #: which is the waste `conf/config.yaml` sized the timeout to avoid.
     requests_timed_out: int = 0
+    #: How many requests the row made. That includes each 429 waited out on its
+    #: `Retry-After`, which does not spend `retries`, so this can exceed
+    #: `retries + 1`.
     attempts: int = 0
     #: Exactly what was sent, plus the two things about the request that are not
     #: in its body: how many messages it carried, and the deadline it was sent
@@ -160,6 +163,25 @@ def _round(x: Optional[float]) -> Optional[float]:
     obvious guard -- `round(x or 0.0, 3)` -- publishes the zero this field
     exists to avoid."""
     return None if x is None else round(x, 3)
+
+
+class QuotaExhausted(Exception):
+    """The provider will refuse every request until a reset far beyond this run.
+
+    Raised by a solver instead of returning an `Attempt`, because it is not this
+    row that failed: every row after it would fail the same way, and recording
+    each as an error writes a taskset's worth of junk that a rerun then has to
+    step over. `run.py` stops starting rows, writes nothing for this one, and
+    exits saying when to rerun.
+
+    `resets_at` is an ISO 8601 UTC time when the provider gave one. `counts` is
+    filled in by `run.generate` with what the invocation wrote before stopping.
+    """
+
+    def __init__(self, message: str, resets_at: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.resets_at = resets_at
+        self.counts: Dict[str, int] = {}
 
 
 @runtime_checkable
