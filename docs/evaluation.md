@@ -26,8 +26,8 @@ costs seconds instead of a sweep.
 
 The harness speaks OpenAI-compatible HTTP and nothing else. Every provider we
 use serves that: OpenRouter, OpenAI, Gemini's compatibility endpoint, Vertex's,
-Azure's, Anthropic's shim, and any local vLLM. Switching between them is a
-config file and an environment variable.
+Azure's, Anthropic's shim, Evren, and any local vLLM. Switching between them is
+a config file and an environment variable.
 
 ```yaml
 # evals/conf/model/openrouter-claude-sonnet-4.5-high.yaml
@@ -59,9 +59,10 @@ OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 mean this harness knowing every provider, which is the thing we are avoiding.
 
 Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini and
-Gemma on AI Studio, and every model the HPC lane serves on vLLM (`hf-*`), plus a
-stub for running the pipeline without spending a token. Adding another is
-copying one. An `hf-*` config also runs against a vLLM you started yourself:
+Gemma on AI Studio, DeepSeek-V4.1-Flash, Qwen3.8-Flash-Next and GLM-5.3 on
+Evren (a hosted vLLM), and every model the HPC lane serves on vLLM (`hf-*`),
+plus a stub for running the pipeline without spending a token. Adding another
+is copying one. An `hf-*` config also runs against a vLLM you started yourself:
 set `VLLM_BASE_URL`, and serve with the `max_model_len` of the profile of the
 same name under `hpc/vllm/models/`, or the config's `max_tokens` will not fit.
 
@@ -70,9 +71,10 @@ less where its context or provider limit is smaller, so token budgets match
 wherever the limits allow. 65,536 is the Gemini API's output limit, so no larger
 cap can hold across the roster. The limit is, for `hf-*`, the profile's
 `max_model_len` minus an 8,192-token prompt reserve, and for a hosted model, the
-provider's output limit. `hpc/vllm/verify_bundle.py` checks each `hf-*` cap is
-exactly min(65,536, room), and `tests/evals` checks each hosted cap is exactly
-min(65,536, provider limit).
+provider's output limit (for Evren, which publishes none, the `max_model_len`
+its error for an oversized `max_tokens` names). `hpc/vllm/verify_bundle.py`
+checks each `hf-*` cap is exactly min(65,536, room), and `tests/evals` checks
+each hosted cap is exactly min(65,536, provider limit).
 
 The two layers hold different facts and never the same one. The eval config
 says what each request carries, the checkpoint id included; the serving
@@ -82,12 +84,12 @@ that they fit.
 Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
 
 A config is named `<provider>-<model>[-<level>|-nothink]`. The provider is the
-endpoint (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`), the model
-is the checkpoint name after the last `/` in lowercase, the level is the
-reasoning effort the config sends, and `-nothink` marks a config that sends
+endpoint (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`, `evren`),
+the model is the checkpoint name after the last `/` in lowercase, the level is
+the reasoning effort the config sends, and `-nothink` marks a config that sends
 `enable_thinking: false`: `openrouter-claude-sonnet-4.5-high`,
 `openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`,
-`hf-gemma-4-31b-it-nothink`.
+`hf-gemma-4-31b-it-nothink`, `evren-deepseek-v4.1-flash-100`.
 
 An RL fine-tune is named after the model it was trained from, with an RL tag:
 `<provider>-<base model>-rl-<tag>[-<level>]`. Its `model` is the fine-tune's
@@ -104,10 +106,12 @@ A config with `base_model` must take the `-rl-<tag>` form and one without must
 not; `tests/evals` and `hpc/vllm/verify_bundle.py` both check this.
 
 A model that takes a reasoning-effort level has one config per level it accepts
-and no level-less one. The level changes what the model is asked as much as the
-prompt does, so it is part of the name, and therefore of the run directory. A
-model whose only switch is thinking on or off (Qwen3, Qwen3.5, Qwen3.6, Gemma 4
-on vLLM) has a config with thinking on under the bare name, and may have a
+and no level-less one. Where the level is a number in a range, as with
+DeepSeek-V4.1-Flash's 1 to 100, the one config runs at the level the card
+reports its results at. The level changes what the model is asked as much as
+the prompt does, so it is part of the name, and therefore of the run directory.
+A model whose only switch is thinking on or off (Qwen3, Qwen3.5, Qwen3.6, Gemma
+4 on vLLM) has a config with thinking on under the bare name, and may have a
 thinking-off one named `-nothink`, served by the same profile. The two may
 differ in sampling where the card recommends different settings per mode.
 

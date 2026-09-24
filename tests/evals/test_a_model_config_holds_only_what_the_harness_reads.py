@@ -81,6 +81,12 @@ PROVIDER_OUTPUT_LIMIT = {
     # GET https://generativelanguage.googleapis.com/v1beta/models/<model>, read 2026-09-24.
     "gemma-4-26b-a4b-it": 32768,
     "gemma-4-31b-it": 32768,
+    # Evren lists no limits; its 400 on an oversized max_tokens names the served
+    # context ("cannot be greater than max_model_len=max_total_tokens=<n>",
+    # probed 2026-09-24), which bounds the output.
+    "deepseek-v4.1-flash": 1048576,
+    "qwen3.8-flash-next": 262144,
+    "glm-5.3": 524288,
 }
 
 
@@ -115,7 +121,7 @@ def test_a_hosted_config_caps_its_output_at_the_roster_cap_or_its_limit(path):
     assert cap_of(path) == want, f"{path.stem} caps its output at {cap_of(path)}, not {want}"
 
 
-LEVELS = ("minimal", "low", "medium", "high", "xhigh")
+LEVELS = ("minimal", "low", "medium", "high", "xhigh", "max")
 
 
 def test_the_configs_of_one_model_differ_only_in_their_effort_level():
@@ -160,7 +166,8 @@ def test_no_real_model_decodes_greedily(path):
 
 #: The endpoint, read off the key the config sends.
 PROVIDER = {"VLLM_API_KEY": "hf", "OPENROUTER_API_KEY": "openrouter",
-            "OPENAI_API_KEY": "openai", "GEMINI_API_KEY": "aistudio"}
+            "OPENAI_API_KEY": "openai", "GEMINI_API_KEY": "aistudio",
+            "EVREN_API_KEY": "evren"}
 
 #: The stub stands in for an endpoint in tests; it is not a model.
 NAMED = [p for p in CONFIGS if p.stem != "stub"]
@@ -169,6 +176,8 @@ NAMED = [p for p in CONFIGS if p.stem != "stub"]
 def level_sent(cfg: dict):
     """The effort level a config sends, through whichever knob its provider reads.
 
+    `chat_template_kwargs.reasoning_effort` carries a level the endpoint's own
+    field refuses, such as DeepSeek-V4.1's number from 1 to 100.
     `chat_template_kwargs.enable_thinking` is a switch, not a level, and is not
     read here.
     """
@@ -177,7 +186,8 @@ def level_sent(cfg: dict):
     google = (extra.get("extra_body") or {}).get("google") or {}
     return (sampling.get("reasoning_effort")
             or (extra.get("reasoning") or {}).get("effort")
-            or (google.get("thinking_config") or {}).get("thinking_level"))
+            or (google.get("thinking_config") or {}).get("thinking_level")
+            or (extra.get("chat_template_kwargs") or {}).get("reasoning_effort"))
 
 
 def thinking_off(cfg: dict) -> bool:
@@ -251,6 +261,11 @@ def test_the_rule_names_an_rl_fine_tune_after_its_base_model():
     assert not names_fit("gemma4-31b-aistudio", gemma)
     assert not names_fit("aistudio-gemma-4-31b-it", gemma)
 
+    numeric = {"api_key_env": "EVREN_API_KEY", "model": "deepseek-v4.1-flash",
+               "extra_body": {"chat_template_kwargs": {"reasoning_effort": 100}}}
+    assert names_fit("evren-deepseek-v4.1-flash-100", numeric)
+    assert not names_fit("evren-deepseek-v4.1-flash", numeric)
+
 
 def test_nothink_names_a_thinking_switch_turned_off_and_nothing_else():
     """`-nothink` is in the name exactly when `enable_thinking` is false."""
@@ -298,8 +313,10 @@ def test_a_synthetic_rl_config_is_checked_like_any_other(tmp_path):
         test_a_config_is_named_by_its_provider_model_and_level(bad)
 
 
-#: Every level each model's provider accepts, as the configs cite them. A model
-#: not listed sends no level (a thinking on/off switch is not a level).
+#: The levels each model's configs send, as the configs cite them: every level
+#: its provider accepts where those are a few names, and the level the card's
+#: results use where they are a numeric range. A model not listed sends no level
+#: (a thinking on/off switch is not a level).
 VALID_LEVELS = {
     # https://huggingface.co/Qwen/Qwen3.8-27B ("xhigh (default)", "medium", "low")
     "Qwen/Qwen3.8-27B": {"low", "medium", "xhigh"},
@@ -323,6 +340,16 @@ VALID_LEVELS = {
     # enabled, "minimal" for disabled)
     "gemma-4-31b-it": {"minimal", "high"},
     "gemma-4-26b-a4b-it": {"minimal", "high"},
+    # https://huggingface.co/Qwen/Qwen3.8-Flash-Next ("xhigh by default;
+    # supported levels are xhigh, medium, and low")
+    "qwen3.8-flash-next": {"low", "medium", "xhigh"},
+    # https://huggingface.co/zai-org/GLM-5.3 ("accepts three levels: `low`,
+    # `high`, and `max`")
+    "glm-5.3": {"low", "high", "max"},
+    # https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash (effort runs "from 1
+    # to 100", and "All instruct results below use the maximum effort setting
+    # (`reasoning_effort=100`)")
+    "deepseek-v4.1-flash": {100},
 }
 
 

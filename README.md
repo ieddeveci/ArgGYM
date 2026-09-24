@@ -66,9 +66,9 @@ the point of it.
 
 `evals/` is the harness for a real sweep -- resumable, offline scoring, per-task reporting against
 the chance floors -- and it talks to any OpenAI-compatible endpoint. Configs ship for OpenRouter,
-the OpenAI API, Gemini's compatibility endpoint and a local vLLM; anything else with that protocol,
-Vertex and Azure among them, is a config of its own naming a `base_url` and a key variable. It is
-not part of the wheel. `docs/evaluation.md` has it.
+the OpenAI API, Gemini's compatibility endpoint, Evren and a local vLLM; anything else with that
+protocol, Vertex and Azure among them, is a config of its own naming a `base_url` and a key
+variable. It is not part of the wheel. `docs/evaluation.md` has it.
 
 ```
 uv run python -m evals.run   taskset=data/taskset-lite.jsonl model=openrouter-claude-sonnet-4.5-high
