@@ -17,7 +17,8 @@ import subprocess
 from pathlib import Path
 
 import yaml
-from pairing import CONFIGS, EFFORT_LEVELS, PROFILES, ROOT, level_of, profile_of
+from pairing import (CONFIGS, EFFORT_LEVELS, NO_THINKING, PROFILES, ROOT, level_of,
+                     profile_of)
 
 # Tokens held back for the prompt out of a serving profile's max_model_len. Every
 # hf-* eval config's max_tokens must fit in what is left: the check below
@@ -71,7 +72,8 @@ names = set(profiles)
 
 
 # ---------------------------------------------------------------------------
-# Pairing, by stem: <profile>, or <profile>-<level> for a model with levels.
+# Pairing, by stem: <profile>; <profile>-<level> for a model with levels; and
+# <profile> with <profile>-nothink for a model whose thinking is a switch.
 # ---------------------------------------------------------------------------
 
 served: dict[str, list[str]] = {name: [] for name in profiles}
@@ -85,25 +87,32 @@ for stem in sorted(configs):
 for profile, stems in sorted(served.items()):
     if not stems:
         errors.append(f"serving profile without an eval config: {profile}")
-    # Either one level-less config or one per level, never both: a leftover
-    # level-less file would run at whatever effort the template defaults to.
-    if profile in stems and len(stems) > 1:
+    # Either one level-less config (with its thinking-off sibling, if any) or one
+    # per level, never both: a leftover level-less file would run at whatever
+    # effort the template defaults to.
+    levelled = [s for s in stems if level_of(s, names)]
+    if profile in stems and levelled:
         errors.append(f"{profile}: has both a level-less config and "
-                      + ", ".join(s for s in stems if s != profile))
+                      + ", ".join(levelled))
+    nothink = f"{profile}-{NO_THINKING}"
+    if nothink in stems and profile not in stems:
+        errors.append(f"{nothink}: a thinking-off config needs its thinking-on {profile}")
     # One server, one checkpoint: the configs a profile serves must all name the
-    # same model, and per-level configs must differ in nothing but the level.
+    # same model, and per-level configs must differ in nothing but the level. A
+    # thinking-on/off pair may differ in sampling too, since the cards recommend
+    # different sampling per mode.
     models = {configs[s].get("model") for s in stems}
     if len(models) > 1:
         errors.append(f"{profile}: its configs name different models {sorted(map(str, models))}")
-    if len(stems) > 1:
+    if len(levelled) > 1:
         def without_level(cfg: dict) -> dict:
             sampling = {k: v for k, v in (cfg.get("sampling") or {}).items()
                         if k != "reasoning_effort"}
             return {**{k: v for k, v in cfg.items() if k != "name"}, "sampling": sampling}
-        first = without_level(configs[stems[0]])
-        for s in stems[1:]:
+        first = without_level(configs[levelled[0]])
+        for s in levelled[1:]:
             if without_level(configs[s]) != first:
-                errors.append(f"{s}: differs from {stems[0]} in more than the effort level")
+                errors.append(f"{s}: differs from {levelled[0]} in more than the effort level")
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +133,12 @@ for name in sorted(configs):
         effort = (e.get("sampling") or {}).get("reasoning_effort")
         if effort != level:
             errors.append(f"{name}: file names effort {level}, config sends {effort}")
+    # `-nothink` is the name of `enable_thinking: false`, and only of it.
+    thinking = ((e.get("extra_body") or {}).get("chat_template_kwargs") or {}).get(
+        "enable_thinking")
+    if name.endswith(f"-{NO_THINKING}") != (thinking is False):
+        errors.append(f"{name}: enable_thinking {thinking}; a config sends false "
+                      f"exactly when its name ends in -{NO_THINKING}")
 
     sampling = e.get("sampling") or {}
     max_tokens = sampling.get("max_tokens", sampling.get("max_completion_tokens"))
@@ -192,20 +207,30 @@ if m is not None:
 
 # Gemma 4 thinks when the request sets enable_thinking, and the gemma4 parser
 # can only split the thought out if the special tokens that delimit it survive.
-# It has no effort levels to split its config by.
-for profile in ("hf-gemma-4-31b-it", "hf-gemma-4-26b-a4b-it"):
-    if profile not in profiles:
-        continue
+# It has no effort levels to split its config by: a profile serves a thinking-on
+# config and at most a thinking-off one, and the card's one sampling setting "across
+# all use cases" (huggingface.co/google/gemma-4-31B-it) leaves the pair differing
+# in enable_thinking alone.
+for profile in sorted(p for p in profiles if p.startswith("hf-gemma-4-")):
     if profiles[profile].get("reasoning_parser") != "gemma4":
         errors.append(f"{profile}: reasoning parser must be gemma4")
-    if served.get(profile) != [profile]:
-        errors.append(f"{profile}: takes exactly one config, no effort levels")
+    stems = served.get(profile, [])
+    if profile not in stems or not set(stems) <= {profile, f"{profile}-{NO_THINKING}"}:
+        errors.append(f"{profile}: takes a thinking-on config and at most a "
+                      f"-{NO_THINKING} one, no effort levels")
         continue
-    extra = configs[profile].get("extra_body") or {}
-    if (extra.get("chat_template_kwargs") or {}).get("enable_thinking") is not True:
-        errors.append(f"{profile}: expected chat_template_kwargs.enable_thinking true")
-    if extra.get("skip_special_tokens") is not False:
-        errors.append(f"{profile}: skip_special_tokens should be false")
+    for stem in stems:
+        if (configs[stem].get("extra_body") or {}).get("skip_special_tokens") is not False:
+            errors.append(f"{stem}: skip_special_tokens should be false")
+    if len(stems) == 2:
+        def without_switch(cfg: dict) -> dict:
+            extra = dict(cfg.get("extra_body") or {})
+            extra["chat_template_kwargs"] = {
+                k: v for k, v in (extra.get("chat_template_kwargs") or {}).items()
+                if k != "enable_thinking"}
+            return {**{k: v for k, v in cfg.items() if k != "name"}, "extra_body": extra}
+        if without_switch(configs[stems[0]]) != without_switch(configs[stems[1]]):
+            errors.append(f"{profile}: its two configs differ in more than enable_thinking")
 
 # Qwen 3.6/3.8 presence penalties, as each model card recommends for thinking
 # mode on general tasks. The two 3.6 cards differ -- only the 35B-A3B card sets

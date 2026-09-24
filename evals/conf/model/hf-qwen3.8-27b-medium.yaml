@@ -16,8 +16,9 @@
 # Final Response: Set the maximum output length to 131,072 tokens."
 # (https://huggingface.co/Qwen/Qwen3.8-27B). Both exceed what the served
 # context leaves, so the context rule decides.
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,428
-# tokens.
+# Longest prompt in data/taskset.jsonl with this tokenizer: 5,374 tokens at
+# xhigh, 5,336 at medium, 5,362 at low (the template writes the level into the
+# prompt).
 name: hf-qwen3.8-27b-medium
 model: Qwen/Qwen3.8-27B
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}

@@ -3,11 +3,14 @@
 
 `hpc/vllm/models/<profile>.yaml` says how to serve a checkpoint;
 `evals/conf/model/<config>.yaml` says what each request carries, including the
-checkpoint id. A config is served by the profile of the same stem, or, for a
+checkpoint id. A config is served by the profile of the same stem; for a
 model with reasoning-effort levels, by the profile its `<profile>-<level>` stem
-names. Neither file names the other.
+names; and for a model whose thinking is a switch, the thinking-off config
+`<profile>-nothink` by the profile that also serves the thinking-on config
+`<profile>`. Neither file names the other.
 
     python3 hpc/vllm/pairing.py hf-qwen3.8-27b-medium   # prints hf-qwen3.8-27b
+    python3 hpc/vllm/pairing.py hf-qwen3.5-9b-nothink   # prints hf-qwen3.5-9b
 
 Standard library only, and Python 3.6 syntax: `submit_truba.sh` runs this on the
 login node, whose system python3 may be older than the image's.
@@ -22,6 +25,10 @@ CONFIGS = ROOT / "evals" / "conf" / "model"
 
 #: Every level any config names. Which of them a model accepts is in its configs.
 EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh")
+
+#: The suffix of a config that sends `chat_template_kwargs.enable_thinking:
+#: false`. A switch is not a level: the thinking-on config carries no suffix.
+NO_THINKING = "nothink"
 
 
 def profile_names() -> Set[str]:
@@ -42,7 +49,12 @@ def profile_of(config: str, profiles: Optional[Set[str]] = None) -> Optional[str
     if config in profiles:
         return config
     level = level_of(config, profiles)
-    return config[: -len(level) - 1] if level else None
+    if level:
+        return config[: -len(level) - 1]
+    base = config[: -len(NO_THINKING) - 1]
+    if config.endswith(f"-{NO_THINKING}") and base in profiles:
+        return base
+    return None
 
 
 def configs_of(profile: str) -> List[str]:
