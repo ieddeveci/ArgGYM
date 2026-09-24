@@ -6,7 +6,7 @@ help:
 	@echo 'make test-all  run the test suite including the slow end-to-end grid'
 	@echo 'make freeze    freeze the standard taskset into data/taskset.jsonl'
 	@echo 'make freeze-lite  freeze the two-seed lite taskset into data/taskset-lite.jsonl'
-	@echo 'make eval      run + score one model (MODEL=..., TEMPLATE=..., ELICITATION=...)'
+	@echo 'make eval      run + score one model on the lite taskset (MODEL=..., TEMPLATE=..., ELICITATION=...)'
 	@echo 'make inspect   start the inspector on http://127.0.0.1:5000'
 	@echo 'make clean     remove build artefacts and caches (leaves data/)'
 

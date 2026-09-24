@@ -5,7 +5,10 @@ writes what came back. Scoring is `score.py`, offline, from these files -- so a
 parser fix, a template change or a scorer bug costs a rerun of a few seconds
 rather than the hours of inference that produced the completions.
 
-    uv run python -m evals.run taskset=data/taskset.jsonl model=openai-gpt-5-medium
+    uv run python -m evals.run taskset=data/taskset-lite.jsonl model=openai-gpt-5-medium
+
+Evals run on the lite taskset, the config default: 120 items per task are enough
+for a per-task ranking, at a fifth of the standard taskset's cost.
     VLLM_BASE_URL=http://localhost:8000/v1 uv run python -m evals.run model=hf-qwen3.8-27b-medium filter.levels=[3,9] filter.limit=20
 """
 from __future__ import annotations
