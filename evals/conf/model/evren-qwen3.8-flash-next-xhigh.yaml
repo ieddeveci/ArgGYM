@@ -1,0 +1,54 @@
+# Qwen3.8-Flash-Next through Evren, an OpenAI-compatible endpoint with vLLM
+# behind it, under the model id qwen3.8-flash-next. Evren returns the reasoning
+# in `message.reasoning`.
+#
+# Sampling: the card's "Thinking Mode": temperature=1.0, top_p=0.95,
+# top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0
+# (https://huggingface.co/Qwen/Qwen3.8-Flash-Next).
+#
+# reasoning_effort: xhigh. The card sends it as the top-level `reasoning_effort`,
+# "xhigh by default; supported levels are xhigh, medium, and low"
+# (https://huggingface.co/Qwen/Qwen3.8-Flash-Next), and the chat template
+# answers any other value with an error. One config per level:
+# evren-qwen3.8-flash-next-low, evren-qwen3.8-flash-next-medium,
+# evren-qwen3.8-flash-next-xhigh.
+# The template writes an instruction into the prompt for xhigh and for low and
+# none for medium (chat_template.jinja, lines 49-55, in the same repo), so
+# medium is the model uninstructed. Through the harness (template xml_tags,
+# elicitation cot, this config's sampling and cap), 5 samples each on
+# defeat_diagnosis/L8/last_link_elitist/s0 gave median reasoning tokens of
+# 8,309 at low, 12,114 at medium and 38,781 at xhigh, but the low and medium
+# samples overlap (7,662-19,192 and 5,131-21,578), so these five do not
+# separate those two levels (probed 2026-09-24).
+#
+# Limits: Evren serves qwen3.8-flash-next with max_model_len 262,144, from the
+# 400 it returns for an oversized max_tokens ("cannot be greater than
+# max_model_len=max_total_tokens=262144", probed 2026-09-24); its /v1/models
+# lists no limits. max_model_len bounds prompt and output together, and leaves
+# far more than 65,536 tokens of output room after any taskset prompt, so the
+# cap is 65,536. Every config caps its output at 65,536 tokens at most, less
+# where its context or provider limit is smaller, so token budgets match
+# wherever the limits allow. 65,536 is the Gemini API's output limit, thinking
+# included, so no larger cap can hold across the roster. The card recommends:
+# "Reasoning Content: Set the maximum output length to 262,144 tokens. Final
+# Response: Set the maximum output length to 131,072 tokens."
+#
+# Keep concurrency low. With 16 requests in flight across
+# deepseek-v4.1-flash and qwen3.8-flash-next, 18 of 30 failed all three
+# attempts with a 503 ("Model şu anda dolu", the model is busy); with 5 in
+# flight on one model at a time, none of 2 x 15 did (probed 2026-09-24). The
+# default generation.concurrency is 16.
+name: evren-qwen3.8-flash-next-xhigh
+model: qwen3.8-flash-next
+base_url: https://evren-llmapi.ssyz.org.tr/v1
+api_key_env: EVREN_API_KEY
+sampling:
+  max_tokens: 65536
+  temperature: 1.0
+  top_p: 0.95
+  presence_penalty: 0.0
+  reasoning_effort: xhigh
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  repetition_penalty: 1.0

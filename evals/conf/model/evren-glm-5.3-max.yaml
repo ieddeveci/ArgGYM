@@ -1,0 +1,46 @@
+# GLM-5.3 through Evren, an OpenAI-compatible endpoint with vLLM behind it,
+# under the model id glm-5.3. Evren returns the reasoning in `message.reasoning`.
+#
+# Weights: a chat response from Evren names the served model zai/glm-5.3-fp8
+# (read 2026-09-24). The official zai-org/GLM-5.3 repo is itself FP8
+# (config.json: quantization_config.quant_method "fp8"); the BF16 weights are
+# a separate repo (https://huggingface.co/zai-org/GLM-5.3-BF16). Beyond that
+# served name, Evren does not say which weights it loads.
+#
+# Sampling: temperature 1.0 and top_p 0.95, from the repo's generation config
+# (https://huggingface.co/zai-org/GLM-5.3/blob/main/generation_config.json).
+# The card gives no general recommendation, only per-benchmark settings in its
+# footnotes: temperature 1.0 in eight of nine, top_p 1.0 in seven and 0.95 in
+# two (HLE w/ tools, SWE-Marathon). Neither sets another sampling parameter, so
+# none is sent.
+#
+# reasoning_effort: max. The card: "the `reasoning_effort` parameter, which
+# accepts three levels: `low`, `high`, and `max`. It defaults to `max` if not
+# passed (or if set to any other value)" (https://huggingface.co/zai-org/GLM-5.3).
+# Evren takes it as the top-level `reasoning_effort`. One config per level:
+# evren-glm-5.3-low, evren-glm-5.3-high, evren-glm-5.3-max.
+#
+# Limits: Evren serves glm-5.3 with max_model_len 524,288, from the 400 it
+# returns for an oversized max_tokens ("cannot be greater than
+# max_model_len=max_total_tokens=524288", probed 2026-09-24); its /v1/models
+# lists no limits. max_model_len bounds prompt and output together, and leaves
+# far more than 65,536 tokens of output room after any taskset prompt, so the
+# cap is 65,536. Every config caps its output at 65,536 tokens at most, less
+# where its context or provider limit is smaller, so token budgets match
+# wherever the limits allow. 65,536 is the Gemini API's output limit, thinking
+# included, so no larger cap can hold across the roster.
+#
+# Keep concurrency low. With 16 requests in flight across
+# deepseek-v4.1-flash and qwen3.8-flash-next, 18 of 30 failed all three
+# attempts with a 503 ("Model şu anda dolu", the model is busy); with 5 in
+# flight on one model at a time, none of 2 x 15 did (probed 2026-09-24). The
+# default generation.concurrency is 16.
+name: evren-glm-5.3-max
+model: glm-5.3
+base_url: https://evren-llmapi.ssyz.org.tr/v1
+api_key_env: EVREN_API_KEY
+sampling:
+  max_tokens: 65536
+  temperature: 1.0
+  top_p: 0.95
+  reasoning_effort: max

@@ -26,8 +26,8 @@ costs seconds instead of a sweep.
 
 The harness speaks OpenAI-compatible HTTP and nothing else. Every provider we
 use serves that: OpenRouter, OpenAI, Gemini's compatibility endpoint, Vertex's,
-Azure's, Anthropic's shim, and any local vLLM. Switching between them is a
-config file and an environment variable.
+Azure's, Anthropic's shim, Evren, and any local vLLM. Switching between them is
+a config file and an environment variable.
 
 ```yaml
 # evals/conf/model/openrouter-claude-sonnet-4.5-high.yaml
@@ -59,9 +59,10 @@ OpenRouter's `reasoning` and `provider`, vLLM's `chat_template_kwargs`, Gemini's
 mean this harness knowing every provider, which is the thing we are avoiding.
 
 Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini and
-Gemma on AI Studio, and every model the HPC lane serves on vLLM (`hf-*`), plus a
-stub for running the pipeline without spending a token. Adding another is
-copying one. An `hf-*` config also runs against a vLLM you started yourself:
+Gemma on AI Studio, DeepSeek-V4.1-Flash, Qwen3.8-Flash-Next and GLM-5.3 on
+Evren (a hosted vLLM), and every model the HPC lane serves on vLLM (`hf-*`),
+plus a stub for running the pipeline without spending a token. Adding another
+is copying one. An `hf-*` config also runs against a vLLM you started yourself:
 set `VLLM_BASE_URL`, and serve with the `max_model_len` of the profile of the
 same name under `hpc/vllm/models/`, or the config's `max_tokens` will not fit.
 
@@ -72,7 +73,11 @@ cap can hold across the roster. The limit is, for `hf-*`, the profile's
 `max_model_len` minus an 8,192-token prompt reserve, and for a hosted model, the
 provider's output limit. `hpc/vllm/verify_bundle.py` checks each `hf-*` cap is
 exactly min(65,536, room), and `tests/evals` checks each hosted cap is exactly
-min(65,536, provider limit).
+min(65,536, provider limit). Evren publishes no output limit; the only bound
+it states is the served context its error for an oversized `max_tokens` names,
+which covers prompt and output together. The smallest, 262,144 tokens, leaves
+room for 65,536 of output above any taskset prompt, so every Evren cap is
+65,536.
 
 The two layers hold different facts and never the same one. The eval config
 says what each request carries, the checkpoint id included; the serving
@@ -82,12 +87,12 @@ that they fit.
 Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
 
 A config is named `<provider>-<model>[-<level>|-nothink]`. The provider is the
-endpoint (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`), the model
-is the checkpoint name after the last `/` in lowercase, the level is the
-reasoning effort the config sends, and `-nothink` marks a config that sends
+endpoint (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`, `evren`),
+the model is the checkpoint name after the last `/` in lowercase, the level is
+the reasoning effort the config sends, and `-nothink` marks a config that sends
 `enable_thinking: false`: `openrouter-claude-sonnet-4.5-high`,
 `openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`,
-`hf-gemma-4-31b-it-nothink`.
+`hf-gemma-4-31b-it-nothink`, `evren-glm-5.3-max`.
 
 An RL fine-tune is named after the model it was trained from, with an RL tag:
 `<provider>-<base model>-rl-<tag>[-<level>]`. Its `model` is the fine-tune's
