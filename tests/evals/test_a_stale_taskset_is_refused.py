@@ -49,8 +49,17 @@ def test_a_stale_version_is_refused_before_any_call(tmp_path, rows, taskset_file
         execute(cfg_for(stale, p.url), os.fspath(tmp_path / "run"))
     msg = str(e.value)
     assert f"{field} {installed - 1} (installed: {installed})" in msg
-    assert stale in msg and "make freeze" in msg
+    assert stale in msg and "make freeze" in msg and "run_id=" in msg
     assert p.requests == []
+
+
+def test_a_file_newer_than_the_checkout_asks_for_an_update(tmp_path, rows,
+                                                           taskset_file, provider):
+    p = provider(answering(rows))
+    newer = with_versions(taskset_file, os.fspath(tmp_path / "newer.jsonl"),
+                          prompt_version=PROMPT_VERSION + 1)
+    with pytest.raises(SystemExit, match="update this checkout"):
+        execute(cfg_for(newer, p.url), os.fspath(tmp_path / "run"))
 
 
 def test_a_manifest_without_versions_is_warned_about(tmp_path, rows, taskset_file,
@@ -75,12 +84,25 @@ def test_a_file_with_no_manifest_is_refused(tmp_path, rows, taskset_file, provid
 
 
 def test_an_old_file_runs_on_request_and_rescores_under_the_installed_scorer(
-        tmp_path, rows, taskset_file, provider):
+        tmp_path, rows, taskset_file, provider, capsys):
     p = provider(answering(rows))
     stale = with_versions(taskset_file, os.fspath(tmp_path / "stale.jsonl"),
                           prompt_version=PROMPT_VERSION - 1)
     run_dir = os.fspath(tmp_path / "run")
-    execute(cfg_for(stale, p.url, allow_stale_taskset="true"), run_dir)
+    run = execute(cfg_for(stale, p.url, allow_stale_taskset="true"), run_dir)
+    assert "running anyway" in capsys.readouterr().err
+    assert run["allow_stale_taskset"] is True
+    assert (run["prompt_version"], run["scoring_version"]) == (PROMPT_VERSION,
+                                                               SCORING_VERSION)
     meta = score_run(run_dir)["_meta"]
     assert meta["scoring_version"] == SCORING_VERSION
     assert meta["taskset_versions"]["prompt_version"] == PROMPT_VERSION - 1
+
+
+def test_a_run_made_under_the_override_does_not_resume_without_it(
+        tmp_path, rows, taskset_file, provider):
+    p = provider(answering(rows))
+    run_dir = os.fspath(tmp_path / "run")
+    execute(cfg_for(taskset_file, p.url, allow_stale_taskset="true"), run_dir)
+    with pytest.raises(SystemExit, match="allow_stale_taskset"):
+        execute(cfg_for(taskset_file, p.url), run_dir)

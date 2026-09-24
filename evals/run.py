@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
+from arggym.core.freeze import PROMPT_VERSION, SCORING_VERSION
 from evals import artifacts, taskset, values
 from evals.client import Endpoint
 from evals.prompt import Elicitation
@@ -76,8 +77,12 @@ def refuse_a_changed_run(run_dir: str, meta: Dict[str, Any]) -> None:
     # leaving the name alone, and a second invocation under a narrower filter
     # leaves a manifest describing two items over a directory holding twelve.
     changed = [k for k in ("taskset_hash", "template", "elicitation",
-                           "elicitation_config", "filter")
+                           "elicitation_config", "filter", "prompt_version",
+                           "scoring_version")
                if before.get(k) != meta.get(k)]
+    # A run.json written before the override existed ran without it.
+    if before.get("allow_stale_taskset", False) != meta.get("allow_stale_taskset"):
+        changed.append("allow_stale_taskset")
     # Sampling too, not just the model. Temperature and the token cap change
     # what the model was asked as surely as the prompt does -- on this box a
     # 24576-token cap scored eight of twelve tasks at exactly 0.000 and a larger
@@ -110,8 +115,6 @@ def refuse_a_stale_taskset(path: str, ts_manifest: Dict[str, Any],
     ties a run to its questions. `allow` is for a deliberate rerun of an old
     file; `run.json` records the file's versions either way.
     """
-    from arggym.core.freeze import PROMPT_VERSION, SCORING_VERSION
-
     versions = ts_manifest.get("versions") or {}
     installed = {"prompt_version": PROMPT_VERSION, "scoring_version": SCORING_VERSION}
     absent = [k for k in installed if versions.get(k) is None]
@@ -123,10 +126,16 @@ def refuse_a_stale_taskset(path: str, ts_manifest: Dict[str, Any],
              if versions.get(k) is not None and versions[k] != v]
     if not stale:
         return
-    msg = (f"{path} was frozen under {' and '.join(stale)}. Its questions do not "
-           f"state the rules the installed scorer enforces, so every score would "
-           f"be measured against rules the model was never told. Re-freeze it "
-           f"with `make freeze` (or `arggym freeze -c <spec> -o {path}`)")
+    newer = any(versions[k] > v for k, v in installed.items()
+                if versions.get(k) is not None and versions[k] != v)
+    fix = ("update this checkout to the arggym that froze it" if newer else
+           f"re-freeze it with `make freeze` (or `arggym freeze -c <spec> -o "
+           f"{path}`) and give the run a new run_id=, since a directory started "
+           f"on the old file will not resume onto the new one")
+    msg = (f"{path} was frozen under {' and '.join(stale)}. Its questions and "
+           f"the installed scorer disagree about the rules, so every score would "
+           f"be measured against rules the model was never told. To fix it, "
+           f"{fix}")
     if allow:
         print(f"warning: {msg}; running anyway because allow_stale_taskset=true.",
               file=sys.stderr)
@@ -184,6 +193,11 @@ def manifest(cfg: DictConfig, solver: ChatSolver, ts_manifest: Dict[str, Any],
         # does not match the taskset it is handed.
         "taskset_hash": ts_manifest.get("taskset_hash"),
         "taskset_versions": ts_manifest.get("versions", {}),
+        # The installed rules, which differ from `taskset_versions` only under
+        # the override, and whether it was set.
+        "prompt_version": PROMPT_VERSION,
+        "scoring_version": SCORING_VERSION,
+        "allow_stale_taskset": bool(cfg.get("allow_stale_taskset", False)),
         "endpoint": solver.client.endpoint.redacted(),
         # The checkpoint an RL fine-tune was trained from. `endpoint.model` is
         # the fine-tune's own repo, the one served; this is only written down,

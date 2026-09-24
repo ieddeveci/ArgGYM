@@ -385,7 +385,8 @@ right is worse than an error:
   not state the rules the scorer enforces; re-freeze with `make freeze`, or pass
   `allow_stale_taskset=true` to rerun an old file on purpose. `score.py` does not
   refuse, since re-scoring old generations with a fixed scorer is legitimate, and
-  it records its own `scoring_version` in `metrics.json`.
+  it records its own `scoring_version` in `metrics.json`; the report says when
+  pooled runs were scored under different ones.
 - **`score.py` refuses a taskset whose hash is not the one the run recorded.**
   Scoring answers against questions they were not asked is silent.
 - **A directory will not take a second configuration.** Resume keys on the row

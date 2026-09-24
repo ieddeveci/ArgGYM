@@ -169,6 +169,18 @@ def test_runs_on_different_prompt_versions_are_called_out(tmp_path):
     assert "different prompt or scoring versions" in text
 
 
+def test_runs_scored_under_different_scorers_are_called_out(tmp_path):
+    a, b = a_metrics("a"), a_metrics("b")
+    a["_meta"]["scoring_version"], b["_meta"]["scoring_version"] = 5, 6
+    assert "different scoring versions (5, 6)" in render(written(tmp_path, a, b))
+
+
+def test_runs_scored_under_one_scorer_are_not_called_out(tmp_path):
+    a, b = a_metrics("a"), a_metrics("b")
+    a["_meta"]["scoring_version"] = b["_meta"]["scoring_version"] = 6
+    assert "different scoring versions" not in render(written(tmp_path, a, b))
+
+
 def test_the_csv_carries_every_grouping(tmp_path):
     m = a_metrics("model-a")
     m["by_task_level"] = {"status_query|L3": dict(m["by_task"]["status_query"])}
