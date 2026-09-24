@@ -14,7 +14,8 @@ cd "$ARGGYM_ROOT"
 # The argument is the eval config to run, a stem under evals/conf/model/. For
 # most models that is also the serving profile's name (hf-qwen3-8b). A model
 # with reasoning-effort levels has one config per level and no level-less one,
-# so it is named with its level (hf-qwen3.8-27b-medium). pairing.py finds the
+# so it is named with its level (hf-qwen3.8-27b-medium); a thinking-off config
+# is named -nothink (hf-qwen3.5-9b-nothink). pairing.py finds the
 # profile; it is the one place that rule is written.
 CONFIG="${1:?usage: $0 EVAL_CONFIG   (e.g. hf-qwen3-8b, hf-qwen3.8-27b-medium)}"
 PROFILE="$(python3 "$SCRIPT_DIR/pairing.py" "$CONFIG")" || exit 2

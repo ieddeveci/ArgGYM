@@ -1,0 +1,21 @@
+dtype: bfloat16
+# Context: 262,144, from config.json (text_config.max_position_embeddings)
+# and the card (https://huggingface.co/Qwen/Qwen3.5-27B/blob/main/README.md#L61).
+max_model_len: 262144
+gpu_memory_utilization: 0.9
+# Parser and --language-model-only as the card serves it
+# (https://huggingface.co/Qwen/Qwen3.5-27B/blob/main/README.md#L972).
+reasoning_parser: qwen3
+trust_remote_code: false
+extra_args:
+- --language-model-only
+# Sizing: 27,781,427,952 parameters at BF16 are 55.6 GB of weights, vision tower
+# included, which --language-model-only does not load. Full-attention KV is
+# 16 layers x 4 KV heads x 256 dims x K,V x 2 B = 65,536 B per token.
+# The other layers are linear attention, with a fixed state per request.
+# The harness's 16 concurrent requests at the full 81,920 + 8,192
+# tokens need 94.5 GB of KV.
+# H100 x2: 2 x 80 GB x 0.9 - 55.6 = 88.4 GB of KV pool, room for 14 of the 16 at full length.
+# H200 x1: 1 x 141 GB x 0.9 - 55.6 = 71.3 GB of KV pool, room for 12 of the 16 at full length.
+tensor_parallel_size_h100: 2
+tensor_parallel_size_h200: 1

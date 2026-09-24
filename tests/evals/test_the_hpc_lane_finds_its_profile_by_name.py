@@ -20,13 +20,16 @@ sys.path.insert(0, str(HPC))
 
 from pairing import level_of, profile_of  # noqa: E402
 
-PROFILES = {"hf-qwen3-8b", "hf-qwen3.8-27b", "hf-gpt-oss-20b"}
+PROFILES = {"hf-qwen3-8b", "hf-qwen3.8-27b", "hf-gpt-oss-20b", "hf-qwen3.5-9b"}
 
 
 @pytest.mark.parametrize("config, profile, level", [
     ("hf-qwen3-8b", "hf-qwen3-8b", None),
     ("hf-qwen3.8-27b-xhigh", "hf-qwen3.8-27b", "xhigh"),
     ("hf-gpt-oss-20b-low", "hf-gpt-oss-20b", "low"),
+    # A thinking-off config is served by its thinking-on sibling's profile.
+    ("hf-qwen3.5-9b-nothink", "hf-qwen3.5-9b", None),
+    ("hf-unknown-nothink", None, None),
     # A level suffix only counts when what is left is a profile.
     ("hf-qwen3-8b-turbo", None, None),
     ("hf-unknown-medium", None, None),

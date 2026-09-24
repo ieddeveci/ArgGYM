@@ -1,0 +1,16 @@
+dtype: bfloat16
+# Context: 131,072, from config.json (text_config.max_position_embeddings) and
+# the card's "128K tokens" (https://huggingface.co/google/gemma-4-E4B-it/blob/main/README.md#L58).
+max_model_len: 131072
+gpu_memory_utilization: 0.9
+reasoning_parser: gemma4
+trust_remote_code: false
+extra_args:
+- --limit-mm-per-prompt
+- '{"image":0,"audio":0}'
+# Sizing: 7,996,156,490 parameters (per-layer embeddings included) at BF16 are
+# 16.0 GB, leaving 56.0 GB of KV pool on one H100 at 0.9. Most layers
+# are 512-token sliding-window attention, so the KV a request holds grows with
+# its length only in the 7 full-attention layers.
+tensor_parallel_size_h100: 1
+tensor_parallel_size_h200: 1

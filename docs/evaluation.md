@@ -68,11 +68,13 @@ vLLM flags). They pair by file stem, and `hpc/vllm/verify_bundle.py` checks
 that they fit.
 Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
 
-A config is named `<provider>-<model>[-<level>]`. The provider is the endpoint
-(`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`), the model is the
-checkpoint name after the last `/` in lowercase, and the level is the reasoning
-effort the config sends: `openrouter-claude-sonnet-4.5-high`,
-`openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`.
+A config is named `<provider>-<model>[-<level>|-nothink]`. The provider is the
+endpoint (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`), the model
+is the checkpoint name after the last `/` in lowercase, the level is the
+reasoning effort the config sends, and `-nothink` marks a config that sends
+`enable_thinking: false`: `openrouter-claude-sonnet-4.5-high`,
+`openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`,
+`hf-gemma-4-31b-it-nothink`.
 
 An RL fine-tune is named after the model it was trained from, with an RL tag:
 `<provider>-<base model>-rl-<tag>[-<level>]`. Its `model` is the fine-tune's
@@ -91,8 +93,10 @@ not; `tests/evals` and `hpc/vllm/verify_bundle.py` both check this.
 A model that takes a reasoning-effort level has one config per level it accepts
 and no level-less one. The level changes what the model is asked as much as the
 prompt does, so it is part of the name, and therefore of the run directory. A
-model whose only switch is thinking on or off (Qwen3, Qwen3.6, Gemma 4 on vLLM)
-has one config, with thinking on.
+model whose only switch is thinking on or off (Qwen3, Qwen3.5, Qwen3.6, Gemma 4
+on vLLM) has a config with thinking on under the bare name, and may have a
+thinking-off one named `-nothink`, served by the same profile. The two may
+differ in sampling where the card recommends different settings per mode.
 
 Every config runs under the `cot` elicitation, which asks the model to reason
 before it answers. `elicitation=none` sends the question with nothing added; it
@@ -122,6 +126,25 @@ Unknown sampling keys are refused rather than forwarded. A run that silently
 dropped one would look configured, record it in the manifest, and generate as if
 it were never set: a whole sweep on the previous harness was scored under a
 `repetition_penalty` that never reached the server.
+
+## Sweep roster
+
+The models the next sweep runs, in priority order. Every vLLM model is served
+from the vendor's official checkpoint in the precision the vendor published it:
+BF16 for all of them except gpt-oss, which ships MXFP4 expert weights and is
+served as shipped. Nothing is quantized here.
+
+1. Qwen3.8-27B: `hf-qwen3.8-27b-{low,medium,xhigh}`
+2. Qwen3.5, thinking on and off: `hf-qwen3.5-{0.8b,2b,4b,9b,27b,35b-a3b,122b-a10b}`
+   and each with `-nothink`
+3. Gemma 4 on vLLM, thinking on and off:
+   `hf-gemma-4-{e2b,e4b,26b-a4b,31b}-it` and each with `-nothink`
+4. Gemini API: `aistudio-gemini-3.5-flash-lite-{minimal,low,medium,high}`,
+   `aistudio-gemini-3.8-flash-{low,medium,high}`
+5. gpt-oss: `hf-gpt-oss-{20b,120b}-{low,medium,high}`
+
+`make eval MODEL=<config>` runs a Gemini config;
+`GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh <config>` runs a vLLM one.
 
 ## Writing your own solver
 

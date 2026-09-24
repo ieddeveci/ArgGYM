@@ -94,8 +94,8 @@ def test_no_real_model_decodes_greedily(path):
 
 
 # ---------------------------------------------------------------------------
-# One naming rule: `<provider>-<model>[-<level>]`, derived from fields the config
-# already holds, so no name is chosen by hand (#179).
+# One naming rule: `<provider>-<model>[-<level>|-nothink]`, derived from fields
+# the config already holds, so no name is chosen by hand (#179).
 # ---------------------------------------------------------------------------
 
 #: The endpoint, read off the key the config sends.
@@ -120,6 +120,12 @@ def level_sent(cfg: dict):
             or (google.get("thinking_config") or {}).get("thinking_level"))
 
 
+def thinking_off(cfg: dict) -> bool:
+    """Whether the config turns a thinking switch off, which its name says as `-nothink`."""
+    kwargs = (cfg.get("extra_body") or {}).get("chat_template_kwargs") or {}
+    return kwargs.get("enable_thinking") is False
+
+
 def slug(model_id: str) -> str:
     """The checkpoint name after the last `/`, lowercased."""
     return model_id.rsplit("/", 1)[-1].lower()
@@ -128,12 +134,13 @@ def slug(model_id: str) -> str:
 def expected_name(cfg: dict) -> str:
     """The name the rule gives a config, with `<tag>` standing for an RL tag.
 
-    `<provider>-<model>[-<level>]`, or for an RL fine-tune, which declares the
-    checkpoint it was trained from in `base_model` and sends its own repo as
-    `model`, `<provider>-<base model>-rl-<tag>[-<level>]`.
+    `<provider>-<model>[-<level>|-nothink]`, or for an RL fine-tune, which
+    declares the checkpoint it was trained from in `base_model` and sends its own
+    repo as `model`, `<provider>-<base model>-rl-<tag>[-<level>|-nothink]`. A
+    thinking switch left on adds nothing to the name.
     """
     level = level_sent(cfg)
-    tail = f"-{level}" if level else ""
+    tail = f"-{level}" if level else ("-nothink" if thinking_off(cfg) else "")
     provider = PROVIDER[cfg["api_key_env"]]
     if cfg.get("base_model"):
         return f"{provider}-{slug(cfg['base_model'])}-rl-<tag>{tail}"
@@ -183,6 +190,36 @@ def test_the_rule_names_an_rl_fine_tune_after_its_base_model():
     assert names_fit("aistudio-gemma-4-31b-it-high", gemma)
     assert not names_fit("gemma4-31b-aistudio", gemma)
     assert not names_fit("aistudio-gemma-4-31b-it", gemma)
+
+
+def test_nothink_names_a_thinking_switch_turned_off_and_nothing_else():
+    """`-nothink` is in the name exactly when `enable_thinking` is false."""
+    def cfg(**kwargs):
+        return {"api_key_env": "VLLM_API_KEY", "model": "Qwen/Qwen3.5-9B",
+                "extra_body": {"chat_template_kwargs": kwargs}}
+    assert names_fit("hf-qwen3.5-9b-nothink", cfg(enable_thinking=False))
+    assert not names_fit("hf-qwen3.5-9b", cfg(enable_thinking=False))
+    assert names_fit("hf-qwen3.5-9b", cfg(enable_thinking=True))
+    assert not names_fit("hf-qwen3.5-9b-nothink", cfg(enable_thinking=True))
+    # Left unset, the template's own default decides, which the name cannot say.
+    assert not names_fit("hf-qwen3.5-9b-nothink", cfg())
+
+
+def test_the_thinking_on_half_of_a_pair_sends_the_switch():
+    """A bare name whose `-nothink` sibling exists must send `enable_thinking: true`.
+
+    Left unset, the template decides, and the Gemma 4 and Qwen3.5-0.8B/2B
+    templates think only when the switch is sent true: the pair would run
+    thinking off twice.
+    """
+    stems = {p.stem: p for p in CONFIGS}
+    pairs = [s[: -len("-nothink")] for s in stems if s.endswith("-nothink")]
+    assert pairs, "no thinking-off configs found"
+    for bare in pairs:
+        assert bare in stems, f"{bare}-nothink has no thinking-on sibling"
+        cfg = yaml.safe_load(stems[bare].read_text())
+        kwargs = (cfg.get("extra_body") or {}).get("chat_template_kwargs") or {}
+        assert kwargs.get("enable_thinking") is True, f"{bare} must send enable_thinking true"
 
 
 def test_a_synthetic_rl_config_is_checked_like_any_other(tmp_path):

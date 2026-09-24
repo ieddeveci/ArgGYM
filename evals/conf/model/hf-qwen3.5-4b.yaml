@@ -1,0 +1,35 @@
+# Qwen/Qwen3.5-4B on vLLM, thinking on, served by
+# hpc/vllm/models/hf-qwen3.5-4b.yaml. Its thinking-off sibling is hf-qwen3.5-4b-nothink.
+#
+# Sampling: the card's "Thinking mode for general tasks":
+# temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5,
+# repetition_penalty=1.0 (https://huggingface.co/Qwen/Qwen3.5-4B/blob/main/README.md#L835).
+#
+# Thinking on: enable_thinking true. Thinking is a switch, not a
+# level: the chat template reads enable_thinking and no reasoning_effort
+# (https://huggingface.co/Qwen/Qwen3.5-4B/blob/main/chat_template.jinja).
+#
+# Cap: the longest output the card recommends, 81,920:
+# "For benchmarking on highly complex problems, such as those found in math
+# and programming competitions, we suggest setting the max output length to
+# 81,920 tokens." (https://huggingface.co/Qwen/Qwen3.5-4B/blob/main/README.md#L1147).
+# It fits within the serving profile's max_model_len minus the 8,192-token prompt
+# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
+# Longest prompt in data/taskset.jsonl with this tokenizer: 5,336
+# tokens.
+name: hf-qwen3.5-4b
+model: Qwen/Qwen3.5-4B
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 81920
+  temperature: 1.0
+  top_p: 0.95
+  presence_penalty: 1.5
+  seed: 0
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  repetition_penalty: 1.0
+  chat_template_kwargs:
+    enable_thinking: true

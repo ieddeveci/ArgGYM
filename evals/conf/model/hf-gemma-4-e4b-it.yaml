@@ -1,15 +1,15 @@
-# google/gemma-4-31B-it on vLLM, thinking on, served by
-# hpc/vllm/models/hf-gemma-4-31b-it.yaml. Its thinking-off sibling is hf-gemma-4-31b-it-nothink.
+# google/gemma-4-E4B-it on vLLM, thinking on, served by
+# hpc/vllm/models/hf-gemma-4-e4b-it.yaml. Its thinking-off sibling is hf-gemma-4-e4b-it-nothink.
 #
 # Sampling: the card's "standardized sampling configuration across all use
 # cases: temperature=1.0 top_p=0.95 top_k=64"
-# (https://huggingface.co/google/gemma-4-31B-it/blob/main/README.md#L364).
+# (https://huggingface.co/google/gemma-4-E4B-it/blob/main/README.md#L365).
 # One setting for both modes, so this config and its sibling differ only in
 # enable_thinking. The card sets no presence penalty, so none is sent.
 #
 # Thinking on: enable_thinking true, the chat template's switch; the template
 # reads no reasoning_effort, so there are no levels
-# (https://huggingface.co/google/gemma-4-31B-it/blob/main/chat_template.jinja).
+# (https://huggingface.co/google/gemma-4-E4B-it/blob/main/chat_template.jinja).
 # skip_special_tokens stays false so the gemma4 reasoning parser can see
 # the channel markers that delimit the thought.
 #
@@ -20,12 +20,12 @@
 # reserve (hpc/vllm/verify_bundle.py checks the cap fits).
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,877
 # tokens.
-name: hf-gemma-4-31b-it
-model: google/gemma-4-31B-it
+name: hf-gemma-4-e4b-it
+model: google/gemma-4-E4B-it
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 253952
+  max_tokens: 122880
   temperature: 1.0
   top_p: 0.95
   seed: 0
