@@ -5,7 +5,11 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
-/data/
+# Frozen tasksets are committed; anything else a run or a local freeze writes
+# under data/ stays local.
+/data/*
+!/data/taskset.jsonl
+!/data/taskset-lite.jsonl
 *.egg-info/
 
 .claude/
