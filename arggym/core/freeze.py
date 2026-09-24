@@ -79,14 +79,15 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: because the retry loop accepts a different candidate for that seed. No other task
 #: moves.
 #:
-#: Version 13 moves six tasks. The five whose prompt carries `permitted_block`:
-#: `attack`, `defence`, `attack_defense`, `counter_argument` and
-#: `counter_argument_strict`. The sentence on unreadable directives now ends ", so write
-#: only directives", as it already did in the blocks of `preference_construction` and
-#: `formalization` (#187). Their theories, ids and gold are unchanged; only the
-#: question's wording moves.
+#: Version 13 moves every task but `formalization`, for three reasons.
 #:
-#: And `claim_chain`: each decoy is built like the true line, with the same root sign
+#: The five whose prompt carries `permitted_block`: `attack`, `defence`,
+#: `attack_defense`, `counter_argument` and `counter_argument_strict`. The sentence on
+#: unreadable directives now ends ", so write only directives", as it already did in the
+#: blocks of `preference_construction` and `formalization` (#187). This changes wording
+#: alone.
+#:
+#: `claim_chain`: each decoy is built like the true line, with the same root sign
 #: and root preference, the same junctions, the same branch signs and, from level 11,
 #: the same dead-end rules hanging off it. From level 4 every derivation of the claim is
 #: attacked by one tower, of even height for the line and odd height of at least 3 for a
@@ -96,6 +97,16 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: one-step reading of the attacks picks out the gold (#185). That rewrites the theory
 #: and gold of its 480 rows at levels 4 to 15, and the preference order of 55 of the 120
 #: rows at levels 1 to 3.
+#:
+#: The listing order of the other theory-showing tasks (#208). `ordered_ops` now
+#: shuffles the preferences as well as the facts and rules, and `semantics_query` lists
+#: its padding among the facts and rules instead of after the preferences, where every
+#: claim it concluded was justified. On the standard grid the listing moves on 480
+#: `semantics_query` rows and on 280 to 552 of the 600 rows of each of
+#: `defeat_diagnosis`, `preference_construction`, both `counter_argument` arms,
+#: `status_query`, `perturbation`, `attack`, `defence` and `attack_defense`. Ids, gold,
+#: the queries asked and every metadata field except the order of `base_ops` are
+#: unchanged, and outside `semantics_query` facts and rules keep their positions.
 PROMPT_VERSION = 13
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.

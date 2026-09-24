@@ -20,6 +20,7 @@ from arggym.core.curriculum import (
 )
 from arggym.core.invariants import (
     language_enrichment,
+    ordered_ops,
     randomize_rule_names,
     split_atoms_and_rules,
 )
@@ -62,19 +63,6 @@ def _names(seed: int, n: int) -> List[str]:
     if n > len(pool):
         raise ValueError(f"name pool exhausted: asked {n}, have {len(pool)}")
     return pool[:n]
-
-
-def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
-    facts = [o for o in ops if o.kind in ("premise", "axiom")]
-    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
-    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
-    if shuffle_seed is not None:
-        rng = random.Random(shuffle_seed)
-        rng.shuffle(facts)
-        rng.shuffle(rules)
-        # In build order the line's root preference is listed first (#185).
-        rng.shuffle(prefs)
-    return facts + rules + prefs
 
 
 def render_op(o: Operation) -> str:
@@ -310,7 +298,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     line_ops = [o for o in ops
                 if (o.kind in ("premise", "axiom") and o.content in _line_roots)
                 or (o.kind in ("defeasible", "strict") and o.name in _line_rules)]
-    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:

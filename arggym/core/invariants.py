@@ -114,6 +114,27 @@ def split_atoms_and_rules(ops) -> Tuple[set, set]:
 RULE_POOL = [f"{a}{b}{c}" for a in "cdfghjklmnpqrstvwxz" for b in "aeiouy" for c in "0123456789"]
 
 
+def ordered_ops(ops, shuffle_seed: Optional[int] = None) -> list:
+    """List a theory as facts, then rules, then preferences, each block shuffled.
+
+    With a seed, every block is shuffled by one ``random.Random(shuffle_seed)``, facts
+    first, then rules, then preferences. The preferences draw last, so the facts and
+    rules land where they would without that draw. A block left in build order tells a
+    solver which directive the generator added for which purpose (#208). Without a seed
+    the build order is kept.
+    """
+    import random as _r
+    facts = [o for o in ops if o.kind in ("premise", "axiom")]
+    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
+    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
+    if shuffle_seed is not None:
+        rng = _r.Random(shuffle_seed)
+        rng.shuffle(facts)
+        rng.shuffle(rules)
+        rng.shuffle(prefs)
+    return facts + rules + prefs
+
+
 def randomize_rule_names(ops, seed: int, prefix: str = ""):
     """Rename every rule of ``ops`` from ``RULE_POOL``; return (new ops, {old: new}).
 

@@ -15,7 +15,7 @@ from arggym.core.curriculum import (
     junctions_for,
     negated_branch,
 )
-from arggym.core.invariants import language_enrichment, randomize_rule_names
+from arggym.core.invariants import language_enrichment, ordered_ops, randomize_rule_names
 from arggym.core.pairs import collect, pair_f1
 from arggym.core.prompting import STRAY_TEXT, answer_format
 from arggym.core.scoring import unmark
@@ -69,17 +69,6 @@ def _names(seed: int, n: int) -> List[str]:
     pool = [f"{a}{b}{d}" for a in _L[:12] for b in _L[12:] for d in range(10)]
     rng.shuffle(pool)
     return pool[:n]
-
-
-def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
-    facts = [o for o in ops if o.kind in ("premise", "axiom")]
-    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
-    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
-    if shuffle_seed is not None:
-        rng = random.Random(shuffle_seed)
-        rng.shuffle(facts)
-        rng.shuffle(rules)
-    return facts + rules + prefs
 
 
 def render_ops(ops: Sequence[Operation]) -> str:
@@ -237,7 +226,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
     _lx, _ = language_enrichment(it, [900], prefix="lx")
     _lx = PROFILES[profile].filter(_lx)
     ops = list(ops) + _lx
-    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
     pert: List[Operation] = []
     order = list(range(n_comp))

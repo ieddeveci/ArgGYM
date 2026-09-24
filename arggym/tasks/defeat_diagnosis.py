@@ -18,7 +18,7 @@ from arggym.core.curriculum import (
     negated_branch,
     wants_ternary,
 )
-from arggym.core.invariants import randomize_rule_names, split_atoms_and_rules
+from arggym.core.invariants import ordered_ops, randomize_rule_names, split_atoms_and_rules
 from arggym.core.prompting import STRAY_TEXT, answer_format
 from arggym.core.scoring import unmark
 
@@ -70,17 +70,6 @@ def _names(seed: int, n: int) -> List[str]:
     pool = [f"{a}{b}{d}" for a in _L[:14] for b in _L[10:] for d in range(10)]
     rng.shuffle(pool)
     return pool[:n]
-
-
-def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
-    facts = [o for o in ops if o.kind in ("premise", "axiom")]
-    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
-    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
-    if shuffle_seed is not None:
-        rng = random.Random(shuffle_seed)
-        rng.shuffle(facts)
-        rng.shuffle(rules)
-    return facts + rules + prefs
 
 
 def render_op(o: Operation) -> str:
@@ -300,7 +289,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         if d["survives_because"]:
             d["survives_because"] = rmap.get(d["survives_because"], d["survives_because"])
 
-    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
         return Rejected("atom_rule_name_collision")

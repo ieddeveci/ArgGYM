@@ -35,6 +35,7 @@ from arggym.core.invariants import (
     dedupe_parallel,
     language_enrichment,
     minimal_subset_exact,
+    ordered_ops,
     randomize_rule_names,
     split_atoms_and_rules,
 )
@@ -85,17 +86,6 @@ def _names(seed: int, n: int) -> List[str]:
     if n > len(pool):
         raise ValueError(f"name pool exhausted: asked {n} of {len(pool)}")
     return pool[:n]
-
-
-def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> List[Operation]:
-    facts = [o for o in ops if o.kind in ("premise", "axiom")]
-    rules = [o for o in ops if o.kind in ("defeasible", "strict")]
-    prefs = [o for o in ops if o.kind in ("prefer_rule", "prefer_premise")]
-    if shuffle_seed is not None:
-        rng = random.Random(shuffle_seed)
-        rng.shuffle(facts)
-        rng.shuffle(rules)
-    return facts + rules + prefs
 
 
 def render_ops(ops: Sequence[Operation]) -> str:
@@ -325,7 +315,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
 
     _lx, _ = language_enrichment(it, [900], prefix="lx")
     ops = list(ops) + _lx
-    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
 
     if any(o.kind in ("premise", "axiom") and o.content == target for o in base):
         return Rejected("target_is_a_premise")
@@ -350,7 +340,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             decoy_rule = None
         else:
             ops.append(Operation(kind="prefer_rule", stronger=killer[0], weaker=decoy_rule))
-        base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+        base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
         if decoy_rule and status(base, "-" + target, ordering) == "JUSTIFIED":
             return Rejected("decoy_justifies_the_negation")
 
@@ -360,7 +350,7 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
         c["bprem"] = {_rmap.get(nm, nm): lit for nm, lit in c["bprem"].items()}
     if decoy_rule is not None:
         decoy_rule = _rmap.get(decoy_rule, decoy_rule)
-    base = _ordered(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
+    base = ordered_ops(ops, shuffle_seed=stable_seed(seed, level, ordering, "shuf"))
     atoms, rnames = split_atoms_and_rules(base)
     if atoms & rnames:
         return Rejected("atom_rule_name_collision")
