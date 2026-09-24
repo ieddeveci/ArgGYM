@@ -10,13 +10,15 @@
 # The serving profile pins the Hub revision, so a rerun serves the same
 # weights.
 #
-# Cap: the serving profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks the cap fits), which is below the longest
-# output the card recommends:
-# "We recommend using an output length of 32,768 tokens for most queries.
-# For benchmarking on highly complex problems, such as those found in math and
-# programming competitions, we suggest setting the max output length to
-# 38,912 tokens." (https://huggingface.co/Qwen/Qwen3-8B).
+# Cap: 32,768, the serving profile's max_model_len minus the 8,192-token prompt
+# reserve. The roster shares one output cap, 65,536, so every model gets the
+# same token budget (65,536 is the Gemini API's output limit, thinking included,
+# so no larger cap can hold across the roster); this profile's context leaves
+# less, so the cap is what it leaves (hpc/vllm/verify_bundle.py checks both).
+# The card recommends: "We recommend using an output length of 32,768 tokens for
+# most queries. For benchmarking on highly complex problems, such as those found
+# in math and programming competitions, we suggest setting the max output length
+# to 38,912 tokens." (https://huggingface.co/Qwen/Qwen3-8B).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
 # tokens.
 name: hf-qwen3-8b

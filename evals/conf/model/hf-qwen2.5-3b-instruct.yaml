@@ -8,12 +8,14 @@
 # runner serves with --generation-config vllm, so these reach the model
 # only by being sent.
 #
-# Cap: the card's "Context Length: Full 32,768 tokens and generation 8192 tokens"
-# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct)
-# describes what the model can generate, not advice for long reasoning,
-# so it is no recommendation, and the cap is the context rule. That is the serving
-# profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 24,576, the serving profile's max_model_len minus the 8,192-token prompt
+# reserve. The roster shares one output cap, 65,536, so every model gets the
+# same token budget (65,536 is the Gemini API's output limit, thinking included,
+# so no larger cap can hold across the roster); this profile's context leaves
+# less, so the cap is what it leaves (hpc/vllm/verify_bundle.py checks both).
+# The card's "Context Length: Full 32,768 tokens and generation 8192 tokens"
+# (https://huggingface.co/Qwen/Qwen2.5-3B-Instruct) describes what the model can
+# generate, not advice for long reasoning, so it is no recommendation.
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
 # tokens.
 name: hf-qwen2.5-3b-instruct

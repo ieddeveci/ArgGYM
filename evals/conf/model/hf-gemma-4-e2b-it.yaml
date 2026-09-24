@@ -13,11 +13,13 @@
 # skip_special_tokens stays false so the gemma4 reasoning parser can see
 # the channel markers that delimit the thought.
 #
-# Cap: the card recommends no output length (its examples use
-# max_new_tokens=1024 and 512), and neither does Google's Gemma 4 model card
-# (https://ai.google.dev/gemma/docs/core/model_card_4), so the cap is the context
-# rule. That is the serving profile's max_model_len minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 65,536, one output cap across the roster so every model gets the same
+# token budget. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. The card recommends no output length
+# (its examples use max_new_tokens=1024 and 512), and neither does Google's
+# Gemma 4 model card (https://ai.google.dev/gemma/docs/core/model_card_4). The
+# cap fits within the serving profile's max_model_len minus the 8,192-token
+# prompt reserve (hpc/vllm/verify_bundle.py checks both).
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,877
 # tokens.
 name: hf-gemma-4-e2b-it
@@ -25,7 +27,7 @@ model: google/gemma-4-E2B-it
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 122880
+  max_tokens: 65536
   temperature: 1.0
   top_p: 0.95
   seed: 0

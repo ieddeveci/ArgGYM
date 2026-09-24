@@ -55,6 +55,20 @@ def test_the_timeout_outlasts_the_largest_cap_at_a_slow_decode():
     assert Endpoint(model="m").timeout_s == timeout, "the client default lags the config"
 
 
+@pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.stem)
+def test_no_config_caps_its_output_above_the_roster_cap(path):
+    """Every config shares one output cap, 65,536, so every model gets the same budget.
+
+    65,536 is the Gemini API's output limit, thinking included, so no larger cap
+    can hold across the roster. A config may sit below it only where its context
+    or its provider's output limit leaves less; `hpc/vllm/verify_bundle.py` checks
+    the hf-* configs sit exactly at min(65,536, room).
+    """
+    s = yaml.safe_load(path.read_text()).get("sampling") or {}
+    cap = s.get("max_tokens", s.get("max_completion_tokens", 0))
+    assert cap <= 65536, f"{path.stem} caps its output at {cap}, above the roster's 65,536"
+
+
 LEVELS = ("minimal", "low", "medium", "high", "xhigh")
 
 

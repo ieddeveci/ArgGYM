@@ -61,6 +61,14 @@ copying one. An `hf-*` config also runs against a vLLM you started yourself:
 set `VLLM_BASE_URL`, and serve with the `max_model_len` of the profile of the
 same name under `hpc/vllm/models/`, or the config's `max_tokens` will not fit.
 
+Every config caps its output at 65,536 tokens, thinking included, so every
+model gets the same token budget. 65,536 is the Gemini API's output limit, so no
+larger cap can hold across the roster. A config sits below it only where there
+is less room: for `hf-*`, the profile's `max_model_len` minus an 8,192-token
+prompt reserve; for a hosted model, the provider's output limit.
+`hpc/vllm/verify_bundle.py` checks each `hf-*` cap is exactly min(65,536, room),
+and `tests/evals` checks no config goes above 65,536.
+
 The two layers hold different facts and never the same one. The eval config
 says what each request carries, the checkpoint id included; the serving
 profile says how to serve it (GPU counts, dtype, context length, parser, extra
@@ -236,14 +244,14 @@ mean.
 
 ### Whether the timeout was big enough
 
-`endpoint.timeout_s` is 28,800 seconds, and it is a safety net for a hung
+`endpoint.timeout_s` is 10,800 seconds, and it is a safety net for a hung
 connection. What ends a long generation is the model's token cap. A completion
 stopped by the cap comes back truncated, and `truncated_rate` shows it. A
 completion stopped by the clock comes back as an API error, which leaves the
 denominator, so a model that loops slowly would score better for looping. The
-number is therefore the largest cap in `evals/conf/model/` (253,952 tokens) at a
-deliberately slow 10 tokens/s, rounded up to the hour. The report measures
-whether it held.
+number is therefore sized for the largest cap in `evals/conf/model/` (65,536
+tokens) at a deliberately slow 10 tokens/s, 6,554 seconds, with three hours
+leaving margin above that. The report measures whether it held.
 
 `metrics.json` carries two kinds of number about it, and they are not
 substitutes.

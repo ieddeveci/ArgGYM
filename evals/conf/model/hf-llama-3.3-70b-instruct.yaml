@@ -5,9 +5,11 @@
 # 0.6, top_p 0.9. The meta-llama repo is gated to us; the file was read from
 # the ungated copy https://huggingface.co/unsloth/Llama-3.3-70B-Instruct.
 #
-# Cap: the card recommends no output length, so the cap is the context rule. That
-# is the serving profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks the cap fits).
+# Cap: 65,536, one output cap across the roster so every model gets the same
+# token budget. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster. The card recommends no output
+# length. The cap fits within the serving profile's max_model_len minus the
+# 8,192-token prompt reserve (hpc/vllm/verify_bundle.py checks both).
 # Longest prompt in tasksets/standard.yaml with this tokenizer: 4,088
 # tokens (tokenizer from unsloth/Llama-3.3-70B-Instruct; the original is gated).
 name: hf-llama-3.3-70b-instruct
@@ -15,7 +17,7 @@ model: meta-llama/Llama-3.3-70B-Instruct
 base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
 api_key_env: VLLM_API_KEY
 sampling:
-  max_tokens: 122880
+  max_tokens: 65536
   temperature: 0.6
   top_p: 0.9
   seed: 0

@@ -2,7 +2,10 @@
 #
 # Limits: 1,048,576 input, 65,536 output, and thinking tokens count against the
 # output limit (https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash,
-# https://ai.google.dev/gemini-api/docs/thinking). The cap is the output limit.
+# https://ai.google.dev/gemini-api/docs/thinking). The cap is that limit,
+# 65,536, the one output cap across the roster so every model gets the same
+# token budget. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster.
 #
 # No temperature, top_p or top_k. Google's guidance for every Gemini 3.x model
 # is to leave all three at their defaults
