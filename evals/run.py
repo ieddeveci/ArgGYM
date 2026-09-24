@@ -94,6 +94,47 @@ def refuse_a_changed_run(run_dir: str, meta: Dict[str, Any]) -> None:
             f"run_id=, or resume=false to start this directory over.")
 
 
+def refuse_a_stale_taskset(path: str, ts_manifest: Dict[str, Any],
+                           allow: bool = False) -> None:
+    """Refuse a taskset frozen under other prompt or scoring rules than this tree's.
+
+    The scorer that reads these generations is the installed one. A file frozen
+    under an older `PROMPT_VERSION` asks questions that do not state rules the
+    scorer enforces (#154: a v5 file under a v7 scorer zeroed every answer with
+    one stray word, a rule no shipped row stated), and one frozen under an older
+    `SCORING_VERSION` carries stated minimums the scorer no longer uses.
+
+    A manifest without the version fields is warned about rather than refused,
+    as `taskset.check` skips any other field a manifest lacks: every freeze
+    writes both, so their absence means a hand-built file, and the hash still
+    ties a run to its questions. `allow` is for a deliberate rerun of an old
+    file; `run.json` records the file's versions either way.
+    """
+    from arggym.core.freeze import PROMPT_VERSION, SCORING_VERSION
+
+    versions = ts_manifest.get("versions") or {}
+    installed = {"prompt_version": PROMPT_VERSION, "scoring_version": SCORING_VERSION}
+    absent = [k for k in installed if versions.get(k) is None]
+    if absent:
+        print(f"warning: {path} records no {' or '.join(absent)}, so this run "
+              f"cannot check it was frozen under the installed rules.",
+              file=sys.stderr)
+    stale = [f"{k} {versions[k]} (installed: {v})" for k, v in installed.items()
+             if versions.get(k) is not None and versions[k] != v]
+    if not stale:
+        return
+    msg = (f"{path} was frozen under {' and '.join(stale)}. Its questions do not "
+           f"state the rules the installed scorer enforces, so every score would "
+           f"be measured against rules the model was never told. Re-freeze it "
+           f"with `make freeze` (or `arggym freeze -c <spec> -o {path}`)")
+    if allow:
+        print(f"warning: {msg}; running anyway because allow_stale_taskset=true.",
+              file=sys.stderr)
+        return
+    raise SystemExit(f"{msg}, or pass allow_stale_taskset=true to rerun an old "
+                     f"file deliberately.")
+
+
 class RunFailed(SystemExit):
     """More of the run failed to reach the provider than the config allows."""
 
@@ -236,6 +277,7 @@ def execute(cfg: DictConfig, run_dir: str, origin: str = ".") -> Dict[str, Any]:
     quiet_http()
     ts_path = os.path.join(origin, cfg.taskset)
     ts_manifest, all_rows = taskset.load(ts_path)
+    refuse_a_stale_taskset(ts_path, ts_manifest, cfg.get("allow_stale_taskset", False))
     rows = taskset.select(
         all_rows,
         tasks=cfg.filter.get("tasks"), levels=cfg.filter.get("levels"),

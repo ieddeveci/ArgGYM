@@ -380,6 +380,12 @@ right is worse than an error:
   `score.py` compares the run's `None` against the file's `None`, finds them
   equal, and scores yesterday's completions against today's gold. Row ids are
   stable across regenerations, so nothing else catches it either.
+- **`run.py` refuses a taskset frozen under another `prompt_version` or
+  `scoring_version` than the installed `arggym`'s**, because its questions do
+  not state the rules the scorer enforces; re-freeze with `make freeze`, or pass
+  `allow_stale_taskset=true` to rerun an old file on purpose. `score.py` does not
+  refuse, since re-scoring old generations with a fixed scorer is legitimate, and
+  it records its own `scoring_version` in `metrics.json`.
 - **`score.py` refuses a taskset whose hash is not the one the run recorded.**
   Scoring answers against questions they were not asked is silent.
 - **A directory will not take a second configuration.** Resume keys on the row
