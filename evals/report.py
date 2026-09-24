@@ -292,6 +292,9 @@ def render(runs: List[Dict[str, Any]]) -> str:
     versions = {json.dumps(m["_meta"].get("taskset_versions"), sort_keys=True)
                 for m in runs}
     hashes = {m["_meta"].get("taskset_hash") for m in runs}
+    # A metrics file from before the field existed reads as None, which is a
+    # scorer this report cannot name, so it counts as different.
+    scorers = {m["_meta"].get("scoring_version") for m in runs}
     parts = [
         "# ArgGYM evaluation", "",
         f"Taskset `{'`, `'.join(sorted(str(h) for h in hashes))}`.", "",
@@ -304,6 +307,12 @@ def render(runs: List[Dict[str, Any]]) -> str:
     if len(versions) > 1:
         parts += ["**These runs used different prompt or scoring versions.** A "
                   "score moves when either does.", ""]
+    if len(scorers) > 1:
+        # Re-scoring is cheap, so pooled runs can share a taskset and still have
+        # been scored by different code.
+        parts += ["**These runs were scored under different scoring versions "
+                  f"({', '.join(sorted(str(v) for v in scorers))}).** Re-score "
+                  "them with one `evals.score` before comparing.", ""]
     parts += [
         "## Coverage", "",
         "Read this table first. A run that lost most of its items to the token "

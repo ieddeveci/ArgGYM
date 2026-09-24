@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Optional
 import pytest
 
 import arggym
-from arggym.core.freeze import taskset_hash
+from arggym.core.freeze import PROMPT_VERSION, SCORING_VERSION, taskset_hash
 
 #: Every task, not a sample of two. The four answer shapes are spread across
 #: the twelve, and the end-to-end test exists to catch an extraction path that
@@ -48,8 +48,8 @@ def taskset_file(tmp_path, rows) -> str:
     with open(path, "w") as f:
         f.write(json.dumps({"__manifest__": {
             "taskset_hash": taskset_hash(rows), "n_items": len(rows),
-            "versions": {"arggym": arggym.__version__, "prompt_version": 3,
-                         "scoring_version": 3}}}) + "\n")
+            "versions": {"arggym": arggym.__version__, "prompt_version": PROMPT_VERSION,
+                         "scoring_version": SCORING_VERSION}}}) + "\n")
         for r in rows:
             f.write(json.dumps(r, default=str) + "\n")
     return path

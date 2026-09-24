@@ -17,6 +17,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import arggym
+from arggym.core.freeze import SCORING_VERSION
 from evals import artifacts, taskset, values
 from evals.prompt import region
 from evals.types import TIMEOUT
@@ -521,6 +522,10 @@ def score_run(run_dir: str, taskset_path: Optional[str] = None) -> Dict[str, Any
             "taskset_versions": ts_manifest.get("versions", {}),
             "run_status": run.get("status"),
             "arggym": arggym.__version__,
+            # The scorer these numbers came from, which may be newer than the
+            # taskset's `scoring_version`: re-scoring old generations with a
+            # fixed scorer is legitimate, and this is where it shows.
+            "scoring_version": SCORING_VERSION,
             # A floor moves with the search as well as with the scorer, and
             # `scoring_version` sees only the scorer. Without this, two of these
             # files carrying different floors for the same rows are identical in

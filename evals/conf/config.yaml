@@ -13,6 +13,11 @@ defaults:
 # earlier ones -- a comparison that looks valid and is not.
 taskset: data/taskset.jsonl
 
+# A taskset frozen under another PROMPT_VERSION or SCORING_VERSION than the
+# installed arggym's is refused: its questions do not state the rules the scorer
+# enforces. True runs it anyway, for a deliberate rerun of an old file.
+allow_stale_taskset: false
+
 # Slice the frozen taskset in memory. Never a second freeze: two exports of the
 # same grid are the same only if nothing moved in between.
 filter:
