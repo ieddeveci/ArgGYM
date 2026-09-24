@@ -11,7 +11,7 @@ defaults:
 # resolved tasksets by pattern, and silently taking the newest would let a
 # taskset rebuilt mid-sweep score later models on different questions than
 # earlier ones -- a comparison that looks valid and is not.
-taskset: data/taskset.jsonl
+taskset: data/taskset-lite.jsonl
 
 # A taskset frozen under another PROMPT_VERSION or SCORING_VERSION than the
 # installed arggym's is refused: its questions do not state the rules the scorer

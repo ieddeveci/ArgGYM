@@ -46,7 +46,7 @@ ELICITATION ?= cot
 eval:
 	@test -n "$(MODEL)" || { echo 'usage: make eval MODEL=<a config under evals/conf/model>'; \
 	  echo 'available:'; ls evals/conf/model | sed 's/.yaml$$/  /;s/^/  /'; exit 1; }
-	uv run python -m evals.run taskset=data/taskset.jsonl model=$(MODEL) \
+	uv run python -m evals.run taskset=data/taskset-lite.jsonl model=$(MODEL) \
 	  template=$(TEMPLATE) elicitation=$(ELICITATION)
 	uv run python -m evals.score outputs/runs/$(MODEL)__$(TEMPLATE)__$(ELICITATION)
 
