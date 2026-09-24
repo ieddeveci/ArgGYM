@@ -134,6 +134,9 @@ class Attempt:
     #: anywhere else. That row still cost two full generations of server time,
     #: which is the waste `conf/config.yaml` sized the timeout to avoid.
     requests_timed_out: int = 0
+    #: How many requests the row made. That includes each 429 waited out on its
+    #: `Retry-After`, which does not spend `retries`, so this can exceed
+    #: `retries + 1`.
     attempts: int = 0
     #: Exactly what was sent, plus the two things about the request that are not
     #: in its body: how many messages it carried, and the deadline it was sent

@@ -13,6 +13,7 @@ run asked for is only knowable afterwards from what we wrote down.
 """
 from __future__ import annotations
 
+import math
 import random
 import time
 from dataclasses import dataclass, field
@@ -53,6 +54,11 @@ _RETRYABLE = (408, 409, 429, 500, 502, 503, 504, 529)
 #: account, reset at 00:00 UTC) and OpenAI's exhausted billing quota. A 429
 #: naming no such code is caught by its reset time instead; see `_told_to_wait`.
 QUOTA_CODES = frozenset({"daily_token_limit_exceeded", "insufficient_quota"})
+
+#: Codes that say a 429 is only a rate limit, whose window ends within minutes.
+#: A `resets_at` beside one is read as a wait capped at `max_retry_after_s` and
+#: never as a quota, so a skewed clock or a misread field cannot stop a run.
+RATE_LIMIT_CODES = frozenset({"rate_limit_exceeded"})
 
 #: A provider that stopped for one of these produced an answer, or ran out of
 #: room while producing one. Anything else -- `content_filter` most of all --
@@ -135,8 +141,10 @@ class Endpoint:
     retries: int = 2
     #: The longest single `Retry-After` a 429 is waited out for. A provider
     #: asking for longer has run out of quota rather than rate, and the run
-    #: stops on `QuotaExhausted` instead of sleeping through it.
-    max_retry_after_s: float = 120.0
+    #: stops on `QuotaExhausted` instead of sleeping through it. Ten minutes,
+    #: above the longest rate window we know of: Evren's token limit slides
+    #: over 5 minutes (`GET /v1/quota`), so its waits run to about 300 s.
+    max_retry_after_s: float = 600.0
 
     def check(self) -> None:
         unknown = set(self.sampling) - SAMPLING_KEYS
@@ -355,43 +363,76 @@ def _told_to_wait(exc: Exception, cap_s: float) -> Optional[float]:
 
     The wait comes from `Retry-After`, else from a `resets_at` in the error
     body. Raises `QuotaExhausted` when the answer is "not within this run": the
-    body names a code in `QUOTA_CODES`, or the wait is longer than `cap_s`.
+    body names a code in `QUOTA_CODES`, or the wait is longer than `cap_s`. A
+    body under a code in `RATE_LIMIT_CODES` never raises on its `resets_at`.
+
+    Every wait is at least `_MIN_WAIT_S`. A `Retry-After` that is zero, in the
+    past or not a finite number says nothing usable, and falls back on the
+    backoff, which spends `retries` and so ends.
     """
     if getattr(exc, "status_code", None) != 429:
         return None
     # The SDK has already unwrapped `{"error": {...}}` into `body`.
     body = getattr(exc, "body", None)
     body = body if isinstance(body, dict) else {}
-    response = getattr(exc, "response", None)
-    wait = _retry_after(response.headers.get("retry-after")
-                        if response is not None else None)
-    reset = _reset_time(body)
-    if wait is None and reset is not None:
-        wait = max(reset - time.time(), 0.0)
     code = body.get("code")
-    if code in QUOTA_CODES or (wait is not None and wait > cap_s):
-        if reset is None and wait is not None:
-            reset = time.time() + wait
-        raise QuotaExhausted(
+    response = getattr(exc, "response", None)
+    header = _retry_after(response.headers.get("retry-after")
+                          if response is not None else None)
+    reset = _reset_time(body)
+    now = time.time()
+
+    def stop(when: Optional[float]) -> QuotaExhausted:
+        return QuotaExhausted(
             " ".join(str(x) for x in ("HTTP 429", code, body.get("message") or exc)
                      if x),
-            resets_at=None if reset is None else datetime.fromtimestamp(
-                reset, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return wait
+            resets_at=_utc(when))
+
+    if code in QUOTA_CODES:
+        raise stop(reset)
+    if header is not None:
+        if header > cap_s:
+            raise stop(reset if reset is not None else now + header)
+        return max(header, _MIN_WAIT_S)
+    if reset is None:
+        return None
+    wait = reset - now
+    if code in RATE_LIMIT_CODES:
+        # A clock skewed either way still gets a wait of at most the cap.
+        return max(min(wait, cap_s), _MIN_WAIT_S)
+    if wait > cap_s:
+        raise stop(reset)
+    return max(wait, _MIN_WAIT_S) if wait > 0 else None
+
+
+#: The shortest wait a 429 gets, so a provider's `0.2` is not a busy loop.
+_MIN_WAIT_S = 1.0
+
+
+def _utc(when: Optional[float]) -> Optional[str]:
+    """A Unix time as ISO 8601 UTC, or `None` for one no calendar holds."""
+    try:
+        return None if when is None else datetime.fromtimestamp(
+            when, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _retry_after(value: Optional[str]) -> Optional[float]:
-    """`Retry-After` in seconds. RFC 9110 allows a number or an HTTP date."""
+    """`Retry-After` in seconds, or `None` when it asks for no positive wait.
+
+    RFC 9110 allows a number or an HTTP date.
+    """
     if not value:
         return None
     try:
-        return max(float(value), 0.0)
+        seconds = float(value)
     except ValueError:
-        pass
-    try:
-        return max(parsedate_to_datetime(value).timestamp() - time.time(), 0.0)
-    except (TypeError, ValueError):
-        return None
+        try:
+            seconds = parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return seconds if math.isfinite(seconds) and seconds > 0 else None
 
 
 def _reset_time(body: Dict[str, Any]) -> Optional[float]:
@@ -399,7 +440,7 @@ def _reset_time(body: Dict[str, Any]) -> Optional[float]:
 
     Searched rather than addressed, because each provider nests it under a name
     of its own (Evren: `error.evren.resets_at`). An ISO 8601 string or a Unix
-    time; anything else is ignored.
+    time in seconds or milliseconds; anything else is ignored.
     """
     for key, value in body.items():
         if isinstance(value, dict):
@@ -407,8 +448,14 @@ def _reset_time(body: Dict[str, Any]) -> Optional[float]:
             if found is not None:
                 return found
         elif key == "resets_at":
+            if isinstance(value, bool):
+                continue
             if isinstance(value, (int, float)):
-                return float(value)
+                if not math.isfinite(value):
+                    continue
+                # Seconds reach 1e11 in the year 5138; milliseconds passed it
+                # in 1973.
+                return value / 1000 if value > 1e11 else float(value)
             try:
                 when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
             except ValueError:

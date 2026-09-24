@@ -227,6 +227,107 @@ def test_a_far_future_retry_after_stops_a_run_without_error_rows(tmp_path, rows,
     assert meta["status"] == "stopped_on_quota" and meta["quota_resets_at"]
 
 
+def _once(reply, rows):
+    """A handler that sends `reply` to the first request and answers the rest."""
+    answer, n = answering(rows), {"n": 0}
+
+    def handler(body):
+        n["n"] += 1
+        return dict(reply) if n["n"] == 1 else answer(body)
+
+    return handler
+
+
+@pytest.mark.parametrize("resets_at,low,high", [
+    # A clock far behind the provider's, or a field that is not the window.
+    ("2099-01-01T00:00:00Z", 600, 601),
+    # A clock ahead of it: the reset is already past.
+    ("2000-01-01T00:00:00Z", 1, 2),
+])
+def test_a_rate_limit_code_never_turns_a_skewed_reset_into_a_stop(
+        rows, provider, monkeypatch, resets_at, low, high):
+    slept, _ = _recorded_sleeps(monkeypatch)
+    p = provider(_once({"__status__": 429, "error": {
+        "code": "rate_limit_exceeded", "message": "wait",
+        "detail": {"resets_at": resets_at}}}, rows))
+    attempt = ChatSolver(Endpoint(model="stub", base_url=p.url, timeout_s=10800,
+                                  retries=0))(rows[0])
+    assert attempt.error is None and attempt.attempts == 2
+    assert len(slept) == 1 and low <= slept[0] <= high, slept
+
+
+@pytest.mark.parametrize("retry_after", [
+    "0", "-5", "Wed, 21 Oct 2015 07:28:00 GMT", "1e400", "nonsense"])
+def test_a_retry_after_that_asks_for_no_wait_gets_the_ordinary_backoff(
+        rows, provider, monkeypatch, retry_after):
+    """Honoured, a zero would retry every half second for three hours."""
+    slept, _ = _recorded_sleeps(monkeypatch)
+    p = provider(lambda body: {"__status__": 429,
+                               "__headers__": {"Retry-After": retry_after},
+                               "error": {"message": "slow down"}})
+    attempt = ChatSolver(Endpoint(model="stub", base_url=p.url, timeout_s=10800,
+                                  retries=2))(rows[0])
+    assert attempt.error_kind == "http_429" and attempt.attempts == 3
+    assert slept == [5, 10]
+
+
+def test_a_retry_after_under_a_second_is_floored(rows, provider, monkeypatch):
+    slept, _ = _recorded_sleeps(monkeypatch)
+    p = provider(_once({"__status__": 429, "__headers__": {"Retry-After": "0.2"},
+                        "error": {"message": "slow down"}}, rows))
+    attempt = ChatSolver(Endpoint(model="stub", base_url=p.url, retries=0))(rows[0])
+    assert attempt.error is None
+    assert len(slept) == 1 and 1 <= slept[0] <= 2, slept
+
+
+def test_an_absurd_reset_is_never_a_crash(rows, provider, monkeypatch):
+    """A reset past any calendar raised inside the retry loop, filing the row as
+    `solver_raised`. It is still a quota; it just names no date."""
+    slept, _ = _recorded_sleeps(monkeypatch)
+    p = provider(lambda body: {"__status__": 429,
+                               "__headers__": {"Retry-After": "99999999999999"},
+                               "error": {"message": "never"}})
+    with pytest.raises(QuotaExhausted) as e:
+        ChatSolver(Endpoint(model="stub", base_url=p.url, retries=2))(rows[0])
+    assert e.value.resets_at is None
+    assert slept == []
+
+
+def test_a_reset_in_milliseconds_is_read_as_one(rows, provider, monkeypatch):
+    slept, _ = _recorded_sleeps(monkeypatch)
+    soon_ms = int((time.time() + 30) * 1000)
+    p = provider(_once({"__status__": 429, "error": {
+        "message": "wait", "resets_at": soon_ms}}, rows))
+    attempt = ChatSolver(Endpoint(model="stub", base_url=p.url, retries=0))(rows[0])
+    assert attempt.error is None
+    assert len(slept) == 1 and 25 <= slept[0] <= 32, slept
+
+    far_ms = 4102444800000  # 2100-01-01T00:00:00Z
+    p = provider(lambda body: {"__status__": 429, "error": {
+        "message": "wait", "resets_at": far_ms}})
+    with pytest.raises(QuotaExhausted) as e:
+        ChatSolver(Endpoint(model="stub", base_url=p.url, retries=0))(rows[0])
+    assert e.value.resets_at == "2100-01-01T00:00:00Z"
+
+
+def test_a_quota_stop_over_the_error_rate_says_both(tmp_path, rows, taskset_file,
+                                                    provider, monkeypatch):
+    _recorded_sleeps(monkeypatch)
+    n = {"n": 0}
+
+    def fail_then_quota(body):
+        n["n"] += 1
+        if n["n"] == 1:
+            return {"__status__": 400, "error": {"message": "bad"}}
+        return _daily_limit(body)
+
+    p = provider(fail_then_quota)
+    with pytest.raises(StoppedOnQuota) as e:
+        execute(cfg_for(taskset_file, p.url, **{"generation.concurrency": 1}),
+                os.fspath(tmp_path / "run"))
+    assert RESETS_AT in e.value.code and "max_error_rate" in e.value.code
+
+
 # --- (d) every other failure is handled exactly as before ---------------------
 
 

@@ -426,7 +426,11 @@ def execute(cfg: DictConfig, run_dir: str, origin: str = ".") -> Dict[str, Any]:
                 f"{meta['n_missing']} items not generated. Rerun the same command "
                 + (f"after {quota.resets_at} " if quota.resets_at else
                    "once the quota is restored ")
-                + "to resume.")
+                + "to resume."
+                + (f" The error rate so far, {error_rate:.1%}, is also above "
+                   f"max_error_rate {cfg.max_error_rate}; read the errors in "
+                   f"{artifacts.GENERATIONS} before rerunning."
+                   if error_rate > cfg.max_error_rate else ""))
         if meta["status"] == "failed":
             raise RunFailed(
                 f"error rate {error_rate:.1%} is above max_error_rate "

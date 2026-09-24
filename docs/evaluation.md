@@ -193,7 +193,7 @@ its map by a pair. `evals/values.py` has both directions.
 A run directory holds what happened, in the order it happened:
 
 ```
-run.json           the manifest; status running -> completed | failed
+run.json           the manifest; status running -> completed | failed | crashed | stopped_on_quota
 prompts.jsonl      written before any call, so a dead run still says what it asked
 generations.jsonl  appended as each result lands
 samples.jsonl      one scored record per item, written by score.py
@@ -225,6 +225,7 @@ means `false` or means "not applicable".
 | `latency_s` | what the whole row cost in wall time, every retry, backoff and rate-limit wait included. `null` when nothing timed it -- a solver need not have a clock. |
 | `attempt_latency_s` | the slowest single request made for the row, which is what `timeout_s` bounds. `null` on the same terms. |
 | `requests_timed_out` | how many of the row's requests expired, including on a row that then answered. |
+| `attempts` | how many requests the row made, each 429 waited out on its `Retry-After` included. Those waits do not spend `endpoint.retries`, so this can exceed `retries + 1`. |
 
 The last two of the first group are the ones to look at. `zero_with_region` is
 a real reasoning failure -- which is a result -- or a scorer bug, and counting
@@ -406,17 +407,22 @@ run's status at the end. Any other status is not retried.
 Two kinds of 429 are handled apart from that:
 
 - **A rate limit.** A 429 with a `Retry-After` of at most
-  `endpoint.max_retry_after_s` (120 s by default) is waited out for that long,
-  plus up to a second of jitter, and does not spend `retries`. A provider that
-  allows one request a minute, as Evren does per key, then slows the run down
-  and fails no rows, at any `generation.concurrency`. Extra workers only queue
-  on the limit. A row stops honouring these waits once they add up to
-  `timeout_s`, and after that the 429 is retried and recorded like any other.
+  `endpoint.max_retry_after_s` (600 s by default, above Evren's 5-minute token
+  window) is waited out for that long, at least 1 s, plus up to a second of
+  jitter, and does not spend `retries`. A provider that allows one request a
+  minute, as Evren does per key, then slows the run down and fails no rows, at
+  any `generation.concurrency`. Extra workers only queue on the limit. A row
+  stops honouring these waits once they add up to `timeout_s`, and after that
+  the 429 is retried and recorded like any other. A `Retry-After` of zero or in
+  the past asks for no wait, so it gets the ordinary backoff. With no header, a
+  `resets_at` in the error body sets the wait instead.
 - **An exhausted quota.** A 429 whose error code is `daily_token_limit_exceeded`
   (Evren's daily token limit, per account) or `insufficient_quota` (OpenAI's
-  billing quota), or whose wait is longer than `max_retry_after_s` (from
-  `Retry-After`, or from a `resets_at` in the error body), means no retry will
-  work until a reset hours away. The run starts no new item. It writes nothing
+  billing quota), or whose wait is longer than `max_retry_after_s`, means no
+  retry will work until a reset hours away. A `resets_at` beside the code
+  `rate_limit_exceeded` never counts: the code says the window is short, so a
+  far-off reset there is read as a skewed clock and waited out for at most the
+  cap. The run starts no new item. It writes nothing
   for the item that hit the quota or for any item not yet started, and the
   requests already in flight finish on their own. Then `run.json` gets
   `status: stopped_on_quota`, with `quota_error` and `quota_resets_at` when the
