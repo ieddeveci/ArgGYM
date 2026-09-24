@@ -71,22 +71,27 @@ Vertex and Azure among them, is a config of its own naming a `base_url` and a ke
 not part of the wheel. `docs/evaluation.md` has it.
 
 ```
-uv run python -m evals.run   taskset=data/taskset.jsonl model=openrouter-claude-sonnet-4.5-high
+uv run python -m evals.run   taskset=data/taskset-lite.jsonl model=openrouter-claude-sonnet-4.5-high
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 ```
+
+Evals run on the lite taskset, `data/taskset-lite.jsonl`: 120 items per task are enough for a
+per-task ranking, at a fifth of the standard taskset's cost.
 
 ## Freeze a taskset
 
 ```
 uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
 ```
 
-`tasksets/standard.yaml` is the evaluated grid, as an input you can check in, cite and diff. The
+`tasksets/standard.yaml` is the full grid, as an input you can check in, cite and diff. The
 manifest records the arggym and engine versions, which seeds produced the items and which were
 skipped, so two exports can be compared by what they skipped and not only by their hash.
 It is 12 tasks x 15 levels x 4 orderings x 10 seeds, 7200 rows. `tasksets/lite.yaml` is the same
-grid at 2 seeds, 1440 rows, and its rows are the first two of every standard cell.
+grid at 2 seeds, 1440 rows, and its rows are the first two of every standard cell. Evals run on
+lite; standard is what a per-task level curve needs.
 
 Cells fill in parallel, one process per core this process may use, which is its CPU affinity
 lowered by a container's CPU quota; `-j N` sets the count and `-j 1` freezes serially. The file is the same byte for byte at any count. On 16 cores standard

@@ -15,6 +15,8 @@ export ACCOUNT=...         # optional; defaults to $USER
 GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh hf-qwen3.8-27b-medium
 ```
 
+The job evaluates `data/taskset-lite.jsonl`, the default in `evals/conf/config.yaml`: 120 items per task are enough for a per-task ranking, at a fifth of the standard taskset's cost.
+
 If the Apptainer runtime is missing or stale, the submission helper first schedules a one-GPU runtime-build job on `kolyoz-cuda` and makes the evaluation depend on its successful completion. Later submissions reuse the image.
 
 See [truba-directive.md](truba-directive.md) for the exact sequence and checks.

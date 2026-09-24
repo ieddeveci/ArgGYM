@@ -5,6 +5,13 @@ the frozen taskset. So a scorer fix, a template change or an extraction bug
 costs seconds here rather than the hours of inference that produced the
 completions.
 
+    uv run python -m evals.score outputs/runs/<dir>
+
+With no `--taskset` it reads the taskset path the run recorded, which for an
+eval is data/taskset-lite.jsonl, and refuses a file whose hash differs. To
+re-score a run generated on the standard taskset from another checkout, name
+the file:
+
     uv run python -m evals.score outputs/runs/<dir> --taskset data/taskset.jsonl
 """
 from __future__ import annotations

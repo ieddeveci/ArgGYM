@@ -7,11 +7,15 @@ no HTTP client.
 
 ```
 uv sync                                    # the evals group is included in dev
-uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
-uv run python -m evals.run   taskset=data/taskset.jsonl model=openrouter-gpt-5-medium
+uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl   # shipped; rebuild only after a generator change
+uv run python -m evals.run   taskset=data/taskset-lite.jsonl model=openrouter-gpt-5-medium
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
 ```
+
+Evals run on the lite taskset, which is also the default in
+`evals/conf/config.yaml`: 120 items per task are enough for a per-task ranking,
+at a fifth of the standard taskset's cost.
 
 Three commands because they fail differently. Generating costs money and hours
 and can be interrupted. Scoring is free, offline, and changes whenever a scorer
@@ -40,7 +44,7 @@ extra_body:
 
 ```bash
 cp .env.example .env        # then fill in OPENROUTER_API_KEY
-uv run python -m evals.run model=openrouter-claude-sonnet-4.5-high taskset=data/taskset.jsonl
+uv run python -m evals.run model=openrouter-claude-sonnet-4.5-high taskset=data/taskset-lite.jsonl
 ```
 
 `api_key_env` names the variable rather than holding the key, so the whole
@@ -389,7 +393,7 @@ them would be resuming under a flag that says otherwise.
 Slice a frozen taskset by coordinate rather than freezing a second one:
 
 ```bash
-uv run python -m evals.run model=stub taskset=data/taskset.jsonl \
+uv run python -m evals.run model=stub taskset=data/taskset-lite.jsonl \
     filter.levels=[3,9,15] filter.tasks=[status_query,claim_chain] filter.limit=40
 ```
 
@@ -414,7 +418,8 @@ right is worse than an error:
   stable across regenerations, so nothing else catches it either.
 - **`run.py` refuses a taskset frozen under another `prompt_version` or
   `scoring_version` than the installed `arggym`'s**, because its questions do
-  not state the rules the scorer enforces; re-freeze with `make freeze`, or pass
+  not state the rules the scorer enforces; re-freeze with `make freeze-lite` for
+  lite or `make freeze` for standard (the message names the one), or pass
   `allow_stale_taskset=true` to rerun an old file on purpose. `score.py` does not
   refuse, since re-scoring old generations with a fixed scorer is legitimate, and
   it records its own `scoring_version` in `metrics.json`; the report says when

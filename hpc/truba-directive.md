@@ -98,6 +98,10 @@ reasoning-effort levels (Qwen3.8, gpt-oss) has one config per level and no
 level-less one, so name the level: `hf-qwen3.8-27b-low`, `-medium` or `-xhigh`.
 The serving profile is the name without the level.
 
+The job evaluates `data/taskset-lite.jsonl`, the default in
+`evals/conf/config.yaml`: 120 items per task are enough for a per-task ranking,
+at a fifth of the standard taskset's cost.
+
 A run that outlasts the 3-day wall time loses only its in-flight generations.
 Submit the same config again with `RESUME=1` to continue from the rows already
 written.

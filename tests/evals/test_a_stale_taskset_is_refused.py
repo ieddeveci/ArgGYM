@@ -49,8 +49,24 @@ def test_a_stale_version_is_refused_before_any_call(tmp_path, rows, taskset_file
         execute(cfg_for(stale, p.url), os.fspath(tmp_path / "run"))
     msg = str(e.value)
     assert f"{field} {installed - 1} (installed: {installed})" in msg
-    assert stale in msg and "make freeze" in msg and "run_id=" in msg
+    assert stale in msg and "run_id=" in msg
+    # stale.jsonl is no shipped file, so no make target rebuilds it.
+    assert f"arggym freeze -c <spec> -o {stale}" in msg and "make freeze" not in msg
     assert p.requests == []
+
+
+@pytest.mark.parametrize("shipped,target", [("taskset-lite.jsonl", "`make freeze-lite`"),
+                                            ("taskset.jsonl", "`make freeze`")])
+def test_a_stale_shipped_file_names_the_target_that_rebuilds_it(
+        tmp_path, rows, taskset_file, provider, shipped, target):
+    p = provider(answering(rows))
+    (tmp_path / "data").mkdir()
+    stale = with_versions(taskset_file, os.fspath(tmp_path / "data" / shipped),
+                          prompt_version=PROMPT_VERSION - 1)
+    with pytest.raises(SystemExit) as e:
+        execute(cfg_for(stale, p.url), os.fspath(tmp_path / "run"))
+    msg = str(e.value)
+    assert target in msg and f"arggym freeze -c <spec> -o {stale}" in msg
 
 
 def test_a_file_newer_than_the_checkout_asks_for_an_update(tmp_path, rows,

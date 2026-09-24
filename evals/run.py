@@ -5,8 +5,11 @@ writes what came back. Scoring is `score.py`, offline, from these files -- so a
 parser fix, a template change or a scorer bug costs a rerun of a few seconds
 rather than the hours of inference that produced the completions.
 
-    uv run python -m evals.run taskset=data/taskset.jsonl model=openai-gpt-5-medium
+    uv run python -m evals.run taskset=data/taskset-lite.jsonl model=openai-gpt-5-medium
     VLLM_BASE_URL=http://localhost:8000/v1 uv run python -m evals.run model=hf-qwen3.8-27b-medium filter.levels=[3,9] filter.limit=20
+
+Evals run on the lite taskset, the config default: 120 items per task are enough
+for a per-task ranking, at a fifth of the standard taskset's cost.
 """
 from __future__ import annotations
 
@@ -129,9 +132,9 @@ def refuse_a_stale_taskset(path: str, ts_manifest: Dict[str, Any],
     newer = any(versions[k] > v for k, v in installed.items()
                 if versions.get(k) is not None and versions[k] != v)
     fix = ("update this checkout to the arggym that froze it" if newer else
-           f"re-freeze it with `make freeze` (or `arggym freeze -c <spec> -o "
-           f"{path}`) and give the run a new run_id=, since a directory started "
-           f"on the old file will not resume onto the new one")
+           f"re-freeze it with {refreeze(path)} and give the run a new run_id=, "
+           f"since a directory started on the old file will not resume onto the "
+           f"new one")
     msg = (f"{path} was frozen under {' and '.join(stale)}. Its questions and "
            f"the installed scorer disagree about the rules, so every score would "
            f"be measured against rules the model was never told. To fix it, "
@@ -142,6 +145,21 @@ def refuse_a_stale_taskset(path: str, ts_manifest: Dict[str, Any],
         return
     raise SystemExit(f"{msg}, or pass allow_stale_taskset=true to rerun an old "
                      f"file deliberately.")
+
+
+#: The Makefile target that rebuilds each shipped taskset, by the path it writes.
+FREEZE_TARGETS = {"data/taskset-lite.jsonl": "make freeze-lite",
+                  "data/taskset.jsonl": "make freeze"}
+
+
+def refreeze(path: str) -> str:
+    """The command that rebuilds `path`: its make target if it is a shipped file."""
+    generic = f"`arggym freeze -c <spec> -o {path}`"
+    norm = os.path.normpath(path).replace(os.sep, "/")
+    for shipped, target in FREEZE_TARGETS.items():
+        if norm == shipped or norm.endswith("/" + shipped):
+            return f"`{target}` (or {generic})"
+    return generic
 
 
 class RunFailed(SystemExit):
