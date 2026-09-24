@@ -74,11 +74,23 @@ from arggym.core.spec import TasksetSpec, check_versions
 #: because the retry loop accepts a different candidate for that seed. No other task
 #: moves.
 #:
-#: Version 13 moves the five tasks whose prompt carries `permitted_block`: `attack`,
-#: `defence`, `attack_defense`, `counter_argument` and `counter_argument_strict`. The
-#: sentence on unreadable directives now ends ", so write only directives", as it
-#: already did in the blocks of `preference_construction` and `formalization` (#187).
-#: Theories, ids and gold are unchanged; only the question's wording moves.
+#: Version 13 moves six tasks. The five whose prompt carries `permitted_block`:
+#: `attack`, `defence`, `attack_defense`, `counter_argument` and
+#: `counter_argument_strict`. The sentence on unreadable directives now ends ", so write
+#: only directives", as it already did in the blocks of `preference_construction` and
+#: `formalization` (#187). Their theories, ids and gold are unchanged; only the
+#: question's wording moves.
+#:
+#: And `claim_chain`: each decoy is built like the true line, with the same root sign
+#: and root preference, the same junctions, the same branch signs and, from level 11,
+#: the same dead-end rules hanging off it. From level 4 every derivation of the claim is
+#: attacked by one tower, of even height for the line and odd height of at least 3 for a
+#: decoy (2 against 3 at levels 4 to 7, then 2 or 4 against 3 or 5, then 4 or 6 against
+#: 5 or 7 from level 12), with its target drawn the same way for all. Preferences are
+#: shuffled into the listing like facts and rules. No sign, size, listing position or
+#: one-step reading of the attacks picks out the gold (#185). That rewrites the theory
+#: and gold of its 480 rows at levels 4 to 15, and the preference order of 55 of the 120
+#: rows at levels 1 to 3.
 PROMPT_VERSION = 13
 #: Bumped when a scoring policy constant or weight changes. Those move a score
 #: without moving a prompt, so the hash over prompts cannot see them.

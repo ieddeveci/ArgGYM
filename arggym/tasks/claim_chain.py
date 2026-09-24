@@ -72,6 +72,8 @@ def _ordered(ops: Sequence[Operation], shuffle_seed: Optional[int] = None) -> Li
         rng = random.Random(shuffle_seed)
         rng.shuffle(facts)
         rng.shuffle(rules)
+        # In build order the line's root preference is listed first (#185).
+        rng.shuffle(prefs)
     return facts + rules + prefs
 
 
@@ -121,120 +123,126 @@ def _tower(ops: List[Operation], names, ridx: List[int], attacked_lit: str,
         prev_rule = nm
 
 
+def _root(ops: List[Operation], names, negated: bool) -> str:
+    """Add the premise a chain starts from. A negated root is attacked by its positive
+    twin and survives on the premise preference."""
+    base = next(names)
+    ops.append(Operation(kind="premise", content=base))
+    if not negated:
+        return base
+    ops.append(Operation(kind="premise", content="-" + base))
+    ops.append(Operation(kind="prefer_premise", stronger="-" + base, weaker=base))
+    return "-" + base
+
+
+def _chain(ops: List[Operation], names, ridx: List[int], root: str, claim: str,
+           depth: int, j_points: Set[int], level: int
+           ) -> Tuple[List[Operation], List[str], List[str]]:
+    """A chain of `depth` rules from `root` to `claim`, with a junction at each of
+    `j_points`. Returns its directives, its trunk rule names and its trunk literals."""
+    line_ops = [Operation(kind="premise", content=root)]
+    trunk_rules: List[str] = []
+    trunk_lits: List[str] = []
+    order = sorted(j_points)
+    cur = root
+    for j in range(depth):
+        ridx[0] += 1
+        nm = f"r_{ridx[0]}"
+        nxt = claim if j == depth - 1 else next(names)
+        extra_lits = []
+        if j in j_points:
+            for _e in range(2 if wants_ternary(level, order.index(j)) else 1):
+                broot = next(names)
+                src = ("-" + broot) if negated_branch(order.index(j) * 2 + _e) else broot
+                ops.append(Operation(kind="premise", content=src))
+                ridx[0] += 1
+                brule = Operation(kind="defeasible", name=f"r_{ridx[0]}", antecedents=(src,),
+                                  consequent=next(names))
+                ops.append(brule)
+                extra_lits.append(brule.consequent)
+                line_ops.append(Operation(kind="premise", content=src))
+                line_ops.append(brule)
+            ridx[0] += 1
+            nm = f"r_{ridx[0]}"
+        r = Operation(kind="defeasible", name=nm, antecedents=tuple([cur] + extra_lits),
+                      consequent=nxt)
+        ops.append(r)
+        line_ops.append(r)
+        trunk_rules.append(nm)
+        trunk_lits.append(nxt)
+        cur = nxt
+    return line_ops, trunk_rules, trunk_lits
+
+
 def build(level: int, seed: int, ordering: str = LAST_LINK,
           profile: str = "FULL") -> Union[CCItem, Rejected]:
     depth = max(2, min(2 + level, 20))
     n_decoy = 1 if level < 4 else min(1 + (level - 4) // 4, 3)
-    tower_true = 0 if level < 8 else 2 * min(1 + (level - 8) // 4, 3)
     n_filler = max(0, min(4 + level * 3, 60))
     branch_decoys = level >= 11
     j_budget = min(3, junction_budget(level, JUNCTION_CAPS["claim_chain"]))
+    use_neg_root = level >= 4
+
+    # From level 4 every derivation of the claim is attacked by one tower: a rule
+    # rebutting one of its trunk literals, and rules above it each undercutting the one
+    # below. The line's tower has even height, so its bottom rule ends up defeated and
+    # the line stands. A decoy's has odd height of at least 3, so its bottom rule is
+    # undercut too, yet stands, and the decoy falls: only walking the whole tower
+    # decides (#185). Every tower's target is drawn the same way. Heights grow in
+    # stages: 2 against 3 at levels 4-7, where the shorter tower is the even one and
+    # reading its length is reading its parity; from level 8 the line's is 2 or 4
+    # (4 or 6 from level 12) with each decoy's one shorter or one longer, and how many
+    # decoy towers are shorter than the line's is uniform over 0..n_decoy, so the
+    # line is the shortest or the longest no more often than any other derivation.
+    tw = random.Random(stable_seed(seed, level, ordering, "tw"))
+    tower_true, decoy_towers = 0, [0] * n_decoy
+    if use_neg_root and level < 8:
+        tower_true, decoy_towers = 2, [3] * n_decoy
+    elif use_neg_root:
+        extra = 0 if level < 12 else 2
+        n_short = tw.randrange(n_decoy + 1)
+        tower_true = (2 if n_short == 0 else 4) + extra
+        short = set(tw.sample(range(n_decoy), n_short))
+        decoy_towers = [tower_true - 1 if k in short else tower_true + 1
+                        for k in range(n_decoy)]
 
     names = _names(stable_seed(seed, level, ordering, "nm"),
-                   ((60 + depth * 3 + n_decoy * (depth + 6) * 4) + 6 * j_budget) + n_filler * 2 + tower_true * 3)
+                   ((60 + depth * 3 + n_decoy * (depth + 6) * 4) + 6 * j_budget) + n_filler * 2
+                   + tower_true + sum(decoy_towers))
     it = iter(names)
     claim = next(it)
     ops: List[Operation] = []
     ridx = [0]
 
-    use_neg_root = level >= 4
-    if use_neg_root:
-        nbase = next(it)
-        ops.append(Operation(kind="premise", content=nbase))
-        ops.append(Operation(kind="premise", content="-" + nbase))
-        ops.append(Operation(kind="prefer_premise", stronger="-" + nbase, weaker=nbase))
-        root = "-" + nbase
-        line_ops: List[Operation] = [Operation(kind="premise", content=root)]
-    else:
-        root = next(it)
-        ops.append(Operation(kind="premise", content=root))
-        line_ops = [ops[-1]]
-    cur = root
-    mid_lit = None
     j_points = set()
     if j_budget and depth >= 3:
         step = max(1, depth // (j_budget + 1))
         j_points = {min(depth - 2, step * (i + 1)) for i in range(j_budget)}
-    for j in range(depth):
-        ridx[0] += 1
-        nm = f"r_{ridx[0]}"
-        nxt = claim if j == depth - 1 else next(it)
-        if j in j_points:
-            n_extra = 2 if wants_ternary(level, sorted(j_points).index(j)) else 1
-            extra_lits = []
-            for _e in range(n_extra):
-                _neg = negated_branch(sorted(j_points).index(j) * 2 + _e)
-                broot = next(it)
-                _src = ("-" + broot) if _neg else broot
-                ops.append(Operation(kind="premise", content=_src))
-                ridx[0] += 1
-                bname = f"r_{ridx[0]}"
-                blit = next(it)
-                brule = Operation(kind="defeasible", name=bname, antecedents=(_src,),
-                                  consequent=blit)
-                ops.append(brule)
-                extra_lits.append(blit)
-                line_ops.append(Operation(kind="premise", content=_src))
-                line_ops.append(brule)
-            ridx[0] += 1
-            nm = f"r_{ridx[0]}"
-            r = Operation(kind="defeasible", name=nm,
-                          antecedents=tuple([cur] + extra_lits), consequent=nxt)
-            ops.append(r)
-            line_ops.append(r)
-        else:
-            r = Operation(kind="defeasible", name=nm, antecedents=(cur,), consequent=nxt)
-            ops.append(r)
-            line_ops.append(r)
-        if j == depth // 2:
-            mid_lit = nxt
-        cur = nxt
-    if tower_true and mid_lit:
-        _tower(ops, it, ridx, mid_lit, tower_true)
 
+    root = _root(ops, it, use_neg_root)
+    line_ops, _, true_lits = _chain(ops, it, ridx, root, claim, depth, j_points, level)
+    chains = [line_ops]
+    if tower_true:
+        _tower(ops, it, ridx, true_lits[tw.randrange(depth - 1)], tower_true)
+
+    # A decoy is built exactly like the true line -- same root sign and root preference,
+    # same junctions, same branch signs -- so nothing but the attacks tells them apart
+    # (#185). Below level 4 the line is unattacked and each decoy fails to one attack.
     decoy_info = []
     for k in range(n_decoy):
-        droot = next(it)
-        ops.append(Operation(kind="premise", content=droot))
-        cur = droot
-        drules: List[str] = []
-        dlits: List[str] = []
-        _dj = {max(1, depth // 2)} if (level >= 5 and depth >= 3) else set()
-        if level >= 9 and depth >= 5:
-            _dj.add(max(1, depth // 4))
-        for j in range(depth):
-            ridx[0] += 1
-            nm = f"r_{ridx[0]}"
-            nxt = claim if j == depth - 1 else next(it)
-            if j in _dj:
-                _ex = []
-                for _e in range(2 if wants_ternary(level, k) else 1):
-                    br, bl = next(it), next(it)
-                    ops.append(Operation(kind="premise", content=br))
-                    ridx[0] += 1
-                    ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
-                                         antecedents=(br,), consequent=bl))
-                    _ex.append(bl)
-                ridx[0] += 1
-                nm = f"r_{ridx[0]}"
-                ops.append(Operation(kind="defeasible", name=nm,
-                                     antecedents=tuple([cur] + _ex), consequent=nxt))
-            else:
-                ops.append(Operation(kind="defeasible", name=nm, antecedents=(cur,),
-                                     consequent=nxt))
-            drules.append(nm)
-            dlits.append(nxt)
-            cur = nxt
+        droot = _root(ops, it, use_neg_root)
+        dline, drules, dlits = _chain(ops, it, ridx, droot, claim, depth, j_points, level)
+        chains.append(dline)
         mode = (k + level) % 4
-        if mode == 3:
+        if decoy_towers[k]:
+            step = tw.randrange(depth - 1)
+            _tower(ops, it, ridx, dlits[step], decoy_towers[k])
+            where = f"tower of {decoy_towers[k]} at step {step + 1}"
+        elif mode == 3:
             ops.append(Operation(
                 kind="axiom" if PROFILES[profile].permits("axiom") else "premise",
                 content="-" + droot))
             where = "impossible-root"
-        elif mode == 0:
-            ops.append(Operation(kind="premise", content="-" + droot))
-            ops.append(Operation(kind="prefer_premise", stronger="-" + droot, weaker=droot))
-            where = "root"
         elif mode == 1:
             _tower(ops, it, ridx, dlits[len(dlits) // 2], 1)
             where = "mid"
@@ -247,18 +255,20 @@ def build(level: int, seed: int, ordering: str = LAST_LINK,
             where = "near-claim"
         decoy_info.append({"rules": drules, "defeat_at": where})
 
+    # Two rules leading nowhere hang off each derivation at the same place, so "the one
+    # whose literals other rules build on" is every derivation rather than the line.
     if branch_decoys and depth >= 4:
-        _line_rules = [o for o in line_ops if o.kind in ("defeasible", "strict") and o.consequent]
-        if not _line_rules:
-            return Rejected("no_line_rule_to_anchor")
-        anchor = _line_rules[min(len(_line_rules) - 1, depth // 3)].consequent
-        cur = anchor
-        for j in range(2):
-            ridx[0] += 1
-            nxt = next(it)
-            ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}", antecedents=(cur,),
-                                 consequent=nxt))
-            cur = nxt
+        for chain in chains:
+            _rules = [o for o in chain if o.kind in ("defeasible", "strict") and o.consequent]
+            if not _rules:
+                return Rejected("no_line_rule_to_anchor")
+            cur = _rules[min(len(_rules) - 1, depth // 3)].consequent
+            for j in range(2):
+                ridx[0] += 1
+                nxt = next(it)
+                ops.append(Operation(kind="defeasible", name=f"r_{ridx[0]}",
+                                     antecedents=(cur,), consequent=nxt))
+                cur = nxt
 
     _base = sum(1 for o in ops if o.kind == "defeasible")
     _have = sum(1 for o in ops if o.kind == "defeasible" and len(o.antecedents or ()) > 1)

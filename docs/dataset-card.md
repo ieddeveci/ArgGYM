@@ -249,6 +249,29 @@ benchmark isolates the reasoning, and it is also the limit: it says nothing
 about defeasible reasoning over real arguments in natural language, except
 through `formalization`, whose limits are above.
 
+Nor does a derivation's shape give the answer away. In `claim_chain`, every
+derivation of the claim is built the same way. Below level 4 the justifying line
+is unattacked and each decoy falls to a single attack. From level 4 each
+derivation starts at a negated premise preferred over its positive twin, has the
+same junctions with the same negated branches, the same dead-end rules hanging
+off it from level 11, and is attacked by one tower: a rule rebutting one of its
+steps, and above it rules each undercutting the one below. That tower alone
+decides the derivation. The line's has even height and a decoy's odd height of at
+least 3, so the first rule of every tower is itself undercut, and only following
+each tower to its top tells the line from the decoys. Heights grow with the
+level: 2 against 3 at levels 4 to 7, then the line's 2 or 4 against decoys' 3 or
+5, and from level 12 the line's 4 or 6 against 5 or 7. The target step is drawn
+the same way for every tower, and from level 8 the line's tower is the shortest
+or the longest no more often than any other. From level 4, picking a derivation
+by the sign of its premises, a preference on its root, its size, which of its
+literals other rules build on, where it is listed, how many directives attack it,
+or whether each of its attackers is itself attacked scores what a random
+derivation scores (`tests/test_claim_chain_gold_has_no_surface_cue.py`). Counting
+a tower's height does better by design, since that is the walk. So does a partial
+count at levels 4 to 11, where a height of 2 or 3 settles a tower without reading
+past it: at levels 8 to 11, 5 of every 6 decoy towers are 3 high, so "a tower of
+height 3 means a decoy" scores 0.83 where a random derivation scores 0.33.
+
 There is no personal data, no scraped text, and no human annotation. The natural
 language in `formalization` comes from surface forms taken from the ASPIC+ and
 argumentation-schemes literature (`arggym/core/nlforms.py`).
