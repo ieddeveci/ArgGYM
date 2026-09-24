@@ -4,8 +4,9 @@ max_model_len: 262144
 gpu_memory_utilization: 0.9
 reasoning_parser: gemma4
 trust_remote_code: false
+# ArgGYM is text-only. --language-model-only sets every modality limit to 0,
+# video included, so vLLM builds neither tower and reserves no encoder cache.
 extra_args:
-- --limit-mm-per-prompt
-- '{"image":0,"audio":0}'
+- --language-model-only
 tensor_parallel_size_h100: 1
 tensor_parallel_size_h200: 1

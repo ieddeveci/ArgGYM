@@ -249,6 +249,12 @@ if m is not None:
 for profile in sorted(p for p in profiles if p.startswith("hf-gemma-4-")):
     if profiles[profile].get("reasoning_parser") != "gemma4":
         errors.append(f"{profile}: reasoning parser must be gemma4")
+    # Gemma 4 takes image, audio and video; a limit left unset stays at 999 and
+    # keeps the vision tower and its encoder cache. Serve the text model alone.
+    gemma_args = list(map(str, profiles[profile].get("extra_args", [])))
+    if "--language-model-only" not in gemma_args or "--limit-mm-per-prompt" in gemma_args:
+        errors.append(f"{profile}: serve text only with --language-model-only, "
+                      "not --limit-mm-per-prompt")
     stems = served.get(profile, [])
     if profile not in stems or not set(stems) <= {profile, f"{profile}-{NO_THINKING}"}:
         errors.append(f"{profile}: takes a thinking-on config and at most a "
