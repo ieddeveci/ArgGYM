@@ -71,10 +71,13 @@ less where its context or provider limit is smaller, so token budgets match
 wherever the limits allow. 65,536 is the Gemini API's output limit, so no larger
 cap can hold across the roster. The limit is, for `hf-*`, the profile's
 `max_model_len` minus an 8,192-token prompt reserve, and for a hosted model, the
-provider's output limit (for Evren, which publishes none, the `max_model_len`
-its error for an oversized `max_tokens` names). `hpc/vllm/verify_bundle.py`
-checks each `hf-*` cap is exactly min(65,536, room), and `tests/evals` checks
-each hosted cap is exactly min(65,536, provider limit).
+provider's output limit. `hpc/vllm/verify_bundle.py` checks each `hf-*` cap is
+exactly min(65,536, room), and `tests/evals` checks each hosted cap is exactly
+min(65,536, provider limit). Evren publishes no output limit; the only bound
+it states is the served context its error for an oversized `max_tokens` names,
+which covers prompt and output together. The smallest, 262,144 tokens, leaves
+room for 65,536 of output above any taskset prompt, so every Evren cap is
+65,536.
 
 The two layers hold different facts and never the same one. The eval config
 says what each request carries, the checkpoint id included; the serving
@@ -89,7 +92,7 @@ the model is the checkpoint name after the last `/` in lowercase, the level is
 the reasoning effort the config sends, and `-nothink` marks a config that sends
 `enable_thinking: false`: `openrouter-claude-sonnet-4.5-high`,
 `openai-gpt-5-minimal`, `hf-qwen3.8-27b-xhigh`, `hf-gemma-4-31b-it`,
-`hf-gemma-4-31b-it-nothink`, `evren-deepseek-v4.1-flash-100`.
+`hf-gemma-4-31b-it-nothink`, `evren-glm-5.3-max`.
 
 An RL fine-tune is named after the model it was trained from, with an RL tag:
 `<provider>-<base model>-rl-<tag>[-<level>]`. Its `model` is the fine-tune's
@@ -106,12 +109,10 @@ A config with `base_model` must take the `-rl-<tag>` form and one without must
 not; `tests/evals` and `hpc/vllm/verify_bundle.py` both check this.
 
 A model that takes a reasoning-effort level has one config per level it accepts
-and no level-less one. Where the level is a number in a range, as with
-DeepSeek-V4.1-Flash's 1 to 100, the one config runs at the level the card
-reports its results at. The level changes what the model is asked as much as
-the prompt does, so it is part of the name, and therefore of the run directory.
-A model whose only switch is thinking on or off (Qwen3, Qwen3.5, Qwen3.6, Gemma
-4 on vLLM) has a config with thinking on under the bare name, and may have a
+and no level-less one. The level changes what the model is asked as much as the
+prompt does, so it is part of the name, and therefore of the run directory. A
+model whose only switch is thinking on or off (Qwen3, Qwen3.5, Qwen3.6, Gemma 4
+on vLLM) has a config with thinking on under the bare name, and may have a
 thinking-off one named `-nothink`, served by the same profile. The two may
 differ in sampling where the card recommends different settings per mode.
 

@@ -1,0 +1,57 @@
+# DeepSeek-V4.1-Flash through Evren, an OpenAI-compatible endpoint with vLLM
+# behind it, under the model id deepseek-v4.1-flash. Evren returns the
+# reasoning in `message.reasoning`.
+#
+# Sampling: temperature 1.0 and top_p 0.95. The card's "Recommended sampling
+# parameters" table gives "temperature 1.0" and "top_p 0.95 or 1.0", and its
+# instruct results use "temperature=1.0, top_p=0.95"
+# (https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash). The card sets
+# nothing else, and the repo has no generation_config.json, so nothing else is
+# sent.
+#
+# Reasoning effort: high. The repo's prompt-encoding reference takes
+# `reasoning_effort` "as an integer in [1, 100] or as one of "low" (50),
+# "high" (75), or "max" (100). The default is "high" (75)."
+# (https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/encoding/README.md).
+# The card's own results use "the maximum effort setting
+# (`reasoning_effort=100`)". One config per named level:
+# evren-deepseek-v4.1-flash-low, evren-deepseek-v4.1-flash-high,
+# evren-deepseek-v4.1-flash-max.
+# Evren refuses a number in the top-level `reasoning_effort` (400: "Input
+# should be 'none', 'minimal', 'low', 'medium', 'high', 'xhigh' or 'max'"), and
+# takes the level through `chat_template_kwargs.reasoning_effort`, where it
+# answers 0 and 101 with a 400: "DeepSeek V4.1 reasoning_effort must be
+# low, high, xhigh, max, or an integer within [1, 100] in chat_template_kwargs"
+# (probed 2026-09-24).
+# Reasoning grows with the level. Through the harness (template xml_tags,
+# elicitation cot, this config's sampling and cap), 5 samples each on
+# defeat_diagnosis/L8/last_link_elitist/s0 gave median reasoning tokens of
+# 12,360 at low, 15,558 at high and 26,351 at max (probed 2026-09-24).
+#
+# Limits: Evren serves deepseek-v4.1-flash with max_model_len 1,048,576, from
+# the 400 it returns for an oversized max_tokens ("cannot be greater than
+# max_model_len=max_total_tokens=1048576", probed 2026-09-24); its /v1/models
+# lists no limits. max_model_len bounds prompt and output together, and leaves
+# far more than 65,536 tokens of output room after any taskset prompt, so the
+# cap is 65,536. Every config caps its output at 65,536 tokens at most, less
+# where its context or provider limit is smaller, so token budgets match
+# wherever the limits allow. 65,536 is the Gemini API's output limit, thinking
+# included, so no larger cap can hold across the roster. The card recommends
+# "max_tokens ≥ 256K".
+#
+# Keep concurrency low. With 16 requests in flight across
+# deepseek-v4.1-flash and qwen3.8-flash-next, 18 of 30 failed all three
+# attempts with a 503 ("Model şu anda dolu", the model is busy); with 5 in
+# flight on one model at a time, none of 2 x 15 did (probed 2026-09-24). The
+# default generation.concurrency is 16.
+name: evren-deepseek-v4.1-flash-high
+model: deepseek-v4.1-flash
+base_url: https://evren-llmapi.ssyz.org.tr/v1
+api_key_env: EVREN_API_KEY
+sampling:
+  max_tokens: 65536
+  temperature: 1.0
+  top_p: 0.95
+extra_body:
+  chat_template_kwargs:
+    reasoning_effort: high

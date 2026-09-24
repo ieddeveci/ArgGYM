@@ -81,9 +81,11 @@ PROVIDER_OUTPUT_LIMIT = {
     # GET https://generativelanguage.googleapis.com/v1beta/models/<model>, read 2026-09-24.
     "gemma-4-26b-a4b-it": 32768,
     "gemma-4-31b-it": 32768,
-    # Evren lists no limits; its 400 on an oversized max_tokens names the served
-    # context ("cannot be greater than max_model_len=max_total_tokens=<n>",
-    # probed 2026-09-24), which bounds the output.
+    # Evren publishes no output limit. Its 400 on an oversized max_tokens names
+    # the served context ("cannot be greater than max_model_len=max_total_tokens=<n>",
+    # probed 2026-09-24), which bounds prompt and output together, so it is an
+    # upper bound on the output, not the output limit itself. The smallest,
+    # 262,144, leaves room for the 65,536 cap above any taskset prompt.
     "deepseek-v4.1-flash": 1048576,
     "qwen3.8-flash-next": 262144,
     "glm-5.3": 524288,
@@ -176,18 +178,38 @@ NAMED = [p for p in CONFIGS if p.stem != "stub"]
 def level_sent(cfg: dict):
     """The effort level a config sends, through whichever knob its provider reads.
 
-    `chat_template_kwargs.reasoning_effort` carries a level the endpoint's own
-    field refuses, such as DeepSeek-V4.1's number from 1 to 100.
+    `chat_template_kwargs.reasoning_effort` is for a level the server's own
+    field does not pass on, as with DeepSeek-V4.1 on Evren.
     `chat_template_kwargs.enable_thinking` is a switch, not a level, and is not
     read here.
     """
+    sent = levels_sent(cfg)
+    return sent[0] if sent else None
+
+
+def levels_sent(cfg: dict) -> list:
+    """Every effort level the config sends, one per knob that carries one."""
     sampling = cfg.get("sampling") or {}
     extra = cfg.get("extra_body") or {}
     google = (extra.get("extra_body") or {}).get("google") or {}
-    return (sampling.get("reasoning_effort")
-            or (extra.get("reasoning") or {}).get("effort")
-            or (google.get("thinking_config") or {}).get("thinking_level")
-            or (extra.get("chat_template_kwargs") or {}).get("reasoning_effort"))
+    knobs = (sampling.get("reasoning_effort"),
+             (extra.get("reasoning") or {}).get("effort"),
+             (google.get("thinking_config") or {}).get("thinking_level"),
+             (extra.get("chat_template_kwargs") or {}).get("reasoning_effort"))
+    return [k for k in knobs if k is not None]
+
+
+@pytest.mark.parametrize("path", NAMED, ids=lambda p: p.stem)
+def test_a_config_sends_its_level_through_one_knob_at_most(path):
+    """Two knobs could disagree, and the name can carry only one of them."""
+    sent = levels_sent(yaml.safe_load(path.read_text()))
+    assert len(sent) <= 1, f"{path.stem} sends a level through {len(sent)} knobs: {sent}"
+
+
+def test_two_knobs_are_seen_as_two():
+    both = {"sampling": {"reasoning_effort": "low"},
+            "extra_body": {"chat_template_kwargs": {"reasoning_effort": "max"}}}
+    assert levels_sent(both) == ["low", "max"]
 
 
 def thinking_off(cfg: dict) -> bool:
@@ -261,10 +283,10 @@ def test_the_rule_names_an_rl_fine_tune_after_its_base_model():
     assert not names_fit("gemma4-31b-aistudio", gemma)
     assert not names_fit("aistudio-gemma-4-31b-it", gemma)
 
-    numeric = {"api_key_env": "EVREN_API_KEY", "model": "deepseek-v4.1-flash",
-               "extra_body": {"chat_template_kwargs": {"reasoning_effort": 100}}}
-    assert names_fit("evren-deepseek-v4.1-flash-100", numeric)
-    assert not names_fit("evren-deepseek-v4.1-flash", numeric)
+    kwargs = {"api_key_env": "EVREN_API_KEY", "model": "deepseek-v4.1-flash",
+              "extra_body": {"chat_template_kwargs": {"reasoning_effort": "max"}}}
+    assert names_fit("evren-deepseek-v4.1-flash-max", kwargs)
+    assert not names_fit("evren-deepseek-v4.1-flash", kwargs)
 
 
 def test_nothink_names_a_thinking_switch_turned_off_and_nothing_else():
@@ -313,10 +335,8 @@ def test_a_synthetic_rl_config_is_checked_like_any_other(tmp_path):
         test_a_config_is_named_by_its_provider_model_and_level(bad)
 
 
-#: The levels each model's configs send, as the configs cite them: every level
-#: its provider accepts where those are a few names, and the level the card's
-#: results use where they are a numeric range. A model not listed sends no level
-#: (a thinking on/off switch is not a level).
+#: Every level each model's provider accepts, as the configs cite them. A model
+#: not listed sends no level (a thinking on/off switch is not a level).
 VALID_LEVELS = {
     # https://huggingface.co/Qwen/Qwen3.8-27B ("xhigh (default)", "medium", "low")
     "Qwen/Qwen3.8-27B": {"low", "medium", "xhigh"},
@@ -346,10 +366,10 @@ VALID_LEVELS = {
     # https://huggingface.co/zai-org/GLM-5.3 ("accepts three levels: `low`,
     # `high`, and `max`")
     "glm-5.3": {"low", "high", "max"},
-    # https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash (effort runs "from 1
-    # to 100", and "All instruct results below use the maximum effort setting
-    # (`reasoning_effort=100`)")
-    "deepseek-v4.1-flash": {100},
+    # https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/blob/main/encoding/README.md
+    # ("an integer in [1, 100] or ... one of "low" (50), "high" (75), or "max"
+    # (100)"): the named levels, not the numbers between them
+    "deepseek-v4.1-flash": {"low", "high", "max"},
 }
 
 

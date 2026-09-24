@@ -2,8 +2,8 @@
 
 An OpenAI-compatible `/chat/completions` call, which every provider we care
 about serves: OpenRouter, Gemini's compatibility endpoint, Vertex's, Azure's,
-Anthropic's shim, and any local vLLM. Switching between them is a `base_url`, an
-API key and a model id -- never a change of code.
+Anthropic's shim, Evren, and any local vLLM. Switching between them is a
+`base_url`, an API key and a model id -- never a change of code.
 
 Two of those layers are known to be lossy. Anthropic says of its own shim that
 it is "not considered a long-term or production-ready solution", and both it and

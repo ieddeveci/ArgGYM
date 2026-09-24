@@ -24,7 +24,7 @@ PROFILES = ROOT / "hpc" / "vllm" / "models"
 CONFIGS = ROOT / "evals" / "conf" / "model"
 
 #: Every level any config names. Which of them a model accepts is in its configs.
-EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh")
+EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh", "max")
 
 #: The suffix of a config that sends `chat_template_kwargs.enable_thinking:
 #: false`. A switch is not a level: the thinking-on config carries no suffix.
