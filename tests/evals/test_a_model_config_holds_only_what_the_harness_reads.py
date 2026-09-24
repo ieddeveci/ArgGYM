@@ -66,6 +66,7 @@ PROVIDER_OUTPUT_LIMIT = {
     # 65,536 output, thinking included, for every Gemini model on the roster
     # (https://ai.google.dev/gemini-api/docs/models/<model>, cited in each config).
     "gemini-2.5-pro": 65536,
+    "gemini-3.1-pro-preview": 65536,
     "gemini-3.5-flash-lite": 65536,
     "gemini-3.6-flash": 65536,
     "gemini-3.7-flash": 65536,
@@ -352,6 +353,7 @@ VALID_LEVELS = {
     "anthropic/claude-sonnet-4.5": {"minimal", "low", "medium", "high", "xhigh"},
     # https://ai.google.dev/gemini-api/docs/thinking
     "gemini-2.5-pro": {"low", "medium", "high"},
+    "gemini-3.1-pro-preview": {"low", "medium", "high"},
     "gemini-3.5-flash-lite": {"minimal", "low", "medium", "high"},
     "gemini-3.6-flash": {"minimal", "low", "medium", "high"},
     "gemini-3.7-flash": {"low", "medium", "high"},

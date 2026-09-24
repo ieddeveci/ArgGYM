@@ -1,0 +1,39 @@
+# Gemini 3.1 Pro through the Gemini API's OpenAI-compatible endpoint.
+#
+# Limits: 1,048,576 input, 65,536 output, and thinking tokens count against the
+# output limit
+# (https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview,
+# https://ai.google.dev/gemini-api/docs/thinking). The cap is that limit,
+# 65,536. Every config caps its output at 65,536 tokens at most, less where its
+# context or provider limit is smaller, so token budgets match wherever the
+# limits allow. 65,536 is the Gemini API's output limit, thinking included, so
+# no larger cap can hold across the roster.
+#
+# The model is served only as a preview, gemini-3.1-pro-preview, with no
+# shutdown date announced (https://ai.google.dev/gemini-api/docs/models,
+# https://ai.google.dev/gemini-api/docs/deprecations).
+#
+# No temperature, top_p or top_k. Google's guidance for every Gemini 3.x model
+# is to leave all three at their defaults
+# (https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5).
+#
+# Thinking level: medium, set through Gemini's own thinking_config rather than
+# reasoning_effort (the two cannot be sent together;
+# https://ai.google.dev/gemini-api/docs/openai). The Gemini API lists low,
+# medium and high for gemini-3.1-pro-preview, default high; minimal is not
+# listed (https://ai.google.dev/gemini-api/docs/thinking).
+# One config per level: aistudio-gemini-3.1-pro-preview-low,
+# aistudio-gemini-3.1-pro-preview-medium,
+# aistudio-gemini-3.1-pro-preview-high.
+name: aistudio-gemini-3.1-pro-preview-medium
+model: gemini-3.1-pro-preview
+base_url: ${oc.env:GEMINI_BASE_URL,https://generativelanguage.googleapis.com/v1beta/openai/}
+api_key_env: GEMINI_API_KEY
+sampling:
+  max_tokens: 65536
+extra_body:
+  extra_body:
+    google:
+      thinking_config:
+        thinking_level: medium
+        include_thoughts: false
