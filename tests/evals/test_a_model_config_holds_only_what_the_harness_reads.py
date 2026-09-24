@@ -205,6 +205,23 @@ def test_nothink_names_a_thinking_switch_turned_off_and_nothing_else():
     assert not names_fit("hf-qwen3.5-9b-nothink", cfg())
 
 
+def test_the_thinking_on_half_of_a_pair_sends_the_switch():
+    """A bare name whose `-nothink` sibling exists must send `enable_thinking: true`.
+
+    Left unset, the template decides, and the Gemma 4 and Qwen3.5-0.8B/2B
+    templates think only when the switch is sent true: the pair would run
+    thinking off twice.
+    """
+    stems = {p.stem: p for p in CONFIGS}
+    pairs = [s[: -len("-nothink")] for s in stems if s.endswith("-nothink")]
+    assert pairs, "no thinking-off configs found"
+    for bare in pairs:
+        assert bare in stems, f"{bare}-nothink has no thinking-on sibling"
+        cfg = yaml.safe_load(stems[bare].read_text())
+        kwargs = (cfg.get("extra_body") or {}).get("chat_template_kwargs") or {}
+        assert kwargs.get("enable_thinking") is True, f"{bare} must send enable_thinking true"
+
+
 def test_a_synthetic_rl_config_is_checked_like_any_other(tmp_path):
     """The same test the shipped configs go through, on a file written here."""
     body = {"model": "someorg/ArgGYM-Qwen3-8B-GRPO", "base_model": "Qwen/Qwen3-8B",

@@ -25,20 +25,18 @@ from pairing import (CONFIGS, EFFORT_LEVELS, NO_THINKING, PROFILES, ROOT, level_
 # requires max_tokens + PROMPT_RESERVE <= max_model_len. A config's cap is the
 # smaller of that room and the longest output its model card recommends.
 #
-# Measured on 2026-09-23 against tasksets/standard.yaml at commit 91307ae (7,070
-# of its 7,200 rows: 13 slow high-level cells of counter_argument,
-# counter_argument_strict and preference_construction had not finished
-# building, and those tasks' prompts run 3,000+ characters shorter than the
-# longest at every level), each prompt composed as evals/prompt.py:compose does
-# with the xml_tags template and the cot elicitation (the default, and the
-# longer of the two shipped conditions), chat-templated with each served
-# model's own tokenizer, generation prompt included. The longest is 4,773
-# tokens, under Mistral-7B-Instruct-v0.3's tokenizer, on
-# status_query/L15/weakest_link_elitist/s6 (8,552 characters); every other
-# tokenizer's longest is 3,708 to 4,428, on a level-15 claim_chain or
-# status_query row. The reserve is that figure rounded up to the next power of
-# two, which leaves 3,419 tokens for prompts that grow when a task states
-# another rule. Re-measure when a generator changes its question text.
+# Measured on 2026-09-24 against the shipped data/taskset.jsonl (7,200 rows), each
+# prompt composed as evals/prompt.py:compose does with the xml_tags template and
+# the cot elicitation (the default, and the longer of the two shipped
+# conditions), chat-templated with each hf-* config's own tokenizer and the
+# chat_template_kwargs and reasoning_effort it sends, generation prompt
+# included. The longest is 5,785 tokens, under Mistral-7B-Instruct-v0.3's
+# tokenizer, on claim_chain/L15/last_link_democratic/s4; every other tokenizer's
+# longest is 4,695 to 5,374, on a level-15 claim_chain row. Mistral-Small-3.2
+# ships no Hugging Face chat template and was not measured. The reserve is that
+# figure rounded up to the next power of two, which leaves 2,407 tokens for
+# prompts that grow when a task states another rule. Re-measure when a generator
+# changes its question text.
 PROMPT_RESERVE = 8192
 
 errors: list[str] = []
@@ -76,6 +74,29 @@ names = set(profiles)
 # <profile> with <profile>-nothink for a model whose thinking is a switch.
 # ---------------------------------------------------------------------------
 
+#: What a thinking-on/off pair may set differently: the card's per-mode sampling.
+MODE_SAMPLING = {"temperature", "top_p", "top_k", "min_p", "presence_penalty",
+                 "repetition_penalty"}
+
+
+def thinking_sent(cfg: dict):
+    return ((cfg.get("extra_body") or {}).get("chat_template_kwargs") or {}).get(
+        "enable_thinking")
+
+
+def without_mode(cfg: dict) -> dict:
+    """A config without its name, its per-mode sampling values and enable_thinking."""
+    sampling = {k: v for k, v in (cfg.get("sampling") or {}).items()
+                if k not in MODE_SAMPLING}
+    extra = {k: v for k, v in (cfg.get("extra_body") or {}).items()
+             if k not in MODE_SAMPLING}
+    extra["chat_template_kwargs"] = {
+        k: v for k, v in (extra.get("chat_template_kwargs") or {}).items()
+        if k != "enable_thinking"}
+    return {**{k: v for k, v in cfg.items() if k != "name"},
+            "sampling": sampling, "extra_body": extra}
+
+
 served: dict[str, list[str]] = {name: [] for name in profiles}
 for stem in sorted(configs):
     profile = profile_of(stem, names)
@@ -99,8 +120,17 @@ for profile, stems in sorted(served.items()):
         errors.append(f"{nothink}: a thinking-off config needs its thinking-on {profile}")
     # One server, one checkpoint: the configs a profile serves must all name the
     # same model, and per-level configs must differ in nothing but the level. A
-    # thinking-on/off pair may differ in sampling too, since the cards recommend
-    # different sampling per mode.
+    # thinking-on/off pair may differ in its sampling values too, since the cards
+    # recommend different sampling per mode, but in nothing else: same cap, same
+    # seed. And its thinking-on half must say so, because the Gemma 4 and the
+    # small Qwen3.5 templates think only when enable_thinking is sent true.
+    if nothink in stems and profile in stems:
+        if thinking_sent(configs[profile]) is not True:
+            errors.append(f"{profile}: its sibling {nothink} turns thinking off, so it "
+                          f"must send enable_thinking true")
+        if without_mode(configs[profile]) != without_mode(configs[nothink]):
+            errors.append(f"{nothink}: differs from {profile} in more than sampling "
+                          f"values and enable_thinking")
     models = {configs[s].get("model") for s in stems}
     if len(models) > 1:
         errors.append(f"{profile}: its configs name different models {sorted(map(str, models))}")
@@ -134,8 +164,7 @@ for name in sorted(configs):
         if effort != level:
             errors.append(f"{name}: file names effort {level}, config sends {effort}")
     # `-nothink` is the name of `enable_thinking: false`, and only of it.
-    thinking = ((e.get("extra_body") or {}).get("chat_template_kwargs") or {}).get(
-        "enable_thinking")
+    thinking = thinking_sent(e)
     if name.endswith(f"-{NO_THINKING}") != (thinking is False):
         errors.append(f"{name}: enable_thinking {thinking}; a config sends false "
                       f"exactly when its name ends in -{NO_THINKING}")
@@ -219,6 +248,8 @@ for profile in sorted(p for p in profiles if p.startswith("hf-gemma-4-")):
         errors.append(f"{profile}: takes a thinking-on config and at most a "
                       f"-{NO_THINKING} one, no effort levels")
         continue
+    if thinking_sent(configs[profile]) is not True:
+        errors.append(f"{profile}: expected chat_template_kwargs.enable_thinking true")
     for stem in stems:
         if (configs[stem].get("extra_body") or {}).get("skip_special_tokens") is not False:
             errors.append(f"{stem}: skip_special_tokens should be false")
@@ -232,23 +263,33 @@ for profile in sorted(p for p in profiles if p.startswith("hf-gemma-4-")):
         if without_switch(configs[stems[0]]) != without_switch(configs[stems[1]]):
             errors.append(f"{profile}: its two configs differ in more than enable_thinking")
 
-# Qwen 3.6/3.8 presence penalties, as each model card recommends for thinking
-# mode on general tasks. The two 3.6 cards differ -- only the 35B-A3B card sets
-# 1.5 -- and #130 is still open on whether 1.5 helps, so the value is pinned
-# here as well as in the configs (huggingface.co/Qwen/Qwen3.6-35B-A3B,
-# huggingface.co/Qwen/Qwen3.6-27B, huggingface.co/Qwen/Qwen3.8-27B).
+# Qwen presence penalties, as each model card recommends for the mode the
+# config runs in: thinking mode on general tasks (text tasks on the 0.8B and 2B
+# cards), and for Qwen3.5 thinking off, the card's non-thinking setting for
+# reasoning tasks (text tasks on 0.8B and 2B). The cards differ -- the 3.6-27B
+# and 3.8-27B cards say 0.0 in thinking mode, the others 1.5, and three Qwen3.5
+# cards say 2.0 with thinking off -- and #130 was on whether a penalty helps, so
+# the value is pinned here as well as in the configs, which cite the card line.
+# Keyed by config, or by profile for every config that profile serves.
 expected_presence_penalty = {
     "hf-qwen3.6-27b": 0.0,
     "hf-qwen3.6-35b-a3b": 1.5,
     "hf-qwen3.8-27b": 0.0,
+    "hf-qwen3.5-0.8b": 1.5, "hf-qwen3.5-0.8b-nothink": 2.0,
+    "hf-qwen3.5-2b": 1.5, "hf-qwen3.5-2b-nothink": 2.0,
+    "hf-qwen3.5-4b": 1.5, "hf-qwen3.5-4b-nothink": 1.5,
+    "hf-qwen3.5-9b": 1.5, "hf-qwen3.5-9b-nothink": 1.5,
+    "hf-qwen3.5-27b": 1.5, "hf-qwen3.5-27b-nothink": 1.5,
+    "hf-qwen3.5-35b-a3b": 1.5, "hf-qwen3.5-35b-a3b-nothink": 1.5,
+    "hf-qwen3.5-122b-a10b": 1.5, "hf-qwen3.5-122b-a10b-nothink": 2.0,
 }
 for name in sorted(configs):
-    profile = profile_of(name, names)
-    if profile in expected_presence_penalty:
+    want = expected_presence_penalty.get(
+        name, expected_presence_penalty.get(profile_of(name, names)))
+    if want is not None:
         actual = (configs[name].get("sampling") or {}).get("presence_penalty")
-        if actual != expected_presence_penalty[profile]:
-            errors.append(f"{name}: expected presence_penalty "
-                          f"{expected_presence_penalty[profile]}, got {actual}")
+        if actual != want:
+            errors.append(f"{name}: expected presence_penalty {want}, got {actual}")
 
 
 # ---------------------------------------------------------------------------
