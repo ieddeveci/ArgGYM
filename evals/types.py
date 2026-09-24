@@ -162,6 +162,25 @@ def _round(x: Optional[float]) -> Optional[float]:
     return None if x is None else round(x, 3)
 
 
+class QuotaExhausted(Exception):
+    """The provider will refuse every request until a reset far beyond this run.
+
+    Raised by a solver instead of returning an `Attempt`, because it is not this
+    row that failed: every row after it would fail the same way, and recording
+    each as an error writes a taskset's worth of junk that a rerun then has to
+    step over. `run.py` stops starting rows, writes nothing for this one, and
+    exits saying when to rerun.
+
+    `resets_at` is an ISO 8601 UTC time when the provider gave one. `counts` is
+    filled in by `run.generate` with what the invocation wrote before stopping.
+    """
+
+    def __init__(self, message: str, resets_at: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.resets_at = resets_at
+        self.counts: Dict[str, int] = {}
+
+
 @runtime_checkable
 class Solver(Protocol):
     """Anything that turns a row into an `Attempt`.

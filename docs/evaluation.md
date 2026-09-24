@@ -222,7 +222,7 @@ means `false` or means "not applicable".
 | `answer_in_cot` | a fenced answer was found only in the reasoning, never submitted. |
 | `zero_with_region` | a well-formed answer that scored zero. |
 | `scorer_refused` | the scorer would not grade the row at all. |
-| `latency_s` | what the whole row cost in wall time, every retry and backoff included. `null` when nothing timed it -- a solver need not have a clock. |
+| `latency_s` | what the whole row cost in wall time, every retry, backoff and rate-limit wait included. `null` when nothing timed it -- a solver need not have a clock. |
 | `attempt_latency_s` | the slowest single request made for the row, which is what `timeout_s` bounds. `null` on the same terms. |
 | `requests_timed_out` | how many of the row's requests expired, including on a row that then answered. |
 
@@ -395,6 +395,39 @@ success never discards work already paid for. `resume=false` deletes the
 directory's generations and starts over, because the writer appends and leaving
 them would be resuming under a flag that says otherwise.
 
+### Retries, rate limits and quotas
+
+A request that fails with a timeout, a dropped connection, a malformed 200, or
+HTTP 408, 409, 429, 500, 502, 503, 504 or 529 is retried `endpoint.retries`
+times (2 by default), after 5 s, then 10 s, then 15 s, up to 30 s. A row whose
+retries run out is written as an error row, and `max_error_rate` decides the
+run's status at the end. Any other status is not retried.
+
+Two kinds of 429 are handled apart from that:
+
+- **A rate limit.** A 429 with a `Retry-After` of at most
+  `endpoint.max_retry_after_s` (120 s by default) is waited out for that long,
+  plus up to a second of jitter, and does not spend `retries`. A provider that
+  allows one request a minute, as Evren does per key, then slows the run down
+  and fails no rows, at any `generation.concurrency`. Extra workers only queue
+  on the limit. A row stops honouring these waits once they add up to
+  `timeout_s`, and after that the 429 is retried and recorded like any other.
+- **An exhausted quota.** A 429 whose error code is `daily_token_limit_exceeded`
+  (Evren's daily token limit, per account) or `insufficient_quota` (OpenAI's
+  billing quota), or whose wait is longer than `max_retry_after_s` (from
+  `Retry-After`, or from a `resets_at` in the error body), means no retry will
+  work until a reset hours away. The run starts no new item. It writes nothing
+  for the item that hit the quota or for any item not yet started, and the
+  requests already in flight finish on their own. Then `run.json` gets
+  `status: stopped_on_quota`, with `quota_error` and `quota_resets_at` when the
+  provider named a reset time, and the run exits non-zero with a line that says
+  when to rerun. Rerunning the same command after that resumes it.
+
+So on a provider with a daily limit, plan how many items a day's quota covers,
+start the run, and rerun it after each reset until it reports `completed`. The
+daily limit may cover every key on an account, so two runs on one account share
+it.
+
 Slice a frozen taskset by coordinate rather than freezing a second one:
 
 ```bash
@@ -447,6 +480,9 @@ right is worse than an error:
 - **A run whose API error rate passes `max_error_rate` is marked `failed`, not
   `completed`,** and exits non-zero. A dead endpoint and a model that answers
   badly produce the same low score, and only one of them is a finding.
+- **A run that ran out of provider quota is marked `stopped_on_quota`,** and
+  exits non-zero without writing error rows for the items it did not reach.
+  Those items are missing, not failed, and a rerun generates them.
 
 ## Testing it without spending anything
 

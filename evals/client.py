@@ -13,8 +13,11 @@ run asked for is only knowable afterwards from what we wrote down.
 """
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, Optional
 
 from evals.types import (
@@ -26,6 +29,7 @@ from evals.types import (
     REFUSAL,
     TIMEOUT,
     Attempt,
+    QuotaExhausted,
 )
 
 #: Sampling keys we will forward. An unknown key raises rather than being
@@ -43,6 +47,12 @@ SAMPLING_KEYS = frozenset({
 #: the third attempt either, and retrying it burns the budget that a real
 #: transient failure needs.
 _RETRYABLE = (408, 409, 429, 500, 502, 503, 504, 529)
+
+#: Codes a provider puts on a 429 when the quota is gone until a reset hours
+#: away, so no retry inside the run can succeed: Evren's daily token limit (per
+#: account, reset at 00:00 UTC) and OpenAI's exhausted billing quota. A 429
+#: naming no such code is caught by its reset time instead; see `_told_to_wait`.
+QUOTA_CODES = frozenset({"daily_token_limit_exceeded", "insufficient_quota"})
 
 #: A provider that stopped for one of these produced an answer, or ran out of
 #: room while producing one. Anything else -- `content_filter` most of all --
@@ -123,6 +133,10 @@ class Endpoint:
     #: behind a successful retry.
     timeout_s: float = 10800.0
     retries: int = 2
+    #: The longest single `Retry-After` a 429 is waited out for. A provider
+    #: asking for longer has run out of quota rather than rate, and the run
+    #: stops on `QuotaExhausted` instead of sleeping through it.
+    max_retry_after_s: float = 120.0
 
     def check(self) -> None:
         unknown = set(self.sampling) - SAMPLING_KEYS
@@ -139,7 +153,8 @@ class Endpoint:
         return {"model": self.model, "base_url": self.base_url,
                 "api_key_env": self.api_key_env, "sampling": dict(self.sampling),
                 "extra_body": dict(self.extra_body), "timeout_s": self.timeout_s,
-                "retries": self.retries}
+                "retries": self.retries,
+                "max_retry_after_s": self.max_retry_after_s}
 
 
 def reasoning_of(message: Any) -> str:
@@ -194,11 +209,19 @@ class ChatClient:
         return body
 
     def complete(self, system: Optional[str], user: str) -> Attempt:
-        """One completion, with retries, returning an `Attempt` and never raising.
+        """One completion, with retries, returning an `Attempt`.
 
         A failure here is infrastructure. It comes back as `error` so the scorer
         can keep it out of the scores rather than counting it as a model that
-        answered wrongly.
+        answered wrongly. The one exception is an exhausted quota, which raises
+        `QuotaExhausted`: that is not this row failing but every row after it,
+        and recording it as an error would write one junk row per item left.
+
+        A 429 carrying `Retry-After` is waited out and does not spend
+        `retries`, so a provider that limits requests per minute slows a run
+        down rather than failing its rows. A row stops honouring those waits
+        once they add up to `timeout_s`, so a provider that never lets a
+        request through still ends the row.
 
         Three numbers come back about time, because one will not do. `latency_s`
         is what the row cost. `attempt_latency_s` is the slowest single request,
@@ -222,8 +245,12 @@ class ChatClient:
         timed_out = 0
         last = "no attempt made"
         last_kind: Optional[str] = None
-        attempt = 0
-        for attempt in range(1, max(self.endpoint.retries, 0) + 2):
+        # `attempt` counts requests and `retried` the ones that spent `retries`.
+        # They differ by the 429s waited out on the provider's word.
+        attempt = retried = 0
+        waited = 0.0
+        while True:
+            attempt += 1
             attempt_started = time.monotonic()
             try:
                 resp = self._lazy().chat.completions.create(**body)
@@ -237,9 +264,19 @@ class ChatClient:
                 # worked. The whole completion was generated twice either way.
                 timed_out += last_kind == TIMEOUT
                 slowest = max(slowest, time.monotonic() - attempt_started)
-                if not _retryable(e) or attempt > self.endpoint.retries:
+                wait = _told_to_wait(e, self.endpoint.max_retry_after_s)
+                if wait is not None and waited + wait <= self.endpoint.timeout_s:
+                    # The jitter spreads workers told the same second, which
+                    # would otherwise all wake and collide again. Counted in
+                    # `waited`, so `Retry-After: 0` forever still ends.
+                    pause = wait + random.uniform(0, 1)
+                    waited += pause
+                    time.sleep(pause)
+                    continue
+                if not _retryable(e) or retried >= self.endpoint.retries:
                     break
-                time.sleep(min(5 * attempt, 30))
+                retried += 1
+                time.sleep(min(5 * retried, 30))
                 continue
             slowest = max(slowest, time.monotonic() - attempt_started)
             choice = resp.choices[0] if resp.choices else None
@@ -249,9 +286,10 @@ class ChatClient:
                 # under load can return this intermittently.
                 last = "malformed response: no choices"
                 last_kind = MALFORMED
-                if attempt > self.endpoint.retries:
+                if retried >= self.endpoint.retries:
                     break
-                time.sleep(min(5 * attempt, 30))
+                retried += 1
+                time.sleep(min(5 * retried, 30))
                 continue
             reason = choice.finish_reason or ""
             refusal = getattr(choice.message, "refusal", None) or ""
@@ -310,3 +348,72 @@ def _retryable(exc: Exception) -> bool:
     # A dropped connection or a timeout carries no status and is exactly the
     # case retrying exists for. A bug in our own call path is not.
     return isinstance(exc, (APIConnectionError, APITimeoutError))
+
+
+def _told_to_wait(exc: Exception, cap_s: float) -> Optional[float]:
+    """How long a 429 asked us to wait, or `None` to fall back on the backoff.
+
+    The wait comes from `Retry-After`, else from a `resets_at` in the error
+    body. Raises `QuotaExhausted` when the answer is "not within this run": the
+    body names a code in `QUOTA_CODES`, or the wait is longer than `cap_s`.
+    """
+    if getattr(exc, "status_code", None) != 429:
+        return None
+    # The SDK has already unwrapped `{"error": {...}}` into `body`.
+    body = getattr(exc, "body", None)
+    body = body if isinstance(body, dict) else {}
+    response = getattr(exc, "response", None)
+    wait = _retry_after(response.headers.get("retry-after")
+                        if response is not None else None)
+    reset = _reset_time(body)
+    if wait is None and reset is not None:
+        wait = max(reset - time.time(), 0.0)
+    code = body.get("code")
+    if code in QUOTA_CODES or (wait is not None and wait > cap_s):
+        if reset is None and wait is not None:
+            reset = time.time() + wait
+        raise QuotaExhausted(
+            " ".join(str(x) for x in ("HTTP 429", code, body.get("message") or exc)
+                     if x),
+            resets_at=None if reset is None else datetime.fromtimestamp(
+                reset, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return wait
+
+
+def _retry_after(value: Optional[str]) -> Optional[float]:
+    """`Retry-After` in seconds. RFC 9110 allows a number or an HTTP date."""
+    if not value:
+        return None
+    try:
+        return max(float(value), 0.0)
+    except ValueError:
+        pass
+    try:
+        return max(parsedate_to_datetime(value).timestamp() - time.time(), 0.0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _reset_time(body: Dict[str, Any]) -> Optional[float]:
+    """A `resets_at` from anywhere in an error body, as a Unix time.
+
+    Searched rather than addressed, because each provider nests it under a name
+    of its own (Evren: `error.evren.resets_at`). An ISO 8601 string or a Unix
+    time; anything else is ignored.
+    """
+    for key, value in body.items():
+        if isinstance(value, dict):
+            found = _reset_time(value)
+            if found is not None:
+                return found
+        elif key == "resets_at":
+            if isinstance(value, (int, float)):
+                return float(value)
+            try:
+                when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            return when.timestamp()
+    return None

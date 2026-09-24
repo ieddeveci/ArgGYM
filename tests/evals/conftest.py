@@ -71,9 +71,12 @@ class StubProvider:
                 outer.requests.append({"body": body, "headers": dict(self.headers)})
                 reply = handler(body)
                 status = reply.pop("__status__", 200)
+                extra = reply.pop("__headers__", {})
                 data = json.dumps(reply).encode()
                 try:
                     self.send_response(status)
+                    for k, v in extra.items():
+                        self.send_header(k, str(v))
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(data)))
                     self.end_headers()
