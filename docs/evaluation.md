@@ -418,7 +418,8 @@ right is worse than an error:
   stable across regenerations, so nothing else catches it either.
 - **`run.py` refuses a taskset frozen under another `prompt_version` or
   `scoring_version` than the installed `arggym`'s**, because its questions do
-  not state the rules the scorer enforces; re-freeze with `make freeze`, or pass
+  not state the rules the scorer enforces; re-freeze with `make freeze-lite` for
+  lite or `make freeze` for standard (the message names the one), or pass
   `allow_stale_taskset=true` to rerun an old file on purpose. `score.py` does not
   refuse, since re-scoring old generations with a fixed scorer is legitimate, and
   it records its own `scoring_version` in `metrics.json`; the report says when

@@ -34,12 +34,22 @@ def test_the_config_default_is_lite():
 
 @pytest.mark.parametrize("path", PYTHON, ids=lambda p: str(p.relative_to(ROOT)))
 def test_no_eval_code_names_the_standard_taskset(path):
-    # String literals only: a comment may cite the standard file as an upper
-    # bound on prompt length, which lite, a subset of it, respects.
+    # String literals only, and not docstrings: a comment may cite the standard
+    # file as an upper bound on prompt length, which lite, a subset of it,
+    # respects, and a docstring may show how to re-score a run generated on it.
     tree = ast.parse(path.read_text())
+    docstrings = {id(node.body[0].value) for node in ast.walk(tree)
+                  if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                       ast.AsyncFunctionDef))
+                  and ast.get_docstring(node, clean=False) is not None}
+    # Nor a path mapped to the make target that freezes it (evals/run.py's
+    # FREEZE_TARGETS): that says how to rebuild the file, not to evaluate on it.
+    freeze_keys = {id(k) for d in ast.walk(tree) if isinstance(d, ast.Dict)
+                   for k, v in zip(d.keys, d.values)
+                   if isinstance(v, ast.Constant) and str(v.value).startswith("make freeze")}
     bad = [n.lineno for n in ast.walk(tree)
            if isinstance(n, ast.Constant) and isinstance(n.value, str)
-           and STANDARD in n.value]
+           and STANDARD in n.value and id(n) not in docstrings | freeze_keys]
     assert not bad, f"{path.name} names {STANDARD} at lines {bad}; evals run on {LITE}"
 
 

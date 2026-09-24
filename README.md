@@ -83,6 +83,7 @@ per-task ranking, at a fifth of the standard taskset's cost.
 
 ```
 uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
 ```
 
 `tasksets/standard.yaml` is the full grid, as an input you can check in, cite and diff. The
