@@ -205,6 +205,8 @@ from it, and nothing can rebuild it. **Copy a finished run somewhere durable.**
 `outputs/` is gitignored scratch, and a completed four-model sweep was once
 deleted from it by something outside this repository, leaving no raw generation
 anywhere on disk. Nothing here can prevent that; only moving the directory can.
+To share a finished run with the team, pack it into `results/` with
+`make results-add`; see [`results/README.md`](../results/README.md).
 
 ### The three outcomes
 
