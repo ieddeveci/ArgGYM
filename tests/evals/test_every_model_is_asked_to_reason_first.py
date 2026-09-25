@@ -46,9 +46,9 @@ def test_the_cot_text_says_nothing_the_question_or_the_template_says():
 
 
 def test_the_standalone_example_asks_what_the_harness_asks():
-    """`examples/evaluate.py` carries its own copy, so it can drift unseen."""
+    """`scripts/evaluate.py` carries its own copy, so it can drift unseen."""
     cot = yaml.safe_load((ROOT / "evals/conf/elicitation/cot.yaml").read_text())
-    example = (ROOT / "examples/evaluate.py").read_text()
+    example = (ROOT / "scripts/evaluate.py").read_text()
     m = re.search(r'^SYSTEM = "([^"]*)"$', example, flags=re.M)
-    assert m, "examples/evaluate.py no longer defines SYSTEM on one line"
+    assert m, "scripts/evaluate.py no longer defines SYSTEM on one line"
     assert m.group(1) == cot["system"]

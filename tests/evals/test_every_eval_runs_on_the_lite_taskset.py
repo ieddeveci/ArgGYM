@@ -22,7 +22,7 @@ STANDARD = "data/taskset.jsonl"
 #: Code that runs or scores an eval. A string literal naming the standard file
 #: here is a default, an override or a usage line that points an eval at it.
 PYTHON = sorted([*(ROOT / "evals").glob("*.py"), *(ROOT / "hpc" / "vllm").glob("*.py"),
-                 *(ROOT / "examples").glob("*.py")])
+                 *(ROOT / "scripts").glob("*.py")])
 SHELL = sorted([*(ROOT / "hpc" / "vllm").glob("*.sh"),
                 *(ROOT / "hpc" / "vllm").glob("*.sbatch"), ROOT / "Makefile"])
 

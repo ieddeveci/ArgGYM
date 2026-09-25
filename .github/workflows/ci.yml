@@ -36,7 +36,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync
-      - run: uv run ruff check arggym evals tests examples
+      - run: uv run ruff check arggym evals tests scripts
 
   install:
     # A bare install must not pull a web framework, and the console script must

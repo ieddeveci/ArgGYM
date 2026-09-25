@@ -60,7 +60,7 @@ particular item. `entry["metadata"]["gold"]` holds the answer the scorer is chec
 `ds.score_answer(text, entry)` returns the float alone, so a reasoning-gym-shaped harness or an RL
 loop works unchanged.
 
-`examples/evaluate.py` is a working reference: standard library only, reads a frozen taskset, calls
+`scripts/evaluate.py` is a working reference: standard library only, reads a frozen taskset, calls
 any OpenAI-compatible endpoint, writes a scored JSONL. It reaches into no ArgGYM internal, which is
 the point of it.
 
@@ -152,7 +152,7 @@ pip install arggym                # the library: generate, render, parse, score
 pip install "arggym[inspector]"   # + the browser inspector
 ```
 
-`examples/evaluate.py` needs nothing beyond the library: it is standard library only. A bare
+`scripts/evaluate.py` needs nothing beyond the library: it is standard library only. A bare
 install pulls neither a web framework nor an HTTP client -- `evals/` is not in the wheel, and its
 dependencies are a local group. From a checkout, `uv sync` then `uv run pytest`; `make` lists the
 shortcuts.

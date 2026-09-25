@@ -87,7 +87,7 @@ reasoning does not have that prose read as answer lines. An opening tag with no
 close after it, as in a truncated generation, is not a pair. The harness in
 `evals/` reads every template through the same method. Nothing in ArgGYM's
 scorers calls `extract_answer` (`arggym/core/answers.py:70`);
-`examples/evaluate.py` names its convention once and derives both the
+`scripts/evaluate.py` names its convention once and derives both the
 instruction and the extraction from it, which is the shape a harness wants.
 
 The content half of the answer-format block belongs to the task and does not
@@ -591,11 +591,11 @@ part of the id.
 
 ```
 arggym/            the package: generate, render, score
-examples/          a reference evaluator, standard library only
+scripts/           a reference evaluator, standard library only, and the results/ packer
 evals/             the harness: run a solver, score it, report it
 ```
 
-`examples/evaluate.py` reads a frozen taskset, calls any OpenAI-compatible
+`scripts/evaluate.py` reads a frozen taskset, calls any OpenAI-compatible
 endpoint, and hands the answer to `arggym.score_row`. It uses three public names
 and reaches into no private one, which is the demonstration: if the public
 surface were not enough, this file could not exist. It also shows the three
