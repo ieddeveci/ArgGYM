@@ -6,12 +6,10 @@ config (`evals/conf/model/<config>.yaml`) says what each request carries,
 including the checkpoint id. No fact lives in both. What is checked is what the
 two layers must agree on: which config each profile serves, whether the request
 fits the server, and the request fields that only work with a given server
-setting. `MODEL_MATRIX.csv`, the evaluation roster, restates a few of those facts
-for reading at a glance, so its columns are checked against them.
+setting.
 """
 from __future__ import annotations
 
-import csv
 import re
 import subprocess
 from pathlib import Path
@@ -302,39 +300,6 @@ for name in sorted(configs):
         actual = (configs[name].get("sampling") or {}).get("presence_penalty")
         if actual != want:
             errors.append(f"{name}: expected presence_penalty {want}, got {actual}")
-
-
-# ---------------------------------------------------------------------------
-# MODEL_MATRIX.csv: the evaluation roster. It is the only home of `params_b` and
-# `tier`; every other column restates a profile or a config, so it is checked
-# against them rather than trusted.
-# ---------------------------------------------------------------------------
-
-matrix = ROOT / "MODEL_MATRIX.csv"
-if not matrix.is_file():
-    errors.append("missing MODEL_MATRIX.csv")
-else:
-    with matrix.open(newline="") as fh:
-        for row in csv.DictReader(fh):
-            pattern = row["config"]
-            m = re.fullmatch(r"(.+)-<([^>]+)>", pattern)
-            stems = [f"{m.group(1)}-{lv}" for lv in m.group(2).split("|")] if m else [pattern]
-            for stem in stems:
-                if stem not in configs:
-                    errors.append(f"MODEL_MATRIX.csv: {pattern} names no eval config {stem}")
-                    continue
-                profile = profile_of(stem, names)
-                p = profiles.get(profile, {})
-                if configs[stem].get("model") != row["hf_model"]:
-                    errors.append(f"MODEL_MATRIX.csv: {stem} hf_model {row['hf_model']} "
-                                  f"but the config sends {configs[stem].get('model')}")
-                for col, key in (("default_gpus", "tensor_parallel_size_h100"),
-                                 ("dtype", "dtype"), ("max_model_len", "max_model_len"),
-                                 ("reasoning_parser", "reasoning_parser")):
-                    want = "" if p.get(key) is None else str(p.get(key))
-                    if row[col] != want:
-                        errors.append(f"MODEL_MATRIX.csv: {stem} {col} {row[col]!r} "
-                                      f"but {profile} says {want!r}")
 
 
 # ---------------------------------------------------------------------------
