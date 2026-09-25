@@ -1,0 +1,70 @@
+{
+  "status": "completed",
+  "taskset": "data/taskset-lite.jsonl",
+  "taskset_hash": "46d1994cc25f3710e1987f59d78b0923",
+  "taskset_versions": {
+    "arggym": "2.0.0",
+    "pyarg": "2.0.2",
+    "prompt_version": 13,
+    "scoring_version": 6,
+    "theory_schema": 1,
+    "python": "3.13.9",
+    "pythonhashseed": "<unset>"
+  },
+  "prompt_version": 13,
+  "scoring_version": 6,
+  "allow_stale_taskset": false,
+  "endpoint": {
+    "model": "google/gemma-4-E4B-it",
+    "base_url": "http://127.0.0.1:8103/v1",
+    "api_key_env": "VLLM_API_KEY",
+    "sampling": {
+      "max_tokens": 65536,
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "seed": 0
+    },
+    "extra_body": {
+      "top_k": 64,
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      },
+      "skip_special_tokens": false
+    },
+    "timeout_s": 10800,
+    "retries": 2,
+    "max_retry_after_s": 600
+  },
+  "base_model": null,
+  "template": "xml_tags",
+  "elicitation": "cot",
+  "elicitation_config": {
+    "name": "cot",
+    "system": "Think the problem through step by step before you answer.",
+    "prefix": "",
+    "suffix": ""
+  },
+  "filter": {
+    "tasks": null,
+    "levels": null,
+    "orderings": null,
+    "limit": null
+  },
+  "n_taskset_total": 1440,
+  "n_selected": 1440,
+  "n_resumed": 0,
+  "concurrency": 48,
+  "git_sha": "266cad8b2d47e946aa5d1c3e0c223ee7b52c6dc1",
+  "host": "pc-amax-1",
+  "python": "3.13.9",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "started_utc": "2026-09-25T11:53:07Z",
+  "finished_utc": "2026-09-25T12:41:56Z",
+  "elapsed_s": 2928.3,
+  "n_generated": 1440,
+  "n_errors": 0,
+  "n_truncated": 0,
+  "n_this_invocation": 1440,
+  "n_missing": 0,
+  "error_rate": 0.0
+}
