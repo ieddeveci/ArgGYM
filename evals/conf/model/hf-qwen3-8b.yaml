@@ -20,7 +20,7 @@
 # queries. For benchmarking on highly complex problems, such as those found in
 # math and programming competitions, we suggest setting the max output length to
 # 38,912 tokens." (https://huggingface.co/Qwen/Qwen3-8B).
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
+# Longest prompt in data/taskset.yaml with this tokenizer: 4,066
 # tokens.
 name: hf-qwen3-8b
 model: Qwen/Qwen3-8B

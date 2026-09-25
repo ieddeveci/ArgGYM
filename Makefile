@@ -26,10 +26,10 @@ test-all:
 	uv run pytest -q -m "" -n auto
 
 freeze:
-	uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+	uv run arggym freeze -c data/taskset.yaml -o data/taskset.jsonl
 
 freeze-lite:
-	uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
+	uv run arggym freeze -c data/taskset-lite.yaml -o data/taskset-lite.jsonl
 
 # `make eval MODEL=openrouter-claude-sonnet-4.5-high`. Scoring is a second step
 # on purpose, so it can be rerun against these generations whenever the scorer

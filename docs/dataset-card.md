@@ -65,9 +65,9 @@ on fresh seeds from the same spec. A fixed dataset cannot offer that.
 | Semantics | grounded, except `semantics_query`, which asks about five |
 | License | MIT |
 
-The grid is `tasksets/standard.yaml`. Ten seeds give each (task, level) 40
+The grid is `data/taskset.yaml`. Ten seeds give each (task, level) 40
 items, which is what a per-task level curve needs; at two, a (task, level) mean
-over 8 items moves in steps of 0.125. `tasksets/lite.yaml` is the same grid at
+over 8 items moves in steps of 0.125. `data/taskset-lite.yaml` is the same grid at
 two seeds, and it is what evals run on: 120 items per task are enough for a
 per-task ranking, at a fifth of the cost. Its rows are the first two of every standard
 cell, so a lite score is a score on a subset of the standard release rather than
@@ -87,7 +87,7 @@ than of the model.
 
 **Against the chance floor.** An uninformed answer is worth measuring on every
 task, and on four of them it is worth a lot. Measured on the level-3 rows of
-`tasksets/lite.yaml`:
+`data/taskset-lite.yaml`:
 
 | task | floor | the answer that earns it |
 |---|---|---|

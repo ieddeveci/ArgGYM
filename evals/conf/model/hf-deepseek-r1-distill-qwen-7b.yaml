@@ -19,7 +19,7 @@
 # recommends 32,768: "For all our models, the maximum generation length is set
 # to 32,768 tokens."
 # (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B).
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,058
+# Longest prompt in data/taskset.yaml with this tokenizer: 4,058
 # tokens.
 name: hf-deepseek-r1-distill-qwen-7b
 model: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B

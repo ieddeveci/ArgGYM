@@ -82,14 +82,14 @@ per-task ranking, at a fifth of the standard taskset's cost.
 ## Freeze a taskset
 
 ```
-uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
-uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
+uv run arggym freeze -c data/taskset.yaml -o data/taskset.jsonl
+uv run arggym freeze -c data/taskset-lite.yaml -o data/taskset-lite.jsonl
 ```
 
-`tasksets/standard.yaml` is the full grid, as an input you can check in, cite and diff. The
+`data/taskset.yaml` is the full grid, as an input you can check in, cite and diff. The
 manifest records the arggym and engine versions, which seeds produced the items and which were
 skipped, so two exports can be compared by what they skipped and not only by their hash.
-It is 12 tasks x 15 levels x 4 orderings x 10 seeds, 7200 rows. `tasksets/lite.yaml` is the same
+It is 12 tasks x 15 levels x 4 orderings x 10 seeds, 7200 rows. `data/taskset-lite.yaml` is the same
 grid at 2 seeds, 1440 rows, and its rows are the first two of every standard cell. Evals run on
 lite; standard is what a per-task level curve needs.
 

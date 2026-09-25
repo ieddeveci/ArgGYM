@@ -244,7 +244,7 @@ def test_the_unattacked_ring_stays_thin_and_reaches_every_ordering():
     ordering that carried none would have its `stable` column built from a different
     population than the rest, and a per-ordering mean would read that as an ordering effect.
 
-    Not keyed on the seed, because `tasksets/standard.yaml` scans up to 40 seeds a cell and
+    Not keyed on the seed, because `data/taskset.yaml` scans up to 40 seeds a cell and
     keeps the first ones that build, so a seed-keyed rule realises an uncontrolled fraction.
 
     The spread is even as well as complete: no ordering carries more than one ring above
@@ -291,10 +291,10 @@ def test_the_release_ships_every_ordering_the_ring_is_balanced_over():
 
     from arggym.core.spec import load
 
-    shipped = load(str(Path(__file__).resolve().parent.parent / "tasksets"
-                       / "standard.yaml")).orderings
+    shipped = load(str(Path(__file__).resolve().parent.parent / "data"
+                       / "taskset.yaml")).orderings
     assert set(shipped) == set(ALL_ORDERINGS), (
-        f"tasksets/standard.yaml ships {shipped}, so the rings at levels "
+        f"data/taskset.yaml ships {shipped}, so the rings at levels "
         f"{sorted(lv for lv, o in RING.items() if o not in shipped)} are never exported; "
         f"re-read the ring's share of the stable rows on the release")
 

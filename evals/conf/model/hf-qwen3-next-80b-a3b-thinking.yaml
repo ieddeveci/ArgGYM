@@ -17,7 +17,7 @@
 # tokens." (https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking). The cap
 # fits within the serving profile's max_model_len minus the 8,192-token prompt
 # reserve (hpc/vllm/verify_bundle.py checks both).
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,068
+# Longest prompt in data/taskset.yaml with this tokenizer: 4,068
 # tokens.
 name: hf-qwen3-next-80b-a3b-thinking
 model: Qwen/Qwen3-Next-80B-A3B-Thinking

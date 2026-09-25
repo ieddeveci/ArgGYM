@@ -345,7 +345,7 @@ require one. The largest case is an undercut of a strict rule, which ASPIC+
 makes inert (`NOTATION.md`, "an undercut cannot be aimed at a strict rule"):
 the generator aims half its undercut units at a strict rule
 (`arggym/tasks/formalization.py:347`), so on 82 of the 120 `formalization`
-rows of `tasksets/lite.yaml` the success test cannot tell whether that
+rows of `data/taskset-lite.yaml` the success test cannot tell whether that
 undercut was written. A support rule with a second route to its conclusion, or
 an undercut of such a rule, is the same case. Dropping the reference's last
 rule still succeeds on 44 of those 120 items: 19 drop an inert undercut, 20 a
@@ -467,7 +467,7 @@ orderings: [last_link_elitist, last_link_democratic,
             weakest_link_elitist, weakest_link_democratic]
 seeds:
   start: 0
-  take: 10           # items required per cell; lite.yaml asks for 2
+  take: 10           # items required per cell; taskset-lite.yaml asks for 2
   scan_limit: 40     # refuse the cell past this
 min_acceptance: 0.3  # refuse a cell keeping under 3 seeds in 10
 min_build_acceptance: 0.13  # refuse a cell keeping under 13 candidates in 100
@@ -642,7 +642,7 @@ Two rules, both from #9, and the definition the first one rests on.
 
 **Publish chance floors beside the scores.** `arggym floors <taskset>` measures
 what the best uninformed answer gets on each task, and it is not small: on the
-level-3 rows of `tasksets/lite.yaml`, `semantics_query` sits at 0.727 (0.786 over
+level-3 rows of `data/taskset-lite.yaml`, `semantics_query` sits at 0.727 (0.786 over
 the 40 level-3 rows of the standard grid), `status_query` at 0.375, `formalization` at
 0.219, `claim_chain` at 0.190, `perturbation` at 0.153 and `defeat_diagnosis` at
 0.131, while the six engine-checked tasks sit at 0.000 because no fixed answer

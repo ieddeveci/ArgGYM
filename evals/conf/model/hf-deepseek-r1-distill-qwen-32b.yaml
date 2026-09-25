@@ -18,7 +18,7 @@
 # (https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B). The cap
 # fits within the serving profile's max_model_len minus the 8,192-token prompt
 # reserve (hpc/vllm/verify_bundle.py checks both).
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,058
+# Longest prompt in data/taskset.yaml with this tokenizer: 4,058
 # tokens.
 name: hf-deepseek-r1-distill-qwen-32b
 model: deepseek-ai/DeepSeek-R1-Distill-Qwen-32B

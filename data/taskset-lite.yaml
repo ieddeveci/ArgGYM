@@ -1,9 +1,9 @@
 # The standard grid at two seeds a cell: 12 tasks x 15 levels x 4 orderings x
 # 2 seeds = 1440 rows, a fifth of the eval cost.
 #
-#   uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
+#   uv run arggym freeze -c data/taskset-lite.yaml -o data/taskset-lite.jsonl
 #
-# Every field but `seeds.take` is standard.yaml's, and the reasons for each are
+# Every field but `seeds.take` is taskset.yaml's, and the reasons for each are
 # written there; tests/test_a_taskset_is_defined_by_its_spec.py fails if the two
 # files drift. A cell takes the first seeds that build, scanning from `start`, so
 # lite's rows are the first two of each standard cell: same ids, same questions,
@@ -13,7 +13,7 @@
 #
 # Two seeds size the grid for a per-task model ranking (120 items a task) and a
 # level trend read as a slope or over bands of levels. A (task, level) mean over
-# 8 items moves in steps of 0.125, so read level curves off standard.yaml.
+# 8 items moves in steps of 0.125, so read level curves off taskset.yaml.
 
 arggym: "2.0.0"
 pyarg: "2.0.2"
@@ -46,7 +46,7 @@ seeds:
   take: 2
   scan_limit: 40
 
-# Both guards are shared with standard.yaml, which names the thinnest cell at
+# Both guards are shared with taskset.yaml, which names the thinnest cell at
 # each take.
 min_acceptance: 0.3
 min_build_acceptance: 0.13

@@ -7,7 +7,7 @@ no HTTP client.
 
 ```
 uv sync                                    # the evals group is included in dev
-uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl   # shipped; rebuild only after a generator change
+uv run arggym freeze -c data/taskset-lite.yaml -o data/taskset-lite.jsonl   # shipped; rebuild only after a generator change
 uv run python -m evals.run   taskset=data/taskset-lite.jsonl model=openrouter-gpt-5-medium
 uv run python -m evals.score outputs/runs/<dir>
 uv run python -m evals.report outputs/runs/* -o outputs/reports/latest
