@@ -50,7 +50,7 @@ def atoms_of(rule_names: Set[str], literals: Iterable[str] = (),
     """The atoms filling a set of literal slots, each stripped of a leading ``-``.
 
     A consequent ``-<name>`` with ``<name>`` a rule is that rule's undercut target
-    rather than an atom (NOTATION.md, undercutting), and a consequent is the only
+    rather than an atom (docs/notation.md, undercutting), and a consequent is the only
     slot where that reading applies; every other slot contributes its atom whether
     or not the name is also a rule's. So ``rule_names & atoms_of(rule_names, ...)``
     is the set of names that mean two things at once, which is exactly when

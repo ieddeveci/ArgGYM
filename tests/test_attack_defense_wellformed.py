@@ -1,7 +1,7 @@
 """No literal in an attack_defense theory is declared twice.
 
 An axiom is unattackable and a premise is undermineable, so a literal declared as both
-contradicts itself on the face of the prompt; NOTATION.md section 1 rules it out. Each builder
+contradicts itself on the face of the prompt; docs/notation.md section 1 rules it out. Each builder
 used to draw names from several independent pools over one 1560-string universe, so the pools
 collided. Every cell below produced a malformed theory before that was fixed.
 """

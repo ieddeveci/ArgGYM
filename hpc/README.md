@@ -1,6 +1,6 @@
 # ArgGYM HF/vLLM — TRUBA Apptainer bundle
 
-This is an overlay for an existing ArgGYM repository. It preserves the benchmark/scoring code and adds the H100/H200 model profiles plus TRUBA deployment automation.
+The vLLM serving profiles for the `hf-*` eval configs, and the scripts that serve them on the TRUBA cluster's H100 and H200 nodes. `docs/evaluation.md` ("Reproducing the results") covers serving the same profiles on your own machine.
 
 ## Run
 

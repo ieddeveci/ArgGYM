@@ -25,7 +25,7 @@ def tasks() -> None:
 
 @app.command()
 def freeze(
-    config: Path = typer.Option(Path("tasksets/standard.yaml"), "--config", "-c",
+    config: Path = typer.Option(Path("data/taskset.yaml"), "--config", "-c",
                                 help="Taskset spec to build."),
     out: Path = typer.Option(Path("data/taskset.jsonl"), "--out", "-o",
                              help="Output JSONL."),

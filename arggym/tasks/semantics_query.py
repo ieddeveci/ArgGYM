@@ -81,7 +81,7 @@ EAGER = "eager"
 # the unshielded ring needs stable, and the semantics are this pair -- so only the seed
 # salt separates them and the three levels are re-seedings of one generator. A theory
 # runs 14 to 24 directives on all of them (40 seeds x 4 orderings a level, and again at
-# 200). The first rung the task has is level 4. `tasksets/standard.yaml` ships levels 1
+# 200). The first rung the task has is level 4. `data/taskset.yaml` ships levels 1
 # to 3 because it ships every level, not because they are easier.
 #
 # Credulous preferred is the second member because the floating cluster every item opens
@@ -132,7 +132,7 @@ def wants_unshielded_ring(level: int, ordering: str) -> bool:
     `stable` says, and a solver could score it without reading a theory.
 
     Keyed on (level, ordering), which are the item's coordinates in the exported grid, and
-    not on the seed. `tasksets/standard.yaml` scans up to 40 seeds a cell and keeps the
+    not on the seed. `data/taskset.yaml` scans up to 40 seeds a cell and keeps the
     first `take` that build, so which seeds a cell ships is not fixed and a seed-keyed rule
     would realise an uncontrolled fraction.
 

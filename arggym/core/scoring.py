@@ -117,7 +117,7 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
     rule_names = {o.name for o in base_ops if o.kind in ("strict", "defeasible")}
     # #89: a rule named after an atom of the theory is not caught here or anywhere
     # downstream, because `-<name>` is read as the undercut of rule `<name>`
-    # (NOTATION.md) whether or not an atom of that name also exists. The rule builds,
+    # (docs/notation.md) whether or not an atom of that name also exists. The rule builds,
     # the answer applies, and the atom's own contrary and preferences now resolve
     # against the rule's on/off switch instead -- a perfect answer can lose this way
     # with `illegal: []`, indistinguishable from reasoning badly. Separating the two
@@ -130,7 +130,7 @@ def check_legality(ops: Sequence[Operation], base_ops: Sequence[Operation],
     # which is the silent zero this check exists to remove. Both lists go in, so the
     # verdict does not depend on which line introduced the atom.
     atoms, _ = split_atoms_and_rules(list(base_ops) + list(ops))
-    # NOTATION.md: "rule antecedents must be literals ALREADY present in the theory".
+    # docs/notation.md: "rule antecedents must be literals ALREADY present in the theory".
     # Nothing checked it, so a rule over two invented literals was accepted and an answer
     # could route its chain through an intermediate the theory never mentions (#35). A
     # contrary the answer legally introduces counts as present from that line on, which

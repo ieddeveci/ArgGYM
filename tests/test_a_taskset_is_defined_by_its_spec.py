@@ -91,7 +91,7 @@ def test_a_spec_round_trips_through_a_file(tmp_path):
     assert load(str(p)) == s
 
 
-TASKSETS = Path(__file__).resolve().parent.parent / "tasksets"
+DATA = Path(__file__).resolve().parent.parent / "data"
 
 
 def test_the_checked_in_spec_describes_todays_grid():
@@ -100,7 +100,7 @@ def test_the_checked_in_spec_describes_todays_grid():
     from arggym.core import registry
     from arggym.core.spec import ALL_ORDERINGS
 
-    s = load(str(TASKSETS / "standard.yaml"))
+    s = load(str(DATA / "taskset.yaml"))
     assert sorted(s.tasks) == sorted(registry.task_names())
     assert len(s.tasks) == 12
     assert s.levels == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
@@ -122,8 +122,8 @@ def test_the_checked_in_spec_describes_todays_grid():
 def test_lite_is_standard_at_two_seeds():
     # One grid at two sizes. Any other difference would make a lite score a
     # score on another taskset rather than on a subset of this one.
-    standard = load(str(TASKSETS / "standard.yaml"))
-    lite = load(str(TASKSETS / "lite.yaml"))
+    standard = load(str(DATA / "taskset.yaml"))
+    lite = load(str(DATA / "taskset-lite.yaml"))
     assert lite.seeds.take == 2
     assert replace(lite, seeds=replace(lite.seeds, take=standard.seeds.take)) == standard
     assert len(lite.cells) * lite.seeds.take == 1440
@@ -145,8 +145,8 @@ def test_a_lite_cell_is_the_first_two_rows_of_its_standard_cell(task, level, ord
     # comparing, which is too slow to run here.
     from arggym.core.freeze import fill_cell
 
-    standard = load(str(TASKSETS / "standard.yaml"))
-    lite = load(str(TASKSETS / "lite.yaml"))
+    standard = load(str(DATA / "taskset.yaml"))
+    lite = load(str(DATA / "taskset-lite.yaml"))
     big, _ = fill_cell(task, level, ordering, standard)
     small, _ = fill_cell(task, level, ordering, lite)
     assert json.dumps(small, sort_keys=True, default=str) == json.dumps(
@@ -158,5 +158,5 @@ def test_the_checked_in_spec_matches_this_tree():
     # this tree does not have would produce a taskset the spec does not name.
     from arggym.core.spec import check_versions
 
-    for name in ("standard.yaml", "lite.yaml"):
-        check_versions(load(str(TASKSETS / name)))
+    for name in ("taskset.yaml", "taskset-lite.yaml"):
+        check_versions(load(str(DATA / name)))

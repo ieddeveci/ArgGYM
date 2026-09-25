@@ -12,7 +12,7 @@
 # no larger cap can hold across the roster. This profile's context is smaller,
 # so the cap is what it leaves (hpc/vllm/verify_bundle.py checks both). The card
 # recommends no output length.
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,773
+# Longest prompt in data/taskset.jsonl with this tokenizer: 4,773
 # tokens.
 name: hf-mistral-7b-instruct-v0.3
 model: mistralai/Mistral-7B-Instruct-v0.3

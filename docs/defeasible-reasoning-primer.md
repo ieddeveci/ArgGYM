@@ -6,7 +6,7 @@ Goal: enough understanding of defeasible reasoning, ASPIC+, and grounded semanti
 
 **Deductive** reasoning is what classical logic does: if the premises are true, the conclusion is *guaranteed*. "All squares have four sides; this is a square; therefore it has four sides." Adding new information can never break a valid deduction. This property is called **monotonicity**.
 
-**Defeasible** reasoning is everyday, presumption-based reasoning: conclusions are drawn *by default* and can be **retracted** when new information arrives. The classic example (which appears in this repo's templates, `aspic_content.py`):
+**Defeasible** reasoning is everyday, presumption-based reasoning: conclusions are drawn *by default* and can be **retracted** when new information arrives. The classic example:
 
 - Tweety is a bird → *presumably* Tweety flies.
 - Now you learn Tweety is a penguin → conclusion retracted: Tweety does not fly.
@@ -27,7 +27,7 @@ ASPIC+ is the framework used here for layers 1–2; **grounded semantics** is us
 
 ## 3. ASPIC+ building blocks
 
-An ASPIC+ **theory** consists of (see `ASPICFramework` in `aspic_engine.py`, and the DSL in `aspic_dsl.py`):
+An ASPIC+ **theory** consists of (see `ASPICFramework` in `arggym/aspic/engine.py`, and the DSL in `arggym/aspic/dsl.py`):
 
 | Element | DSL | Meaning |
 |---|---|---|
@@ -38,7 +38,7 @@ An ASPIC+ **theory** consists of (see `ASPICFramework` in `aspic_engine.py`, and
 | **Rule preference** | `[prefer_rule: d1 > d2]` | d1 is stronger than d2. |
 | **Premise preference** | `[prefer_premise: p > q]` | p is stronger than q. |
 
-Negation: `-x` is the contrary of `x` (handled in `contrary()` in `aspic_engine.py`).
+Negation: `-x` is the contrary of `x` (handled in `contrary()` in `arggym/aspic/engine.py`).
 
 Tweety in the DSL:
 
@@ -58,7 +58,7 @@ An **argument** chains these: {premise bird, apply d1} is an argument for `fly`.
 ```
 Engine verdict: `-fly: JUSTIFIED`, `fly: OVERRULED` — the firm argument wins with no preference needed.
 
-*(All verdicts in this primer are real `aspic_engine` outputs, not hand-derived.)*
+*(All verdicts in this primer are real engine outputs, not hand-derived.)*
 
 ## 4. The three kinds of attack
 
@@ -92,7 +92,7 @@ Verdict: `fly: OVERRULED`, `-d1: JUSTIFIED` — note the asymmetry: the undercut
 
 ## 5. From attack to defeat: preferences and orderings
 
-An attack only **defeats** if the attacker is not weaker than its target. That's where preferences come in — and *how* an argument's overall strength is computed from its parts is the **ordering** (see `ORDERINGS` in `aspic_engine.py`):
+An attack only **defeats** if the attacker is not weaker than its target. That's where preferences come in — and *how* an argument's overall strength is computed from its parts is the **ordering** (see `ORDERINGS` in `arggym/aspic/engine.py`):
 
 - **Last-link**: an argument's strength is decided by its *final* defeasible rule. A preference on the last rule wins the conflict.
 - **Weakest-link**: an argument is only as strong as its *weakest* element across the whole chain (rules and premises).
@@ -119,7 +119,7 @@ Once you have the attack/defeat graph, grounded semantics computes the *most ske
 3. Newly rejected attackers may free other arguments → accept them; repeat until nothing changes.
 4. Whatever remains — typically symmetric conflicts with no preference to break the tie — stays **UNDEC** (undecided).
 
-The set of IN arguments is the **grounded extension**. It always exists and is unique, which is what makes engine-verified gold answers possible. (Other semantics — preferred, stable — allow multiple "reasonable" outcomes; ArgGYM avoids that ambiguity.) Implementation: `argument_labels()` in `aspic_engine.py`, using PyArg's `get_grounded_extension`.
+The set of IN arguments is the **grounded extension**. It always exists and is unique, which is what makes engine-verified gold answers possible. (Other semantics — preferred, stable — allow multiple "reasonable" outcomes; ArgGYM asks about them only in `semantics_query`, which names the semantics beside each claim.) Implementation: `argument_labels()` in `arggym/aspic/engine.py`.
 
 A key phenomenon to know: **reinstatement**. If A attacks B and C attacks A, then C "saves" B — B is back IN. Chains of attacks flip statuses alternately; several tasks (robustness, preference_construction) revolve around this.
 
@@ -136,14 +136,14 @@ Verdict flips: `fly: JUSTIFIED`, `-fly: OVERRULED` — d3 knocks out d2's argume
 
 ## 7. Claim statuses
 
-Task answers are usually about *claims* (literals), not arguments. A claim's status aggregates over all arguments concluding it (`status_map()` in `aspic_engine.py`):
+Task answers are usually about *claims* (literals), not arguments. A claim's status aggregates over all arguments concluding it (`status_map()` in `arggym/aspic/engine.py`):
 
 - **JUSTIFIED** — some argument for it is IN (survives every attack).
 - **OVERRULED** — arguments exist, but all are OUT (defeated by stronger surviving arguments).
 - **UNDECIDED** — best arguments are stuck in unresolved conflict.
 - **UNSATISFIABLE** — no argument for it can be built at all.
 
-These four labels are the answer vocabulary of `status_query`, the most central task. One theory showing all four:
+The engine gives all four. `status_query`, the most central task, asks only about claims some argument concludes, so its answers use the first three. One theory showing all four:
 
 ```
 [axiom: contract_signed]        [premise: terms_breached]
@@ -162,21 +162,18 @@ Engine verdicts:
 
 ## 8. The tools
 
-- **PyArg** (`python-argumentation` on PyPI) — Python library implementing ASPIC+, abstract argumentation frameworks, and semantics. It is the *ground-truth engine*: `aspic_engine.py` is a thin wrapper that builds a PyArg `ArgumentationTheory` and reads off the grounded extension. If PyArg is wrong, gold answers are wrong, which is why auditing it is a standing task.
-- **The bracket DSL** (`aspic_dsl.py`, spec shown to models in `prompting.py`) — the interchange format: theories are rendered into it, and constructive-task answers from models are parsed back out of it, applied to the theory, and re-verified by the engine.
-- **Local LLM server (vLLM or Ollama)** — used by `build_kb.py`/`generate_argumentations.py` to author natural-language argument material (the "content" KB, `kb.json`) from seed claims in `claims.json`. LLMs author *surface text* only; correctness always comes from the engine. The chat client auto-detects which API the `--host` speaks.
+- **PyArg** (`python-argumentation` on PyPI, pinned to 2.0.2) -- Python library implementing ASPIC+, abstract argumentation frameworks, and semantics. It is the *ground-truth engine*: `arggym/aspic/` wraps it, and every gold answer is computed through it. If PyArg is wrong, gold answers are wrong.
+- **The bracket DSL** (`arggym/aspic/dsl.py`, specified in `docs/notation.md`) -- the interchange format: theories are rendered into it, and answers to the construction tasks are parsed back out of it, applied to the theory, and re-verified by the engine.
 
 ## 9. How ArgGYM puts it together
 
-- **Procedural generation**: `aspic_gym.py` samples random ASPIC+ theories from `TheoryConfig`, so items are unlimited and contamination-free.
-- **Engine-verified**: every gold answer is computed by PyArg, and model answers to constructive tasks (build an attack, add a preference…) are *executed* in the engine and checked semantically — not string-matched.
-- **Two surface modes**: *symbolic* (abstract atoms like `p`, `q`) vs *content* (plain-language statements drawn from `kb.json` / templates in `aspic_content.py`). Comparing the two isolates "can it do the logic" from "does the wording help or mislead".
-- **Difficulty levels 1–15** (`levels.py`): knobs (theory size, conflicts, undercut probability…) grow with level; features unlock at set levels (`FEATURES`: conflict@2, axioms@3, strict rules@4, undercuts@5, …).
-- **13 tasks** (`tasks/registry.py`), roughly grouped:
-  - *Read the theory*: `status_query` (classify claim statuses), `claim_identification`, `attackers_of`.
-  - *Build arguments*: `attack` (mount a defeating attack), `counter_argumentation`, `preference_construction` (add preferences to settle an undecided claim), `evidence_construction`, `enthymeme` (fill in missing element of an incomplete argument).
-  - *Translate*: `formalization` (NL → DSL), `syntax` (format drill — likely excluded from the benchmark, kept for training).
-  - *Revise beliefs*: `perturbation_prediction` (predict status changes after the theory is edited), `robustness`, `ordering_sensitivity` (same theory, different ordering).
+- **Procedural generation**: each task module under `arggym/tasks/` builds a theory to its level's shape from a seed, so items are unlimited and a contested result can be re-run on fresh seeds.
+- **Engine-verified**: every gold answer is computed by PyArg, and answers to the construction tasks (build an attack, add a preference...) are *executed* in the engine and checked semantically, not string-matched.
+- **Opaque symbols**: literals are drawn from a per-item pool of opaque names and rule names are randomized, so no answer can be reached from world knowledge. `formalization` is the one task with natural-language text.
+- **Difficulty levels 1-15**: each task states its own shape per level; the knobs the tasks share are in `arggym/core/curriculum.py`.
+- **12 tasks** (`arggym/core/registry.py`), in two families, listed with what each asks in `docs/dataset-card.md`:
+  - *Read the theory*: `status_query`, `semantics_query`, `claim_chain`, `defeat_diagnosis`, `perturbation`, `formalization`.
+  - *Change the theory*: `preference_construction`, `counter_argument`, `counter_argument_strict`, `attack`, `defence`, `attack_defense`.
 
 ## 10. End-to-end worked example (do this by hand once)
 
@@ -359,27 +356,26 @@ This is what the `ordering_sensitivity` task probes, and it is the strongest
 argument for pinning the ordering in the prompt: the *same theory* has two
 defensible answers, and only the declared ordering picks one.
 
-*(All verdicts above are real `aspic_engine` outputs.)*
+*(All verdicts above are real engine outputs.)*
 
 ### 10.11 How this looks as a benchmark item
 
 Given this theory, ArgGYM's `status_query` task asks for the status of
 `prescribe_amox`; `attack` asks the model to *construct* the undercut in §10.8;
-`perturbation_prediction` gives it the undercut and asks what changes;
+`perturbation` gives it the undercut and asks what changes;
 `formalization` gives the English case from §10.1 and asks for the DSL of §10.3.
-In *content* mode the atoms are replaced by glossed sentences ("the throat
-culture is positive for strep") and the rules are numbered "Rule 1, Rule 2, …";
-in *symbolic* mode they appear as bare atoms. The gold answer is whatever the
-engine just printed — in both modes.
+In the generated items the atoms are opaque names rather than words like
+`strep_positive`. The gold answer is whatever the engine just printed.
 
 One honest difference from this example: here the preference *came from
 somewhere* (a clinical guideline hierarchy). ArgGYM's generated items choose the
 direction at random, deliberately, so that a model cannot skip the theory and
-answer from world knowledge alone. See `preference-semantics-issues.md`.
+answer from world knowledge alone (`docs/dataset-card.md`, "Preference
+direction is arbitrary").
 
-The fastest way to build intuition: run the Flask playground (`python app.py`),
-generate level-1 `status_query` items, and solve them by hand before checking
-the engine's answer.
+The fastest way to build intuition: start the inspector (`arggym inspect`, which
+needs `pip install "arggym[inspector]"`), open level-1 `status_query` items, and
+solve them by hand before checking the engine's answer.
 
 ## 11. Reading list (optional, in order)
 

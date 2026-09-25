@@ -87,7 +87,7 @@ reasoning does not have that prose read as answer lines. An opening tag with no
 close after it, as in a truncated generation, is not a pair. The harness in
 `evals/` reads every template through the same method. Nothing in ArgGYM's
 scorers calls `extract_answer` (`arggym/core/answers.py:70`);
-`examples/evaluate.py` names its convention once and derives both the
+`scripts/evaluate.py` names its convention once and derives both the
 instruction and the extraction from it, which is the shape a harness wants.
 
 The content half of the answer-format block belongs to the task and does not
@@ -234,6 +234,23 @@ value and never writes a directive. A solver returning text calls `parse` first.
 Both reach the same scorer and get the same object back, which is the property
 worth having, rather than two scorers that happen to agree today.
 
+```python
+ds = arggym.create("counter_argument", level=6, size=50)
+# The names are the ones the question's theory uses, so read them from the item.
+ops = arggym.ops_from_json([{"kind": "prefer_rule", "stronger": "xo7", "weaker": "xi7"}])
+result = ds.score_value(ops, ds[0])
+
+# A label map is a plain dict: every claim the question asks about, and its status.
+labels = arggym.create("status_query", level=6, size=10)
+result = labels.score_value({"ab1": "justified", "cd2": "undecided"}, labels[0])
+```
+
+Both show the shape of an answer rather than a correct one: the names above
+belong to no particular item. `entry["metadata"]["gold"]` holds the answer the
+scorer checks against. A stored row scores without a dataset object or the
+generator: `arggym.score_row(text, row)` and `arggym.score_row_value(value,
+row)`.
+
 `parse` raises `UnparseableAnswer` on text that spells out no answer at all;
 `score_value` never raises it, because a solver that hands over a value has done
 its own parsing and its failures are its own. `score` turns the exception back
@@ -342,10 +359,10 @@ names the first six literals on which a failed answer differs.
 
 Behaviour cannot see a directive that changes no status, and success does not
 require one. The largest case is an undercut of a strict rule, which ASPIC+
-makes inert (`NOTATION.md`, "an undercut cannot be aimed at a strict rule"):
+makes inert (`docs/notation.md`, "an undercut cannot be aimed at a strict rule"):
 the generator aims half its undercut units at a strict rule
 (`arggym/tasks/formalization.py:347`), so on 82 of the 120 `formalization`
-rows of `tasksets/lite.yaml` the success test cannot tell whether that
+rows of `data/taskset-lite.yaml` the success test cannot tell whether that
 undercut was written. A support rule with a second route to its conclusion, or
 an undercut of such a rule, is the same case. Dropping the reference's last
 rule still succeeds on 44 of those 120 items: 19 drop an inert undercut, 20 a
@@ -467,7 +484,7 @@ orderings: [last_link_elitist, last_link_democratic,
             weakest_link_elitist, weakest_link_democratic]
 seeds:
   start: 0
-  take: 10           # items required per cell; lite.yaml asks for 2
+  take: 10           # items required per cell; taskset-lite.yaml asks for 2
   scan_limit: 40     # refuse the cell past this
 min_acceptance: 0.3  # refuse a cell keeping under 3 seeds in 10
 min_build_acceptance: 0.13  # refuse a cell keeping under 13 candidates in 100
@@ -591,11 +608,11 @@ part of the id.
 
 ```
 arggym/            the package: generate, render, score
-examples/          a reference evaluator, standard library only
+scripts/           a reference evaluator, standard library only, and the results/ packer
 evals/             the harness: run a solver, score it, report it
 ```
 
-`examples/evaluate.py` reads a frozen taskset, calls any OpenAI-compatible
+`scripts/evaluate.py` reads a frozen taskset, calls any OpenAI-compatible
 endpoint, and hands the answer to `arggym.score_row`. It uses three public names
 and reaches into no private one, which is the demonstration: if the public
 surface were not enough, this file could not exist. It also shows the three
@@ -616,9 +633,9 @@ inspector = ["flask>=3.0"]
 report    = ["matplotlib>=3.8"]
 
 [dependency-groups]
-evals = ["openai>=3.8", "hydra-core>=1.3", "tqdm>=4.66"]
+evals = ["openai>=3.8", "hydra-core>=1.3", "tqdm>=4.66", "python-dotenv>=1.0"]
 dev   = [{include-group = "evals"}, "pytest>=8.0", "pytest-xdist>=3.0",
-         "ruff>=0.6", "flask>=3.0"]
+         "ruff>=0.6", "flask>=3.0", "matplotlib>=3.8"]
 ```
 
 `pip install arggym` pulls no web framework, which is #54, and CI checks that
@@ -642,7 +659,7 @@ Two rules, both from #9, and the definition the first one rests on.
 
 **Publish chance floors beside the scores.** `arggym floors <taskset>` measures
 what the best uninformed answer gets on each task, and it is not small: on the
-level-3 rows of `tasksets/lite.yaml`, `semantics_query` sits at 0.727 (0.786 over
+level-3 rows of `data/taskset-lite.yaml`, `semantics_query` sits at 0.727 (0.786 over
 the 40 level-3 rows of the standard grid), `status_query` at 0.375, `formalization` at
 0.219, `claim_chain` at 0.190, `perturbation` at 0.153 and `defeat_diagnosis` at
 0.131, while the six engine-checked tasks sit at 0.000 because no fixed answer

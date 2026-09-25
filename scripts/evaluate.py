@@ -12,8 +12,8 @@ question says nothing about a fence, so the convention is chosen here: swap
 `TEMPLATE` for `AnswerTemplate("boxed", r"\\boxed{", "}")` and both the
 instruction and the extraction follow it.
 
-    uv run arggym freeze -c tasksets/lite.yaml -o data/taskset-lite.jsonl
-    python examples/evaluate.py data/taskset-lite.jsonl \
+    uv run arggym freeze -c data/taskset-lite.yaml -o data/taskset-lite.jsonl
+    python scripts/evaluate.py data/taskset-lite.jsonl \
         --base-url http://localhost:8000/v1 --model my-model
 
 The lite taskset is what evals run on: 120 items per task are enough for a

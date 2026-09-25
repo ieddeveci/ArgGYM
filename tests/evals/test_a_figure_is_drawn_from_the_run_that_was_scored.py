@@ -1,8 +1,7 @@
 """The figures are drawn from artifacts `evals/score.py` wrote, in this test.
 
-`docs/arggym2-eval-2026-08-11/make_figures.py` read `metrics["overall"]` and a
-per-task `mean_score`. The harness writes `coverage` and `mean`, and had done for
-months; nothing ran the script, so nobody found out until the next sweep needed a
+An earlier figure script read `metrics["overall"]` and a per-task `mean_score`.
+The harness writes `coverage` and `mean`, and had done for months; nothing ran the script, so nobody found out until the next sweep needed a
 chart (#142). A fixture with the field names typed in by hand would have gone
 stale beside it, so every metrics file here comes out of `score_run`, and a
 rename in `evals/score.py` fails these tests rather than the sweep.

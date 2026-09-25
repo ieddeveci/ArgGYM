@@ -17,7 +17,7 @@
 # (its vLLM examples set MAX_TOK = 262144, the whole context). The cap fits
 # within the serving profile's max_model_len minus the 8,192-token prompt
 # reserve (hpc/vllm/verify_bundle.py checks both).
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,163
+# Longest prompt in data/taskset.jsonl with this tokenizer: 4,163
 # tokens.
 name: hf-ministral-3-3b-reasoning-2512
 model: mistralai/Ministral-3-3B-Reasoning-2512

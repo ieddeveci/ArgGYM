@@ -1,14 +1,13 @@
 # The evaluated grid.
 #
-# This file is the taskset, not a convenience wrapper over one. Until now the
-# grid was a function default the CLI could not override, so a published taskset
-# was identified by "whatever the defaults were at that commit". Cite this file
-# and its taskset_hash instead.
+# This file defines the taskset. Cite it together with the taskset_hash of the
+# file it freezes into.
 #
-#   uv run arggym freeze -c tasksets/standard.yaml -o data/taskset.jsonl
+#   uv run arggym freeze -c data/taskset.yaml -o data/taskset.jsonl
 #
-# 12 tasks x 15 levels x 4 orderings x 10 seeds = 7200 rows. tasksets/lite.yaml is
-# this file at two seeds a cell, and its rows are a subset of these.
+# 12 tasks x 15 levels x 4 orderings x 10 seeds = 7200 rows.
+# data/taskset-lite.yaml is this file at two seeds a cell, and its rows are a
+# subset of these.
 
 # Checked before anything is generated, so a mismatch costs seconds rather than
 # a full export. Leave a field out and the export records what it used instead.
@@ -90,7 +89,7 @@ seeds:
 # (minimality_unproven, #124): each costs one candidate, and the whole budget in
 # freeze time. Five seeds of this grid are skipped that way, all
 # preference_construction under weakest-link democratic at levels 9, 12, 14 and
-# 15, and the lowest rate is 0.83, at L14 (10 kept of 12). lite.yaml reads the
+# 15, and the lowest rate is 0.83, at L14 (10 kept of 12). taskset-lite.yaml reads the
 # same cell over its first four seeds, which hold both of its skips, so it keeps
 # 2 of 4 at 0.50. With two items the rate is 2/n, so 0.3 lets that cell take two
 # more skips (2/6 = 0.33) before refusing it (2/7 = 0.29).
@@ -102,7 +101,7 @@ min_acceptance: 0.3
 # and is set to fire on a generator that falls below today's floor. The floor is
 # a reading at a given `take`, not a property of the cell: the scan stops as soon
 # as the cell is full. At the `take: 10` above the thinnest cell is perturbation
-# at L6 under last-link elitist, 0.227 (10 kept of 44). lite.yaml shares this
+# at L6 under last-link elitist, 0.227 (10 kept of 44). taskset-lite.yaml shares this
 # value, and at its `take: 2` the thinnest is semantics_query at L13 under
 # weakest-link democratic, 0.167 (2 kept of 12), so 0.13 sits under the lower
 # of the two. Change `take` and this floor has to be measured again.

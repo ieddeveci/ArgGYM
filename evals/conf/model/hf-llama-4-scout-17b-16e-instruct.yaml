@@ -11,7 +11,7 @@
 # no larger cap can hold across the roster. The card recommends no output
 # length. The cap fits within the serving profile's max_model_len minus the
 # 8,192-token prompt reserve (hpc/vllm/verify_bundle.py checks both).
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 3,859
+# Longest prompt in data/taskset.jsonl with this tokenizer: 3,859
 # tokens (tokenizer from unsloth/Llama-4-Scout-17B-16E-Instruct; the original is gated).
 name: hf-llama-4-scout-17b-16e-instruct
 model: meta-llama/Llama-4-Scout-17B-16E-Instruct

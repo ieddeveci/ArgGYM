@@ -19,7 +19,7 @@ from arggym.core.freeze import freeze
 from arggym.core.spec import SeedPolicy, TasksetSpec
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "examples"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 import evaluate  # noqa: E402
 
@@ -47,7 +47,7 @@ def test_the_example_names_one_convention_and_uses_it_for_both_halves(taskset):
     convention is named once and both halves are derived from it, so a reader who
     swaps `TEMPLATE` gets an instruction and an extractor that still match.
     """
-    src = (ROOT / "examples" / "evaluate.py").read_text()
+    src = (ROOT / "scripts" / "evaluate.py").read_text()
     assert "arggym.extract_answer(" in src
     assert "re.compile" not in src, "the example defines a second answer-region regex"
     assert evaluate.prompt_for("Q") == f"Q\n{evaluate.TEMPLATE.instruction}"
@@ -120,7 +120,7 @@ def test_the_report_refuses_to_print_one_number(capsys):
 
 
 def test_the_example_is_syntactically_a_script():
-    r = subprocess.run([sys.executable, str(ROOT / "examples" / "evaluate.py"), "--help"],
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "evaluate.py"), "--help"],
                        capture_output=True, text=True)
     assert r.returncode == 0
     assert "--base-url" in r.stdout

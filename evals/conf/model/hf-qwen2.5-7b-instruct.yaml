@@ -17,7 +17,7 @@
 # card's "Context Length: Full 131,072 tokens and generation 8192 tokens"
 # (https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) describes what the model can
 # generate, not advice for long reasoning, so it is no recommendation.
-# Longest prompt in tasksets/standard.yaml with this tokenizer: 4,066
+# Longest prompt in data/taskset.jsonl with this tokenizer: 4,066
 # tokens.
 name: hf-qwen2.5-7b-instruct
 model: Qwen/Qwen2.5-7B-Instruct

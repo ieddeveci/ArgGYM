@@ -7,7 +7,7 @@ what an item permits is not a single axis, so `formalization` and
 `permitted_block`. Each block's docstring names the scoring policy that makes
 its clauses the right ones.
 
-`NOTATION.md` states the same rules for a human reader, in its own register.
+`docs/notation.md` states the same rules for a human reader, in its own register.
 `tests/test_the_notation_contract_is_stated_where_it_is_enforced.py` holds the
 two together.
 """
