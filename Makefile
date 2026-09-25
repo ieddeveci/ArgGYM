@@ -63,10 +63,10 @@ RUNS_DIR ?= outputs/runs
 FORCE ?=
 results-add:
 	@test -n "$(RUN)" || { echo 'usage: make results-add RUN="<run_id> [<run_id>...]"'; exit 1; }
-	RUNS_DIR=$(RUNS_DIR) FORCE=$(FORCE) bash scripts/results.sh add $(RUN)
+	RUNS_DIR="$(RUNS_DIR)" FORCE="$(FORCE)" bash scripts/results.sh add $(RUN)
 
 results-unpack:
-	RUNS_DIR=$(RUNS_DIR) FORCE=$(FORCE) bash scripts/results.sh unpack $(RUN)
+	RUNS_DIR="$(RUNS_DIR)" FORCE="$(FORCE)" bash scripts/results.sh unpack $(RUN)
 
 clean:
 	rm -rf dist .pytest_cache *.egg-info

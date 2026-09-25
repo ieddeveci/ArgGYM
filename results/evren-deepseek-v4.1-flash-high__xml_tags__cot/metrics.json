@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "run_dir": "/home/baris/repos/ArgGYM2/outputs/runs/evren-deepseek-v4.1-flash-high__xml_tags__cot",
+    "run_dir": "outputs/runs/evren-deepseek-v4.1-flash-high__xml_tags__cot",
     "endpoint": {
       "model": "deepseek-v4.1-flash",
       "base_url": "https://evren-llmapi.ssyz.org.tr/v1",
@@ -27,7 +27,7 @@
       "prefix": "",
       "suffix": ""
     },
-    "taskset": "/home/baris/repos/ArgGYM2/data/taskset-lite.jsonl",
+    "taskset": "data/taskset-lite.jsonl",
     "taskset_hash": "46d1994cc25f3710e1987f59d78b0923",
     "taskset_versions": {
       "arggym": "2.0.0",
