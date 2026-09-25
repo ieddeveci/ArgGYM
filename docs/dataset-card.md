@@ -5,7 +5,7 @@ not license. Written to the shape of Gebru et al.'s datasheets, which ask the
 questions a reader needs before citing a number.
 
 The interface is specified separately in `docs/dataset-contract.md`; the DSL and
-the semantics conventions are in `NOTATION.md`.
+the semantics conventions are in `docs/notation.md`.
 
 ---
 
@@ -26,6 +26,21 @@ what changed when the theory did.
 `counter_argument`, `counter_argument_strict`, `attack`, `defence`,
 `attack_defense`. The answer is a set of directives that must reach a stated
 goal, keep the theory consistent, and do it in close to the fewest moves.
+
+| task | what it asks |
+|---|---|
+| `status_query` | State the status of each named claim. The baseline: everything else presupposes it. The queried set covers all three statuses with no status above 45% of it, because justified literals outnumber the rest and a representative sample would hand over most of the score. |
+| `semantics_query` | State the status of each claim under the semantics named beside it: grounded, sceptical or credulous preferred, stable, or eager. The same theory yields different answers under different semantics, so a model that knows only the grounded extension cannot score by default. |
+| `claim_chain` | Write all and only the directives forming the line that justifies a claim. Decoys reach the same claim but are defeated, and each is built like the true line (see "Composition and bias" below). |
+| `defeat_diagnosis` | A claim is not justified; say why. Name every failure point, its defeater, the kind of attack, and why that defeater survives. The complement to `claim_chain`. |
+| `perturbation` | Given a theory and a set of additions, predict which claims change status and to what. Tests prediction rather than action, and requires telling a cascade from a survivor. |
+| `formalization` | Translate a natural-language argument into the ASPIC+ DSL. Scored on behaviour, on per-directive structure, and on the type decisions separately, because axiom-versus-premise is behaviourally invisible unless something undermines the literal. |
+| `preference_construction` | Move claims to required statuses using only preference directives: no undercut, no new argument, only re-weighting. |
+| `counter_argument` | Make a claim's contrary justified, which destroying its support does not achieve. |
+| `counter_argument_strict` | The same item with strict rules permitted in the answer. An ablation of `counter_argument`, read below. |
+| `attack` | Make a justified claim overruled. |
+| `defence` | Make an attacked claim justified. |
+| `attack_defense` | Both at once on a shared structure, where the naive attack sabotages the defence. |
 
 The second family is why the benchmark exists. Its answers have no oracle: any
 directive set reaching the goals is correct, so grading means running the engine
@@ -72,6 +87,15 @@ two seeds, and it is what evals run on: 120 items per task are enough for a
 per-task ranking, at a fifth of the cost. Its rows are the first two of every standard
 cell, so a lite score is a score on a subset of the standard release rather than
 on another draw.
+
+`make freeze` and `make freeze-lite` rebuild the two files from their specs.
+Cells fill in parallel, one process per core the process may use, which is its
+CPU affinity lowered by a container's CPU quota; `arggym freeze -j N` sets the
+count and `-j 1` freezes serially. The file is the same byte for byte at any
+count. On 16 cores standard takes about 16 minutes and lite about 13, against 85
+and 27 on one. More cores do not help past that point, because the slowest cell
+sets the wall time: on standard it is `preference_construction` at level 14
+under `weakest_link_democratic`, which alone takes 16 minutes.
 
 A release is identified by its `taskset_hash`, and the manifest records the
 arggym version, the engine version, the prompt and scoring versions, which seeds

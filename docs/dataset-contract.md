@@ -234,6 +234,23 @@ value and never writes a directive. A solver returning text calls `parse` first.
 Both reach the same scorer and get the same object back, which is the property
 worth having, rather than two scorers that happen to agree today.
 
+```python
+ds = arggym.create("counter_argument", level=6, size=50)
+# The names are the ones the question's theory uses, so read them from the item.
+ops = arggym.ops_from_json([{"kind": "prefer_rule", "stronger": "xo7", "weaker": "xi7"}])
+result = ds.score_value(ops, ds[0])
+
+# A label map is a plain dict: every claim the question asks about, and its status.
+labels = arggym.create("status_query", level=6, size=10)
+result = labels.score_value({"ab1": "justified", "cd2": "undecided"}, labels[0])
+```
+
+Both show the shape of an answer rather than a correct one: the names above
+belong to no particular item. `entry["metadata"]["gold"]` holds the answer the
+scorer checks against. A stored row scores without a dataset object or the
+generator: `arggym.score_row(text, row)` and `arggym.score_row_value(value,
+row)`.
+
 `parse` raises `UnparseableAnswer` on text that spells out no answer at all;
 `score_value` never raises it, because a solver that hands over a value has done
 its own parsing and its failures are its own. `score` turns the exception back
@@ -342,7 +359,7 @@ names the first six literals on which a failed answer differs.
 
 Behaviour cannot see a directive that changes no status, and success does not
 require one. The largest case is an undercut of a strict rule, which ASPIC+
-makes inert (`NOTATION.md`, "an undercut cannot be aimed at a strict rule"):
+makes inert (`docs/notation.md`, "an undercut cannot be aimed at a strict rule"):
 the generator aims half its undercut units at a strict rule
 (`arggym/tasks/formalization.py:347`), so on 82 of the 120 `formalization`
 rows of `data/taskset-lite.yaml` the success test cannot tell whether that
@@ -616,9 +633,9 @@ inspector = ["flask>=3.0"]
 report    = ["matplotlib>=3.8"]
 
 [dependency-groups]
-evals = ["openai>=3.8", "hydra-core>=1.3", "tqdm>=4.66"]
+evals = ["openai>=3.8", "hydra-core>=1.3", "tqdm>=4.66", "python-dotenv>=1.0"]
 dev   = [{include-group = "evals"}, "pytest>=8.0", "pytest-xdist>=3.0",
-         "ruff>=0.6", "flask>=3.0"]
+         "ruff>=0.6", "flask>=3.0", "matplotlib>=3.8"]
 ```
 
 `pip install arggym` pulls no web framework, which is #54, and CI checks that

@@ -145,25 +145,6 @@ dropped one would look configured, record it in the manifest, and generate as if
 it were never set: a whole sweep on the previous harness was scored under a
 `repetition_penalty` that never reached the server.
 
-## Sweep roster
-
-The models the next sweep runs, in priority order. Every vLLM model is served
-from the vendor's official checkpoint in the precision the vendor published it:
-BF16 for all of them except gpt-oss, which ships MXFP4 expert weights and is
-served as shipped. Nothing is quantized here.
-
-1. Qwen3.8-27B: `hf-qwen3.8-27b-{low,medium,xhigh}`
-2. Qwen3.5, thinking on and off: `hf-qwen3.5-{0.8b,2b,4b,9b,27b,35b-a3b,122b-a10b}`
-   and each with `-nothink`
-3. Gemma 4 on vLLM, thinking on and off:
-   `hf-gemma-4-{e2b,e4b,26b-a4b,31b}-it` and each with `-nothink`
-4. Gemini API: `aistudio-gemini-3.5-flash-lite-{minimal,low,medium,high}`,
-   `aistudio-gemini-3.8-flash-{low,medium,high}`
-5. gpt-oss: `hf-gpt-oss-{20b,120b}-{low,medium,high}`
-
-`make eval MODEL=<config>` runs a Gemini config;
-`GPU_TYPE=H100 ./hpc/vllm/submit_truba.sh <config>` runs a vLLM one.
-
 ## Writing your own solver
 
 The harness holds one object, and it is four lines:
@@ -238,11 +219,9 @@ mismatched engine version or a missing field; the previous harness caught that
 case with a broad `except`, called it `0.0`, and published a cell of forty items
 scoring exactly 0.000.
 
-**Read `truncated_rate` before any mean.** On the August sweep three of seven
-models lost between 74% and 89% of their items to the token cap at every level.
-Half of all 4,312 truncated generations ended in a repetition loop; one burned
-61,440 tokens repeating a single vacuous line 1,654 times and never wrote an
-answer. A mean over what survives that is a measurement of the token cap.
+**Read `truncated_rate` before any mean.** A model that loops until it hits its
+token cap never writes an answer, and a model that does this on most items has
+a mean that measures the cap rather than the model.
 
 **`bloat_rate` says how many zeros the directive budget decided.** The six
 construction tasks zero an answer that uses more than twice the minimum number
@@ -491,6 +470,79 @@ right is worse than an error:
 - **A run that ran out of provider quota is marked `stopped_on_quota`,** and
   exits non-zero without writing error rows for the items it did not reach.
   Those items are missing, not failed, and a rerun generates them.
+
+## Reproducing the results
+
+The finished runs behind the paper's tables are in `results/`, one directory
+per run; `results/README.md` describes the layout. Every table can be rebuilt
+from them without calling a model, and every run can be regenerated from the
+configs below.
+
+**Environment.** Python 3.13 and the locked dependencies:
+
+```
+uv sync --python 3.13          # installs exactly what uv.lock pins
+```
+
+The shipped tasksets were frozen under Python 3.13.9, which their manifests
+record. Local models are served by vLLM 0.29.0. `hpc/vllm/arggym-vllm.def`
+builds the serving image from `vllm/vllm-openai:v0.29.0-cu129` and pins vLLM
+and Transformers in `hpc/vllm/requirements-vllm.txt`.
+
+**Taskset.** Every run in `results/` used `data/taskset-lite.jsonl`, built from
+`data/taskset-lite.yaml`: 1,440 rows, `taskset_hash`
+`46d1994cc25f3710e1987f59d78b0923`, prompt version 13, scoring version 6. The
+standard taskset, `data/taskset.jsonl` from `data/taskset.yaml`, has 7,200 rows
+and hash `6925b5154f15653caa973cc9f7b1e46a`. A freeze is deterministic, so
+`uv run arggym freeze -c data/taskset-lite.yaml -o /tmp/lite.jsonl` rebuilds the
+lite file byte for byte; it takes about 13 minutes on 16 cores. `run.py` and
+`score.py` recompute the hash from the rows and refuse a file that disagrees.
+
+**Models.** Each run's `run.json` names its model config under
+`evals/conf/model/` and records the resolved request it sent: checkpoint,
+endpoint, sampling and `extra_body`. Every run used the `xml_tags` template and
+the `cot` elicitation, the defaults.
+
+**Serving.** An `hf-*` config is served by vLLM with the profile of the same
+name under `hpc/vllm/models/`, which fixes the dtype, context length, reasoning
+parser and extra flags. Every checkpoint is the vendor's official one in the
+precision the vendor published: BF16 for all of them except gpt-oss, which ships
+MXFP4 expert weights and is served as shipped. `hpc/vllm/run_vllm_arggym.py`
+starts vLLM with the profile, waits for it, runs `evals.run` and `evals.score`,
+and records the Hugging Face revision it served in `run.json`. To see the exact
+serving command without starting anything:
+
+```
+uv run python hpc/vllm/run_vllm_arggym.py hf-qwen3.5-9b --dry-run
+```
+
+To serve on your own machine, run that `vllm serve` command in the image above,
+set `VLLM_BASE_URL` to the server's `/v1` URL, and run `evals.run` with the same
+config. On TRUBA, `hpc/README.md` covers the batch scripts.
+
+**Sampling and limits.** Each config uses the sampling its model card or
+provider recommends, and its comments link the source. Where the provider says
+to leave sampling at its defaults, as for GPT-5, Claude with thinking on, and
+Gemini 3.x, the config sends none. Every `hf-*` config also sends `seed: 0`. The output
+cap, thinking included, is 65,536 tokens, or less where the model's context or
+the provider's output limit is smaller ("Pointing it at a provider" above);
+`hpc/vllm/verify_bundle.py` and `tests/evals` check every cap. A request times
+out after 3 hours (`endpoint.timeout_s: 10800` in `evals/conf/config.yaml`).
+
+**Regenerating the tables.** Unpack the runs, rescore them, and report:
+
+```
+make results-unpack
+for run in outputs/runs/*/; do uv run python -m evals.score "$run"; done
+uv run python -m evals.report outputs/runs/* -o outputs/reports/paper
+uv run --extra report python -m evals.figures outputs/runs/* -o outputs/figures
+```
+
+Unpacking needs `zstd` and `git-lfs` (`results/README.md`). Rescoring rebuilds
+`samples.jsonl` and `metrics.json` from the stored generations and matches the
+committed `metrics.json` in every score; only the paths in `_meta` differ.
+`RUNS_DIR=/some/dir` on `make results-unpack` unpacks elsewhere, if
+`outputs/runs/` already holds runs of your own.
 
 ## Testing it without spending anything
 
