@@ -1,6 +1,6 @@
 """A new rule named after a literal already in the theory scores zero and says so (#89).
 
-`-<name>` for a rule name switches that rule off (NOTATION.md, undercutting); the same
+`-<name>` for a rule name switches that rule off (docs/notation.md, undercutting); the same
 `-<name>` for a literal is its negation. `check_legality` built `rule_names` from the
 base theory's own rules and checked a new name against only that set, so a rule named
 after a premise, an axiom, or another rule's antecedent or consequent built and applied
@@ -111,7 +111,7 @@ def test_a_rule_name_that_breaks_the_grammar_is_rejected():
 def test_an_atom_is_the_name_without_its_sign():
     """A theory that only ever shows `-ko1` still uses the atom `ko1`.
 
-    This is what the prompt now says, in the words NOTATION.md line 25 always used.
+    This is what the prompt now says, in the words docs/notation.md line 25 always used.
     Stated as "no literal in the theory" it was wrong: the theory contains no literal
     `ko1`, only `-ko1`, and a model reading that sentence would think `ko1` was free.
     """

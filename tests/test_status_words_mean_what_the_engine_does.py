@@ -1,6 +1,6 @@
 """`overruled` has to mean what the engine reports, and the docs have to say that.
 
-NOTATION.md defined overruled as "its contrary is in the extension". `status_map`
+docs/notation.md defined overruled as "its contrary is in the extension". `status_map`
 (`arggym/aspic/engine.py:216-230`) reads the arguments FOR the claim: justified if one is
 IN, undecided if none is IN but one is UNDEC, overruled otherwise. A justified undercut
 defeats every argument for a claim without putting the contrary anywhere, so the engine
@@ -47,7 +47,7 @@ def test_an_undercut_overrules_a_claim_without_establishing_its_contrary():
 
 
 def test_the_notation_no_longer_defines_overruled_by_the_contrary():
-    doc = (pathlib.Path(__file__).resolve().parent.parent / "NOTATION.md").read_text()
+    doc = (pathlib.Path(__file__).resolve().parent.parent / "docs" / "notation.md").read_text()
     section = doc.split("## 5. Statuses", 1)[1].split("---", 1)[0]
     assert "every argument for it is defeated" in section
     assert "its contrary is in the extension; the conflict was RESOLVED" not in section

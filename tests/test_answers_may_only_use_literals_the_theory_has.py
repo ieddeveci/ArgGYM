@@ -3,7 +3,7 @@
 A contrary the answer legally introduces counts too, wherever in the answer it is written:
 the check collects those first, so the two lines may be given in either order.
 
-NOTATION.md states it -- "rule antecedents must be literals ALREADY present in the
+docs/notation.md states it -- "rule antecedents must be literals ALREADY present in the
 theory" -- and `check_legality` never checked it, so a rule over two invented literals
 was accepted and an answer could route its chain through an intermediate the theory does
 not mention (#35). No prompt said it either, which is fixed in the same branch.

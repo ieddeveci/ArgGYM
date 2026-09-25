@@ -1,12 +1,12 @@
 """No rule of a perturbation item shares a name with an atom or with another rule.
 
 The theory and the perturbation form one namespace: the model reads them in a single prompt,
-and NOTATION.md section 1 rules out an atom that shares a name with a rule. The perturbation's
+and docs/notation.md section 1 rules out an atom that shares a name with a rule. The perturbation's
 rules used to be named from the atom pool, so a perturbation rule regularly took the name of a
 literal, and now and then the name of a rule already in the theory. Every cell below produced a
 malformed item before that was fixed.
 
-An undercut is written as a rule concluding a negated rule name (NOTATION.md section 2), so a
+An undercut is written as a rule concluding a negated rule name (docs/notation.md section 2), so a
 negated rule name in a rule position is a rule reference rather than an atom occurrence. A
 premise or axiom content is always a literal, negated or not.
 """

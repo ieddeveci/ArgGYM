@@ -1,7 +1,7 @@
-"""Every rule the scorer enforces is stated in the question and in `NOTATION.md`.
+"""Every rule the scorer enforces is stated in the question and in `docs/notation.md`.
 
 The contract is written three times: `core/prompting.py` states it to a model,
-`NOTATION.md` states it to a reader, and `core/scoring.py` enforces it. #89 added one
+`docs/notation.md` states it to a reader, and `core/scoring.py` enforces it. #89 added one
 clause to the naming grammar, it had to be written in two of those places by hand, and
 nothing would have failed had the wrong subset moved. The table below is what fails.
 
@@ -13,7 +13,7 @@ What this does NOT catch:
 
 - It checks that both places say *something* about each enforced rule, not that they say
   the same thing. "twice the minimum" here and "three times" there passes. Holding the
-  two wordings identical is not wanted: they address different readers, and `NOTATION.md`
+  two wordings identical is not wanted: they address different readers, and `docs/notation.md`
   writes "literals **ALREADY** present" where a prompt writes it plainly.
 - It covers what `check_legality` and `score_item` reject. A rule the engine applies on
   its own -- an undercut aimed at a strict rule is inert -- is invisible here.
@@ -64,7 +64,7 @@ class Clause(NamedTuple):
 
     #: A phrase of the block the question carries. None where nothing states it.
     block: Optional[str]
-    #: A phrase of `NOTATION.md`. None where nothing states it.
+    #: A phrase of `docs/notation.md`. None where nothing states it.
     notation: Optional[str]
     #: True where `scoring.py` builds this reason with `reasons.append`, which is what
     #: the completeness assertion below scans for.
@@ -223,7 +223,7 @@ def test_notation_md_states_the_module_rules_no_row_of_the_table_reaches():
     is satisfied by these sentences without being able to see them go: deleting any of
     the three left the suite green.
     """
-    doc = _flat((ROOT / "NOTATION.md").read_text())
+    doc = _flat((ROOT / "docs" / "notation.md").read_text())
     assert _flat("Anything else outside the lines a shape below asks for -- a word of "
                  "prose, a label, a heading -- scores the whole answer zero.") in doc, (
         "section 6 no longer states what text outside the answer lines costs")
@@ -234,12 +234,12 @@ def test_notation_md_states_the_module_rules_no_row_of_the_table_reaches():
 
 
 def test_notation_md_states_every_rule_the_scorer_enforces():
-    doc = _flat((ROOT / "NOTATION.md").read_text())
+    doc = _flat((ROOT / "docs" / "notation.md").read_text())
     for reason, clause in sorted(CLAUSES.items()):
         if clause.notation is None:
             assert reason in ACCEPTED_GAPS, f"{reason} is stated nowhere and unrecorded"
             continue
-        assert _flat(clause.notation) in doc, f"NOTATION.md says nothing about {reason}"
+        assert _flat(clause.notation) in doc, f"docs/notation.md says nothing about {reason}"
 
 
 _APPENDED = re.compile(r'reasons\.append\(f"([a-z_]+):')

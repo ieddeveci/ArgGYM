@@ -2,7 +2,7 @@
 
 An atom is a name that appears as a premise or axiom, as a rule antecedent, as a positive
 consequent, or in a premise preference. A negated consequent whose bare name is a rule is an
-undercut target, not an atom (NOTATION.md section 2), so it is left out on purpose.
+undercut target, not an atom (docs/notation.md section 2), so it is left out on purpose.
 
 Known failures are listed in KNOWN_FAILURES by the issue that tracks them. A test calls
 pytest.xfail from inside when the property fails for a listed mode, so a cell that happens to
