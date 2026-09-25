@@ -1,4 +1,4 @@
-.PHONY: help setup test test-all freeze freeze-lite eval inspect clean
+.PHONY: help setup test test-all freeze freeze-lite eval inspect clean results-add results-unpack
 
 help:
 	@echo 'make setup     install the package and its dev dependencies'
@@ -8,6 +8,8 @@ help:
 	@echo 'make freeze-lite  freeze the two-seed lite taskset into data/taskset-lite.jsonl'
 	@echo 'make eval      run + score one model on the lite taskset (MODEL=..., TEMPLATE=..., ELICITATION=...)'
 	@echo 'make inspect   start the inspector on http://127.0.0.1:5000'
+	@echo 'make results-add RUN="<id>..."  pack finished outputs/runs/<id> into results/<id> (FORCE=1 replaces)'
+	@echo 'make results-unpack [RUN="<id>..."]  restore results/<id> into outputs/runs/<id>; no RUN means all'
 	@echo 'make clean     remove build artefacts and caches (leaves data/)'
 
 setup:
@@ -52,6 +54,19 @@ eval:
 
 inspect:
 	uv run arggym inspect
+
+# Shared runs, see results/README.md. RUN takes one run id or several,
+# space-separated. RUNS_DIR moves the run side off outputs/runs, e.g. to pack
+# from another checkout or to unpack into a scratch directory.
+RUN ?=
+RUNS_DIR ?= outputs/runs
+FORCE ?=
+results-add:
+	@test -n "$(RUN)" || { echo 'usage: make results-add RUN="<run_id> [<run_id>...]"'; exit 1; }
+	RUNS_DIR=$(RUNS_DIR) FORCE=$(FORCE) bash scripts/results.sh add $(RUN)
+
+results-unpack:
+	RUNS_DIR=$(RUNS_DIR) FORCE=$(FORCE) bash scripts/results.sh unpack $(RUN)
 
 clean:
 	rm -rf dist .pytest_cache *.egg-info
