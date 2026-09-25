@@ -22,7 +22,7 @@ die() { echo "results: $*" >&2; exit 1; }
 
 command -v zstd >/dev/null ||
   die "zstd is not installed. Install it (apt install zstd, brew install zstd) and retry."
-command -v python3 >/dev/null || die "python3 is not installed."
+command -v python >/dev/null || die "python is not installed."
 
 absolute() { case $1 in /*) printf '%s\n' "$1" ;; *) printf '%s\n' "$PWD/$1" ;; esac; }
 [ -n "${RUNS_DIR:-}" ] && RUNS_DIR=$(absolute "$RUNS_DIR")
@@ -36,7 +36,7 @@ case ${FORCE:-} in 1|true|yes) FORCE=1 ;; *) FORCE= ;; esac
 
 # The JSON edits go through python3, so the files keep the exact layout
 # `evals.artifacts.write_json` gives them (indent 2) and only the paths change.
-json() { python3 - "$@"; }
+json() { python - "$@"; }
 
 # Checks the taskset a run was generated against and prints data/<name>.jsonl.
 # The recorded taskset is a path on the machine that ran the eval. Only a
