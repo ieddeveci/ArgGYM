@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RL post-training on ArgGYM: practices and sources</title>
+<style>
+  :root {
+    --fg: #1d1f21; --muted: #5c6166; --bg: #fff; --side: #f6f7f9; --line: #e2e5e9;
+    --accent: #2457a6; --ok: #1d7a3a; --part: #9a6700; --no: #b42318; --own: #6941c6;
+    --box: #f3f7fd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); }
+  nav { position: fixed; top: 0; left: 0; bottom: 0; width: 270px; overflow-y: auto; background: var(--side); border-right: 1px solid var(--line); padding: 20px 16px; font-size: 14px; }
+  nav a { color: var(--fg); text-decoration: none; display: block; padding: 3px 0; }
+  nav a:hover { color: var(--accent); }
+  nav .sub { padding-left: 14px; color: var(--muted); }
+  main { margin-left: 270px; max-width: 920px; padding: 32px 48px 80px; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 23px; margin-top: 52px; padding-top: 12px; border-top: 2px solid var(--line); }
+  h3 { font-size: 18px; margin-top: 32px; }
+  h4 { font-size: 16px; margin: 0 0 8px; }
+  a { color: var(--accent); }
+  code { font: 13.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f0f2f4; padding: 1px 4px; border-radius: 3px; }
+  .lede { color: var(--muted); margin-top: 0; }
+  .practice { border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 18px 0; }
+  .practice dl { margin: 0; display: grid; grid-template-columns: 90px 1fr; gap: 6px 14px; }
+  .practice dt { font-weight: 600; color: var(--muted); font-size: 14px; padding-top: 2px; }
+  .practice dd { margin: 0; }
+  .practice ul { margin: 0; padding-left: 18px; }
+  .box { background: var(--box); border-left: 4px solid var(--accent); padding: 14px 18px; margin: 20px 0; border-radius: 0 6px 6px 0; }
+  .box.warn { background: #fdf6ec; border-color: var(--part); }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 6px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+  .v { color: var(--ok); border-color: var(--ok); }
+  .p { color: var(--part); border-color: var(--part); }
+  .u { color: var(--no); border-color: var(--no); }
+  .o { color: var(--own); border-color: var(--own); }
+  .fresh { font-size: 14px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 14px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--side); }
+  .scroll { overflow-x: auto; }
+  ol.defaults li { margin-bottom: 6px; }
+  @media (max-width: 900px) { nav { display: none; } main { margin-left: 0; padding: 20px; } .practice dl { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <strong>Contents</strong>
+  <a href="#start">Read this first</a>
+  <a href="#defaults">Starting defaults</a>
+  <a href="#primer">1. Algorithm primer</a>
+  <a class="sub" href="#kl">KL: keep or drop</a>
+  <a href="#agree">2. Make sampler and trainer agree</a>
+  <a href="#losspath">3. Loss-path bugs</a>
+  <a href="#choices">4. Loss and hyperparameters</a>
+  <a href="#reward">5. Reward design and hacking</a>
+  <a class="sub" href="#arggym">What this means for ArgGYM</a>
+  <a href="#monitor">6. Monitoring and triage</a>
+  <a href="#eval">7. Measuring gains and transfer</a>
+  <a href="#lora">8. LoRA or full fine-tuning</a>
+  <a href="#libs">Appendix A. Library landscape</a>
+  <a href="#spike">Appendix B. Spike questions</a>
+  <a href="#gaps">Appendix C. Unverified and dropped</a>
+</nav>
+
+<main>
+
+<h1>RL post-training on ArgGYM: practices and sources</h1>
+<p class="lede">Team reference for the RL experiments. Compiled 2026-10-14. Every source link was fetched and checked on that date unless marked otherwise.</p>
+
+<h2 id="start">Read this first</h2>
+
+<p>We plan to train models with RL on ArgGYM and then measure two things: whether they improve on ArgGYM, and whether that improvement transfers to other benchmarks. This page collects the practices that decide whether such a run is correct and whether its result means anything. It does not pick a training library; that is a separate spike, and <a href="#libs">Appendix A</a> is its input.</p>
+
+<p>Each practice has a rule, the reason behind it, a way to check it, and its sources. Each source carries a status:</p>
+<ul>
+  <li><span class="tag v">verified</span> the claim and its numbers were read in the primary source.</li>
+  <li><span class="tag p">partial</span> read from the abstract, a saved copy, or a secondary source only.</li>
+  <li><span class="tag u">unverified</span> the source could not be opened; the claim rests on other evidence.</li>
+  <li><span class="tag o">our runs</span> from our own earlier experiments; no public source.</li>
+</ul>
+<p>A <span class="fresh">Freshness</span> line says whether newer work or a library change qualifies the rule. Library behaviour changes monthly, so anything tagged with a library version is a snapshot of 2026-10-14.</p>
+
+<p>Three facts about ArgGYM decide which practices matter most. Tasks are single-turn, so the multi-turn advice applies only if we add a tool loop. The reward gives partial credit, and a policy that reads nothing already earns a large share of it (<a href="#arggym">details</a>). And the question is transfer, so the eval design in <a href="#eval">section 7</a> carries as much weight as the training recipe.</p>
+
+<h2 id="defaults">Starting defaults</h2>
+<p>If you read nothing else, these are the choices the evidence below supports for a first run. Each links to its section.</p>
+<ol class="defaults">
+  <li>GRPO-family loss with token-level aggregation, asymmetric clip (0.2 / 0.28), no KL term, group-mean baseline. <a href="#primer">&sect;1</a>, <a href="#choices">&sect;4</a></li>
+  <li>Trainer and vLLM at matched precision, FP32 master weights, processed log-probs, sampler and trainer using the same temperature and truncation. <a href="#agree">&sect;2</a></li>
+  <li>An importance-sampling correction for the sampler/trainer gap, after the gap has been driven down by fixing the engine. <a href="#agree">&sect;2</a></li>
+  <li>Validate the whole stack on a toy task with a known optimum before the real run. <a href="#toy">&sect;3</a></li>
+  <li>Synchronous or one-step-off training for the first run, so staleness is not a variable. <a href="#lag">&sect;3</a></li>
+  <li>LR 1e-6 constant with short warmup for full fine-tuning; about 10&times; that for LoRA on all layers. <a href="#lr">&sect;4</a>, <a href="#lora">&sect;8</a></li>
+  <li>Drop zero-variance groups; mask truncated responses; log both rates. <a href="#zerovar">&sect;4</a></li>
+  <li>Score degenerate answers against the reward before training, and pick checkpoints on strict success, never on reward. <a href="#reward">&sect;5</a></li>
+  <li>One dashboard from step 0, plus logged completions that someone reads. <a href="#monitor">&sect;6</a></li>
+  <li>A fixed transfer suite (near and far benchmarks), identical sampling for base and checkpoints, pass@1 and pass@k, several seeds. <a href="#eval">&sect;7</a></li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="primer">1. Algorithm primer</h2>
+
+<p>All of these methods compute the same core gradient, the log-probability of each sampled token times an advantage. They differ in three places: how the advantage is estimated, how the importance ratio <code>r = &pi;<sub>&theta;</sub> / &pi;<sub>old</sub></code> is clipped or weighted, and how per-token losses are averaged into one number. Read each entry as a change to the one before it.</p>
+
+<h3>PPO (2017)</h3>
+<p>Policy gradient with a clipped surrogate, <code>min(r&middot;A, clip(r, 1&minus;&epsilon;, 1+&epsilon;)&middot;A)</code>, a learned value model (critic), and GAE advantages. The clip lets you take several gradient steps on one batch of rollouts without the policy running away: once the ratio has moved past 1&plusmn;&epsilon; in the direction the advantage wants, that token's gradient is zero. The paper found &epsilon; = 0.2 best (Table 1). For LLMs the cost is the critic, a second model of the same size that is hard to train well (see <a href="#valuewarm">value warmup</a>). <a href="https://arxiv.org/abs/1707.06347">Schulman et al. 2017</a></p>
+
+<h3>GRPO (2024): drop the critic</h3>
+<p>Sample G responses per prompt and z-score each response's reward within its group, <code>A<sub>i</sub> = (r<sub>i</sub> &minus; mean) / std</code>, applied to every token of that response. KL to the reference model goes into the loss. Losses are averaged per sequence, then over the group. The group is a cheap Monte Carlo baseline that replaces the critic. Original settings: LR 1e-6, KL &beta; = 0.04, G = 64, one update per batch. The original reward was a learned reward model, not a verifier. <a href="https://arxiv.org/abs/2402.03300">Shao et al. 2024 (DeepSeekMath)</a></p>
+
+<h3>Dr. GRPO (Mar 2025): remove two biases</h3>
+<p>Two parts of GRPO bias the gradient. Dividing each sequence's loss by its length punishes a long wrong answer less per token than a short one, so wrong answers grow longer over training. Dividing by the group std gives more weight to prompts that are almost all-right or all-wrong. Dr. GRPO divides by a constant instead of the length, removes the std, and sets KL to 0. It reached 43.3% on AIME 2024 from Qwen2.5-Math-7B with shorter wrong answers. <a href="https://arxiv.org/abs/2503.20783">Liu et al. 2025</a></p>
+
+<h3>DAPO (Mar 2025): four fixes</h3>
+<ul>
+  <li><b>Clip-higher</b>: &epsilon;<sub>low</sub> = 0.2, &epsilon;<sub>high</sub> = 0.28, so low-probability tokens can grow. Slows entropy collapse.</li>
+  <li><b>Dynamic sampling</b>: drop groups that are all-correct or all-wrong (they have zero gradient) and resample until the batch is full.</li>
+  <li><b>Token-level loss</b>: average over every token in the batch, so long responses are not under-weighted.</li>
+  <li><b>Overlong handling</b>: mask the loss of truncated responses, plus a soft penalty near the length limit.</li>
+</ul>
+<p>No KL term. On Qwen2.5-32B, AIME 2024 went 30 (naive GRPO) &rarr; 36 &rarr; 38 &rarr; 41 &rarr; 42 &rarr; 50 as the pieces were added (Table 1). That is one model, one benchmark, and an additive ablation rather than leave-one-out. <a href="https://arxiv.org/abs/2503.14476">Yu et al. 2025</a></p>
+
+<h3>GSPO (Jul 2025): ratio per sequence</h3>
+<p>One importance ratio per response, the length-normalized sequence ratio <code>(&pi;<sub>&theta;</sub>(y|x) / &pi;<sub>old</sub>(y|x))<sup>1/|y|</sup></code>, and the whole response is clipped together. Token ratios are one-sample, high-variance estimates whose noise grows with length; on MoE models this caused collapse that GRPO only avoided with routing replay. Because the ratio is a geometric mean, the clip range is tiny (3e-4 / 4e-4 in the paper). GSPO clips about 15% of tokens against GRPO's 0.13% and still trains more efficiently. Used for Qwen3. <a href="https://arxiv.org/abs/2507.18071">Zheng et al. 2025</a></p>
+
+<h3>CISPO (Jun 2025): clip the weight, keep the gradient</h3>
+<p>REINFORCE with a stop-gradient on a clipped importance weight, <code>sg(clip(r)) &middot; A &middot; log &pi;<sub>&theta;</sub></code>, token-level averaging, no KL. PPO-style clipping had zeroed the gradient on rare reflective tokens ("However", "Wait", "Recheck") after the first update; CISPO bounds their weight instead of dropping them. It matched DAPO on AIME 2024 in half the steps. MiniMax publishes no value for &epsilon;<sub>high</sub>; ScaleRL uses a cap of 4 to 8. There is no standalone paper. <a href="https://arxiv.org/abs/2506.13585">MiniMax-M1, &sect;3.1</a></p>
+
+<h3>ScaleRL (Oct 2025): choose by asymptote</h3>
+<p>A study of more than 400,000 GPU-hours (ICLR 2026 oral) that fits pass rate against compute with a sigmoid: <code>A</code> is the ceiling and <code>B</code> the efficiency. Most design choices change B, not A; a few move A (loss type, batch size, generation length, FP32 LM head on an MoE). A recipe that leads at small compute can be overtaken. The final recipe: PipelineRL with up to 8 steps off-policy, CISPO, prompt-level loss averaging, batch-level advantage normalization, FP32 logits, zero-variance filtering, permanently dropping prompts with pass rate &ge; 0.9, forced interruption of over-long thinking, no KL. Inside that full recipe, DAPO reached a similar ceiling to CISPO; CISPO's edge was speed. <a href="https://arxiv.org/abs/2510.13786">Khatri et al. 2025</a></p>
+
+<h3>What is standard by October 2026</h3>
+<p>No new loss has won, but open-model reports converge on the same set of choices: no KL term, a group-mean baseline (often without the std), token-level loss over the batch, asymmetric clipping, dropping zero-variance groups, and an explicit correction for the sampler/trainer probability gap.</p>
+<ul>
+  <li><a href="https://arxiv.org/abs/2512.13961">Olmo 3</a> (&sect;4.4.1, Table 49): active sampling to remove zero-gradient groups, token-level loss, no KL, clip 0.2 / 0.272, truncated IS capped at 2.0, no std.</li>
+  <li><a href="https://arxiv.org/abs/2602.15763">GLM-5</a> (&sect;3.2): GRPO, no KL, clip 0.2 / 0.28, group 32, IcePop token masking.</li>
+  <li><a href="https://arxiv.org/abs/2512.16144">INTELLECT-3</a> (&sect;3.3): masked token-level IS, no KL, mean baseline.</li>
+  <li><a href="https://arxiv.org/abs/2512.02556">DeepSeek-V3.2</a> (&sect;3.1): GRPO with KL kept (unbiased estimator), masking of off-policy negative sequences, frozen MoE routing.</li>
+</ul>
+<p>Newer losses available in TRL and verl but not yet standard: <a href="https://arxiv.org/abs/2511.20347">SAPO</a> (a smooth gate instead of a hard clip; used for Qwen3-VL) and <a href="https://arxiv.org/abs/2602.04879">DPPO</a> (masks tokens by divergence instead of ratio). Library defaults have followed: TRL's GRPOTrainer defaults to <code>loss_type="dapo"</code> and <code>beta=0.0</code> (<a href="https://huggingface.co/docs/trl/main/en/grpo_trainer">docs</a>), verl to <code>loss_agg_mode=token-mean</code> and <code>use_kl_loss=false</code> (<a href="https://github.com/verl-project/verl/blob/main/verl/trainer/config/actor/actor.yaml">actor config</a>).</p>
+
+<h3 id="kl">KL to the reference model: keep or drop?</h3>
+<p>Current practice with verifiable rewards mostly drops it. There is no learned reward model to over-optimize, and long-reasoning policies are meant to move far from the base model. Dropped in DAPO, Dr. GRPO, <a href="https://arxiv.org/abs/2503.24290">Open-Reasoner-Zero</a> (their ablation found no-KL most stable), <a href="https://arxiv.org/abs/2506.10910">Magistral</a>, <a href="https://arxiv.org/abs/2505.22312">Skywork OR-1</a> (&beta; = 1e-3 pulled the policy back and stalled AIME), MiniMax-M1, Olmo 3, GLM-5, INTELLECT-3, ScaleRL, and TRL's default. Kept in <a href="https://arxiv.org/abs/2505.24864">ProRL</a>, which also resets the reference to a recent snapshot periodically, and DeepSeek-V3.2, which notes that "math may benefit from weak or no KL".</p>
+<p>If you keep it, check the gradient. Putting the common k3 estimator in the loss and differentiating it gives the gradient of the reverse direction, KL(&pi;<sub>ref</sub>&Vert;&pi;); differentiating k2 (squared log-ratio) gives the intended one. <a href="https://arxiv.org/abs/2506.09477">Tang &amp; Munos 2025, &sect;3</a></p>
+<div class="box">
+<b>For our transfer question.</b> The usual reason to keep KL is to limit forgetting. <a href="https://arxiv.org/abs/2509.04259">RL's Razor</a> finds that forgetting tracks the KL from the base policy measured on the new task, and that on-policy RL already lands on low-KL solutions without a penalty. <a href="https://arxiv.org/abs/2510.18874">Retaining by Doing</a> (abstract only) also credits on-policy data rather than a KL term. So drop KL by default and measure forgetting directly on held-out benchmarks (<a href="#eval">&sect;7</a>), rather than assume a KL term protects you.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="agree">2. Before the first run: make the sampler and the trainer agree</h2>
+
+<p>RL on LLMs uses two systems: an inference engine (vLLM, SGLang) that samples rollouts, and a trainer that computes gradients. The loss compares their probabilities for the same tokens. Any gap between them that is not caused by a policy update is noise in the gradient, and several of the failures below look like a learning-rate problem when they are not.</p>
+
+<div class="practice">
+<h4>Run the trainer's forward pass and the inference engine at the same effective precision</h4>
+<dl>
+<dt>Why</dt><dd>If the trainer runs FP32 and vLLM runs BF16, log-probs differ by a token-dependent gap (mean about 0.076 on Qwen3-0.6B, tails up to 3.05). That gap alone pushes the ratio outside the clip range before the policy has moved, and the clipped tokens get zero gradient. At step 3, 13.5% of tokens were clipped with mismatched precision against 1.0% with matched precision, and a toy task that should converge in 100 steps never did at LR 1e-6. Raising the LR to 1e-5 hid the problem, which is why it looks like tuning. Qi et al. trace the gap to BF16 rounding and show FP16 on both sides removes it.</dd>
+<dt>Check</dt><dd>Log clip fraction from step 1; it should be near 0 early. Log mean and max <code>|logp_trainer &minus; logp_sampler|</code> on the same tokens.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://huggingface.co/spaces/aminediroHF/trainer-generator-bf16-mismatch">Dirhoussi, trainer-generator precision mismatch in TRL (Apr 2026)</a> <span class="tag p">partial</span> numbers checked against a saved copy; the Space renders client-side</li>
+<li><a href="https://arxiv.org/abs/2510.26788">Qi et al., Defeating the Training-Inference Mismatch via FP16</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: TRL v1.15.0's AsyncGRPOConfig now loads the model in float32 and warns at start-up when vLLM's dtype differs (<a href="https://huggingface.co/docs/trl/async_grpo_trainer">docs</a>). Other stacks leave it to you.</p>
+</div>
+
+<div class="practice">
+<h4>Keep master weights in FP32</h4>
+<dl>
+<dt>Why</dt><dd>Near 1.0, the smallest step a BF16 weight can take is 2<sup>&minus;7</sup>. At LR 1e-6, an update needs about 3,900 steps of accumulated change before the stored weight moves at all. In the same toy setup, BF16 weights did not converge even with matched precision.</dd>
+<dt>Check</dt><dd>Confirm the dtype of the optimizer's parameter copy, not only the autocast flag. At low LR, the per-step diff of a few weight tensors should be nonzero.</dd>
+<dt>Sources</dt><dd>Dirhoussi, as above <span class="tag p">partial</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Compute the LM head in FP32 on both sides, and confirm it reaches generation</h4>
+<dl>
+<dt>Why</dt><dd>MiniMax found most of the train/inference probability gap comes from the final logits; moving the head to FP32 raised the correlation between the two from about 0.9 to 0.99. ScaleRL measured the ceiling A rising from 0.52 to 0.61 with this one change.</dd>
+<dt>Check</dt><dd>Measure the sampler/trainer log-prob gap with the flag on and off. If it does not shrink, generation is still using a BF16 head.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2506.13585">MiniMax-M1, &sect;3.2</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.13786">ScaleRL, Fig. 5b</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: qualified twice. Inside the full ScaleRL recipe on a dense 8B model, leaving FP32 out "makes little difference"; the large gains were with GRPO/DAPO losses and on an MoE. Treat it as cheap insurance. Separately, <a href="https://github.com/huggingface/trl/issues/7430">TRL issue #7430</a> (open, Sep 2026) reports that <code>cast_lm_head_to_fp32</code> is ignored during generation.</p>
+</div>
+
+<div class="practice">
+<h4>Use the same log-prob definition on both sides: processed log-probs, same temperature, same truncation mask</h4>
+<dl>
+<dt>Why</dt><dd>The importance ratio is only valid if both sides define a probability over the same distribution. Three things break this silently. vLLM V1 returns log-probs from the raw model by default, before temperature; ServiceNow saw the ratio shift away from 1 after a vLLM upgrade until they set <code>logprobs-mode=processed_logprobs</code>. With top-p or top-k, the sampler draws from a truncated vocabulary while the trainer normalizes over all of it; DeepSeek-V3.2 records the sampling mask and applies it in training. And if you sample at temperature T, the trainer must divide its logits by the same T.</dd>
+<dt>Check</dt><dd>At step 0, before any update, the mean of <code>logp_trainer &minus; logp_sampler</code> should be about 0. Either sample training rollouts at temperature 1.0 with top-p and top-k off, or carry the mask over.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://huggingface.co/blog/ServiceNow-AI/correctness-before-corrections">ServiceNow, vLLM V0 to V1: Correctness Before Corrections in RL (May 2026)</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2512.02556">DeepSeek-V3.2, "Keep Sampling Mask"</a> <span class="tag v">verified</span></li>
+<li>Temperature point follows from the definition of the ratio; no separate source.</li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: vLLM now ships <code>--return-sampling-mask</code> alongside processed log-probs (needs Model Runner V2, temperature &gt; 0, no speculative decoding; <a href="https://docs.vllm.ai/en/stable/training/sampling_mask/">docs</a>). A March 2026 survey said no library supported this; that is now out of date for vLLM.</p>
+</div>
+
+<div class="practice">
+<h4>Fix inference-engine correctness first; add importance-sampling corrections for what remains</h4>
+<dl>
+<dt>Why</dt><dd>Corrections can hide a backend bug as easily as they correct real staleness. In ServiceNow's migration, the remaining gap came from engine defaults: prefix caching reused KV state from before a weight update, and async scheduling was on. Only after fixing those and the FP32 head did reward track the old reference. Batch-invariant kernels did not close their gap.</dd>
+<dt>Check</dt><dd>With corrections off and no policy update, the sampler/trainer gap should be near 0. Disable prefix caching, or confirm the cache is cleared on every weight sync.</dd>
+<dt>Sources</dt><dd><a href="https://huggingface.co/blog/ServiceNow-AI/correctness-before-corrections">ServiceNow blog</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Apply a truncated or masked importance-sampling correction on the sampler-to-trainer ratio, separate from the PPO ratio</h4>
+<dl>
+<dt>Why</dt><dd>Even with identical weights, vLLM and the trainer assign different probabilities because kernels, precision and parallelism differ, so "on-policy" training is slightly off-policy. Truncated IS (TIS) multiplies each token's loss by <code>min(&pi;<sub>trainer,old</sub> / &pi;<sub>sampler</sub>, C)</code>; Olmo 3 and Open Instruct use C = 2. Recompute the "old" log-probs on the trainer, so the PPO ratio measures only policy movement and the TIS weight measures only the backend gap. Zhong et al. isolated the gap with a zero-mismatch engine: on Qwen3-30B-A3B the mismatch alone took train/val reward from a reference of 0.753 / 0.534 down to 0.255 / 0.067. Token-level truncation plus sequence-level rejection tracked the reference best.</dd>
+<dt>Check</dt><dd>Log the IS weight mean (about 1.0), its std, effective sample size, and the fraction of tokens or sequences truncated or rejected. verl's docs flag a mean outside 0.5&ndash;2.0, ESS below 0.3, or std above 1.0.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://fengyao.notion.site/off-policy-rl">Yao et al., Your Efficient RL Framework Secretly Brings You Off-Policy RL Training (Aug 2025)</a> <span class="tag u">unverified</span> page did not render; authorship and the TIS proposal confirmed via search and adoption</li>
+<li><a href="https://rlhfbook.com/c/06-policy-gradients">Lambert, RLHF book, ch. 6 "Truncated Importance Sampling"</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2605.14220">Zhong et al., Diagnosing Training-Inference Mismatch via a Zero-Mismatch Reference</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: library defaults now do part of this. TRL v1.15.0 enables it by default (<code>vllm_importance_sampling_mode='sequence_mask'</code>, <a href="https://huggingface.co/docs/trl/grpo_trainer">docs</a>). verl has an <code>algorithm.rollout_correction</code> block with presets (<a href="https://verl.readthedocs.io/en/latest/algo/rollout_corr.html">docs</a>); whether it is on by default was not confirmed. Threshold sensitivity is untested.</p>
+</div>
+
+<div class="practice">
+<h4>Use batch-invariant kernels as a diagnostic, not a default</h4>
+<dl>
+<dt>Why</dt><dd>Inference kernels change their reduction order with batch size, and floating-point addition is not associative, so a token's log-prob depends on what else is in the batch. Matching precision does not remove this. Thinking Machines showed an RL run without correction collapsing with a KL spike near step 318, while bitwise-identical sampler and trainer kept KL at exactly 0. vLLM's bitwise-consistent setup ran 2.4&times; slower.</dd>
+<dt>Check</dt><dd>Run one prompt at several batch sizes and compare log-probs. If reward still degrades after the fixes above while KL looks normal, suspect this.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://thinkingmachines.ai/blog/defeating-nondeterminism-in-llm-inference/">He / Thinking Machines, Defeating Nondeterminism in LLM Inference (Sep 2025)</a> <span class="tag v">verified</span></li>
+<li><a href="https://vllm.ai/blog/2025-11-10-bitwise-consistent-train-inference">vLLM, Bitwise consistent on-policy RL (Nov 2025)</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: vLLM has <code>VLLM_BATCH_INVARIANT=1</code> in beta (<a href="https://docs.vllm.ai/en/latest/features/batch_invariance/">docs</a>). The trainer must use matching kernels for it to help.</p>
+</div>
+
+<div class="practice">
+<h4>For MoE models, replay the sampler's expert routing in the training forward pass</h4>
+<dl>
+<dt>Why</dt><dd>The router can pick different experts on the two sides for the same input, so the gradient goes to experts that never produced the token. DeepSeek calls keeping the routing "crucial for RL training stability of MoE models". R3 records inference routing and replays it in training.</dd>
+<dt>Check</dt><dd>Log the fraction of tokens whose expert set differs between sampler and trainer.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2512.02556">DeepSeek-V3.2</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.11370">Ma et al., R3</a> <span class="tag p">partial</span> abstract</li>
+</ul></dd>
+</dl>
+<p class="fresh">Applies only if we train an MoE (e.g. Qwen3.5-35B-A3B). verl, SkyRL, slime and NeMo-RL list router replay (<a href="#libs">Appendix A</a>).</p>
+</div>
+
+<div class="practice">
+<h4>Train on the exact token ids the sampler emitted; never re-encode decoded text</h4>
+<dl>
+<dt>Why</dt><dd>Parsing a response into messages and re-rendering it through the chat template can produce different tokens, so the gradient lands on a sequence the model never sampled. Nothing crashes. On a Qwen3.5 MoE coding agent, a full re-render produced 32 prefix breaks in 64 rollouts against 0 with a token-level bridge. 18 of 19 open-weight templates extend token-for-token when a message is appended; base Qwen3 does not, because of its empty <code>&lt;think&gt;</code> block.</dd>
+<dt>Check</dt><dd>Per model template, run a prefix-preservation test. In training, log the first position where sampled ids and re-tokenized ids differ.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://qgallouedec-tito.hf.space/">Gallou&eacute;dec &amp; Rasul, Agentic RL: Token-In, Token-Out Done Right (May 2026)</a> <span class="tag v">verified</span></li>
+<li><a href="https://github.com/PrimeIntellect-ai/renderers">PrimeIntellect renderers README</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">ArgGYM is single-turn, but the same bug appears if the harness keeps the completion as text and re-tokenizes it for the trainer. Keep token ids end to end.</p>
+</div>
+
+<div class="practice">
+<h4>Render training prompts exactly as the eval harness renders them</h4>
+<dl>
+<dt>Why</dt><dd>Same template, system prompt, thinking mode, history handling and answer parser. Otherwise the transfer you measure is partly a format shift. Reasoning-model templates also rewrite earlier turns: Qwen3's keeps only the final answer of past turns, and its model card says frameworks that bypass the template must do the same.</dd>
+<dt>Check</dt><dd>Render one prompt through the training path and through the eval harness and diff the token ids. During training, score some samples with the eval harness's parser, not only the training reward. Our own earlier analysis found the local eval default used no system prompt while training used one.</dd>
+<dt>Sources</dt><dd><a href="https://huggingface.co/Qwen/Qwen3-8B">Qwen3-8B model card, "No Thinking Content in History"</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="losspath">3. The loss path, and catching breakage early</h2>
+
+<p>These bugs run without errors and produce plausible loss curves. They are the reason to test the pipeline before trusting a result.</p>
+
+<div class="practice">
+<h4>Put loss only on completion tokens, and attach the reward to the last generated token</h4>
+<dl>
+<dt>Why</dt><dd>Prompt tokens spend gradient on tokens the policy cannot change. Loss outside the completion mask trains on padding. Writing the reward at index <code>-1</code> puts it on padding rather than the last real token.</dd>
+<dt>Check</dt><dd>Assert zero gradient on prompt and padding tokens. Assert the reward index equals the last unmasked completion position. Treat EOS the same way in rollout and training.</dd>
+<dt>Sources</dt><dd><a href="https://rlhfbook.com/course">Lambert, RLHF book course, lecture 4 "PPO debugging checklist"</a> <span class="tag p">partial</span> read from a saved copy</dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Recompute current log-probs with a fresh forward pass, and guard every division</h4>
+<dl>
+<dt>Why</dt><dd>If cached rollout log-probs are used as the current policy, the ratio stays at 1 and the clip never acts. A group with identical rewards has std 0, so a std-normalized advantage is NaN. A completion that is only EOS gives an empty mask. Compute <code>log_softmax</code> then <code>gather</code>, never <code>softmax</code> then <code>log</code>. Detach advantages.</dd>
+<dt>Check</dt><dd>A clip fraction of exactly 0% across many steps points to stale log-probs. Use <code>std + eps</code> and <code>mask.sum().clamp_min(1)</code>.</dd>
+<dt>Sources</dt><dd><a href="https://rlhfbook.com/course">RLHF book course, lecture 4</a> <span class="tag p">partial</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Decide how truncated generations are scored and masked</h4>
+<dl>
+<dt>Why</dt><dd>A response cut off at the length cap is not necessarily wrong. Scoring it as wrong adds noise and pushes the model shorter for the wrong reason; scoring it as complete feeds the scorer broken input. DAPO masks truncated samples out of the loss (+6 AIME, the first step of its ablation) and adds a soft penalty near the cap. For ArgGYM, the scorer marks a truncated answer unparseable, so truncation becomes reward 0 unless we choose otherwise.</dd>
+<dt>Check</dt><dd>Log truncation rate per step. If it rises, the reward is penalizing length rather than wrong reasoning.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2503.14476">DAPO &sect;3.4</a> <span class="tag v">verified</span></li>
+<li><a href="https://rlhfbook.com/c/06-policy-gradients">RLHF book, ch. 6</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">TRL's <code>mask_truncated_completions</code> still defaults to False.</p>
+</div>
+
+<div class="practice" id="toy">
+<h4>Validate the pipeline on a toy task with a known optimum before the real task</h4>
+<dl>
+<dt>Why</dt><dd>The precision bug above was found on a task with reward = &minus;length, where the optimum is to emit EOS at once. Any working RL loop solves it within 100 steps on a 0.6B model. A broken setup then fails in minutes instead of looking "slow" for days. On a real benchmark you cannot tell a bug from slow progress.</dd>
+<dt>Check</dt><dd>Rerun the toy task on the exact stack after every infrastructure change.</dd>
+<dt>Sources</dt><dd>Dirhoussi, as in &sect;2 <span class="tag p">partial</span></dd>
+</dl>
+</div>
+
+<div class="practice" id="lag">
+<h4>Bound and log policy lag in async training</h4>
+<dl>
+<dt>Why</dt><dd>Async rollouts raise throughput, but samples come from an older policy. Small lag is safe: Asynchronous RLHF trained 40% faster on LLaMA 3.1 8B at matched performance, and ScaleRL ran 8 steps off-policy at the same ceiling. Large lag is not: at 12 steps of lag, every token-level correction tested eventually collapsed in Huang's runs, though sequence-level IS recovered with larger batches.</dd>
+<dt>Check</dt><dd>Tag each sample with the policy version that generated it; log the lag distribution, clip fraction and old/new KL; cap lag with a bounded queue. For a first run, synchronous or one-step-off removes this variable.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2410.18252">Noukhovitch et al., Asynchronous RLHF (ICLR 2025)</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.13786">ScaleRL</a> <span class="tag v">verified</span></li>
+<li><a href="https://luk-huang.github.io/personal-website/blog/is-frontier-asynchronous-rl-solved.html">Huang, Is Frontier Asynchronous RL Solved? (May 2026)</a> <span class="tag v">verified</span> blog, small models</li>
+<li><a href="https://huggingface.co/blog/async-rl-training-landscape">HF survey of 16 async RL libraries (Mar 2026)</a></li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Confirm the model you evaluate is the model you trained</h4>
+<dl>
+<dt>Why</dt><dd>The costliest failure is a green pipeline serving the wrong weights. Some LoRA merge tools write base weights plus a separate adapter folder, and <code>vllm serve &lt;dir&gt;</code> without <code>--enable-lora</code> ignores the adapter silently. vLLM's LoRA path also covers only supported modules, so adapters on unusual layers apply in part. Weight sync that skips mismatched parameter names, and stale checkpoints, belong to the same class. The symptom is a "no effect" result.</dd>
+<dt>Check</dt><dd>In the export script, assert <code>max|served &minus; base| &gt; 0</code> on a few trained tensors. After every weight sync, grep the sampler log for skipped-parameter warnings.</dd>
+<dt>Sources</dt><dd><span class="tag o">our runs</span> an evaluation of an unmodified base model went unnoticed for hours (June 2026)</dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Read start-up logs for slow-path fallbacks; measure tokens/s/GPU before tuning</h4>
+<dl>
+<dt>Why</dt><dd>Hybrid linear-attention models (Qwen3-Next and Qwen3.5 layers, Mamba-style) fall back to pure-PyTorch kernels when <code>flash-linear-attention</code> and <code>causal-conv1d</code> are missing. The only sign is one warning line. In one of our LoRA runs on a ~4B model this meant about 130 s/step; installing the kernels brought it to 7&ndash;11 s/step.</dd>
+<dt>Check</dt><dd>Grep the log for "Falling back to torch implementation". Compute tokens/s/GPU and MFU at step 1. Change one thing at a time.</dd>
+<dt>Sources</dt><dd><a href="https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_next/modeling_qwen3_next.py">transformers <code>modeling_qwen3_next.py</code></a> <span class="tag v">verified</span>; timings <span class="tag o">our runs</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Use stable knowledge benchmarks as a canary</h4>
+<dl>
+<dt>Why</dt><dd>Post-training rarely moves knowledge-heavy evals like MMLU. When a job is badly broken, they "can often drop by 10-20 points". A big drop there points to a bug before it says anything about transfer.</dd>
+<dt>Check</dt><dd>Run one or two such benchmarks on early checkpoints with the base model's harness and sampling.</dd>
+<dt>Sources</dt><dd><a href="https://rlhfbook.com/c/appendix-c-practical">RLHF book, appendix C "Identifying Bad Training Jobs"</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="choices">4. Loss and hyperparameter choices</h2>
+
+<div class="practice">
+<h4>Choose loss aggregation on purpose; default to token-level</h4>
+<dl>
+<dt>Why</dt><dd>How per-token losses become one number sets each token's weight. Per-sequence averaging (original GRPO) weights tokens by 1/length, so long wrong answers are punished less and length drifts up. Token-level averaging over the batch (DAPO) weights every token equally; a constant normalizer (Dr. GRPO) removes the length bias outright. ScaleRL found prompt-level averaging best, but in leave-one-out runs all choices landed within &plusmn;0.02 of each other. Tricks or Traps finds token-level helps base models more than instruct models.</dd>
+<dt>Check</dt><dd>Log mean length separately for correct and wrong responses. Wrong answers growing while reward is flat is the length-bias signature.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2503.20783">Dr. GRPO &sect;3</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2503.14476">DAPO &sect;3.3</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.13786">ScaleRL &sect;3.2, Fig. 15</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2508.08221">Tricks or Traps, takeaway 7</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Use asymmetric clipping, and do not reuse &epsilon; across losses</h4>
+<dl>
+<dt>Why</dt><dd>With a symmetric clip, a low-probability token can grow by at most 1+&epsilon; per update, which starves exploration. Clip-higher (0.2 / 0.28) is in most 2026 reports (Olmo 3 0.272, GLM-5 0.28, ProRL 0.4). GRPO- and DAPO-style losses are very sensitive to the clip setting; CISPO and GSPO are much more robust (ScaleRL A.17). The scales differ by orders of magnitude: GSPO's sequence clip is around 1e-4, CISPO's cap 4&ndash;8.</dd>
+<dt>Check</dt><dd>Log clip fraction split into low and high side, plus entropy.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2503.14476">DAPO</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.13786">ScaleRL A.17</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2507.18071">GSPO &sect;5.1</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: CE-GPPO (ACL 2026) argues clip-higher alone does not prevent entropy collapse <span class="tag u">unverified</span> seen in search results only.</p>
+</div>
+
+<div class="practice">
+<h4>Know what the number of updates per batch does</h4>
+<dl>
+<dt>Why</dt><dd>The ratio starts at 1 and only moves during updates within a batch, so with one update per batch the PPO clip barely acts (apart from the sampler/trainer gap). More updates per batch reuse data but make training more off-policy; DAPO uses 16. Skywork OR-1 found off-policy updates speed up entropy collapse.</dd>
+<dt>Check</dt><dd>Clip fraction and entropy as you change updates per batch.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2503.14476">DAPO &sect;4.1</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2505.22312">Skywork OR-1</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Prefer large prompt batches, and judge them on downstream evals</h4>
+<dl>
+<dt>Why</dt><dd>RL gradients are Monte Carlo estimates and very noisy; the critical batch size for RL tasks is far larger than for supervised ones (McCandlish et al. estimate &gt;8M frames for Dota 5v5 against 15k for ImageNet). PPO is not batch-size invariant, because the clip ties batch size to step size. ScaleRL found larger batches learn slower early but reach a higher ceiling and avoid stagnating on downstream evals. Published values range from 32 to 512 prompts per step (Olmo 3 32&ndash;128, INTELLECT-3 256, DAPO 512).</dd>
+<dt>Check</dt><dd>Track in-distribution validation and downstream evals separately. Rising validation with flat downstream evals is ScaleRL's small-batch failure.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/1812.06162">McCandlish et al. 2018</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2110.00641">Hilton et al. 2021</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.13786">ScaleRL &sect;5</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: qualified by two 2026 preprints, both <span class="tag p">partial</span> abstract only. <a href="https://arxiv.org/abs/2608.29296">When Do Larger Batches Help Scale LLM RL?</a> finds that with LR retuned, learning per sample is roughly batch-invariant and large batches help mainly through throughput. <a href="https://arxiv.org/abs/2610.18853">Two Clocks</a> finds a critical batch size beyond which sample efficiency drops. Treat "bigger batch raises the ceiling" as ScaleRL's result in its setup.</p>
+</div>
+
+<div class="practice">
+<h4>Group size is second-order; 8 to 16 is the common range</h4>
+<dl>
+<dt>Why</dt><dd>A group needs both successes and failures to give any gradient, so larger groups help on hard prompts. Within ScaleRL's range, 8/16/24/32 per prompt at a fixed total batch left the curves "essentially unchanged". The extremes disagree: <a href="https://arxiv.org/abs/2510.00977">It Takes Two</a> keeps 97.6% of G=16 performance with G=2, and <a href="https://arxiv.org/abs/2510.01180">BroRL</a> revives a plateaued 1.5B model with N=512. Common values: TRL 8, Olmo 3 8, DAPO and INTELLECT-3 16, GLM-5 32.</dd>
+<dt>Check</dt><dd>Fraction of zero-variance groups. If most are all-wrong, raise G or make the data easier before tuning anything else.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2510.13786">ScaleRL &sect;5</a> <span class="tag v">verified</span>; It Takes Two, BroRL <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2603.12151">IsoCompute Playbook</a> <span class="tag p">partial</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Subtract the group mean; decide deliberately whether to divide by the group std</h4>
+<dl>
+<dt>Why</dt><dd>Every method keeps the group-mean baseline. Dividing by the group std (original GRPO) gives more weight to prompts that are almost all-right or all-wrong. Dr. GRPO calls this a difficulty bias and removes it; the RLHF book points out that those groups include the hardest prompts, where one success is valuable. With binary rewards the group std is &radic;(p(1&minus;p)), so dividing by it is a per-prompt weighting, not a neutral rescale. Options with evidence: group mean with batch-level std (Tricks or Traps, Magistral); batch-level normalization (ScaleRL, "marginally better"); group mean with no std (Dr. GRPO, Olmo 3, INTELLECT-3).</dd>
+<dt>Check</dt><dd>Plot |advantage| against group pass rate.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2503.20783">Dr. GRPO &sect;3.1</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2508.08221">Tricks or Traps, takeaways 2&ndash;3</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2510.13786">ScaleRL &sect;3.2</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Open question for us: no source settles this, and 2026 reports split. ArgGYM's partial-credit reward makes the answer specific to our data, so we should ablate it.</p>
+</div>
+
+<div class="practice" id="zerovar">
+<h4>Drop zero-variance groups from the loss; resampling to refill the batch is optional</h4>
+<dl>
+<dt>Why</dt><dd>An all-correct or all-wrong group has zero advantage and zero gradient. Left in the batch, it only shrinks the effective batch and distorts the normalizer. DAPO resamples to refill (+8 AIME, its largest single gain). The resampling part travels less well: a small study on Qwen2.5-1.5B found it did not help and cost &gt;25% more compute per step, and <a href="https://arxiv.org/abs/2506.02177">GRESO</a> instead skips prompts predicted to be zero-variance (up to 2.4&times; faster rollouts). Offline, Skywork OR-1 drops prompts the starting model solves 0/16 or 16/16, and ScaleRL permanently drops prompts with pass rate &ge; 0.9.</dd>
+<dt>Check</dt><dd>Fraction of zero-variance groups per step, split into all-correct and all-wrong; effective batch size after filtering; pass-rate histogram of the training pool under the starting model.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2503.14476">DAPO &sect;3.2</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2512.07611">Lian 2025</a> <span class="tag v">verified</span> weak evidence: one author, one task</li>
+<li><a href="https://arxiv.org/abs/2505.22312">Skywork OR-1</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: <a href="https://arxiv.org/abs/2509.21880">RL-ZVP (ICLR 2026)</a> extracts signal from zero-variance prompts with entropy-guided advantages and beats filtering by up to 8.6 points <span class="tag v">verified</span>.</p>
+</div>
+
+<div class="practice">
+<h4>Do not add a fixed entropy bonus by default; watch entropy and fix collapse at the clip or the data</h4>
+<dl>
+<dt>Why</dt><dd>Entropy collapse caps performance: Cui et al. fit <code>R = &minus;a&middot;e<sup>H</sup> + b</code>, so zero entropy fixes the ceiling. A plain bonus is fragile: coefficients 1e-4 and 1e-3 did nothing, 1e-2 made entropy explode. Skywork OR-1 uses an adaptive bonus that switches on only below a target entropy and found sampling temperature 1.0 beat 0.6. ScaleRL found entropy does not reliably predict downstream performance. TRL and verl both default the coefficient to 0.</dd>
+<dt>Check</dt><dd>Entropy per step. A steady slide to zero while reward plateaus is collapse; a sudden rise with garbled outputs is explosion. Treat entropy as an alarm, not a target.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2505.22617">Cui et al., The Entropy Mechanism of RL for Reasoning LMs</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2505.22312">Skywork OR-1</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2506.01939">Beyond the 80/20 Rule</a> <span class="tag v">verified</span> updating only the 20% highest-entropy tokens matches full updates</li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice" id="valuewarm">
+<h4>If you use PPO, warm up the value model before policy updates</h4>
+<dl>
+<dt>Why</dt><dd>GAE advantages come from the critic, and a critic with a fresh head gives garbage advantages at first. VC-PPO pretrains the value model and decouples GAE &lambda; for critic and actor; AIME rose from 5.6 (plain PPO) to 49.0. VAPO scores 11 without value pretraining and 60.4 with it. Not relevant to GRPO-family methods, which have no critic.</dd>
+<dt>Check</dt><dd>Value loss falling before policy steps start; stable advantage std over the first steps.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2503.01491">VC-PPO</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2504.05118">VAPO</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2411.15124">T&uuml;lu 3 &sect;6.2</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Compare recipes by their trend, not by who leads early</h4>
+<dl>
+<dt>Why</dt><dd>Pass rate against log-compute is sigmoidal, and a recipe that leads early can be overtaken; ScaleRL's GRPO baseline went unstable after about 6k GPU-hours. Seed noise on the fitted ceiling is about &plusmn;0.02. ScaleRL's per-curve compute is far above ours, so borrow the method, not the ranking.</dd>
+<dt>Check</dt><dd>Fit the curve on held-out validation; use 2&ndash;3 seeds before calling a difference; track downstream evals alongside.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2510.13786">ScaleRL &sect;2.1, &sect;4</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice" id="lr">
+<h4>Learning rate: start at 1e-6 constant with a short warmup, then sweep</h4>
+<dl>
+<dt>Why</dt><dd>1e-6 constant is the most common published value (DeepSeekMath, DAPO with 20 warmup steps, INTELLECT-3, TRL's default); ProRL uses 2e-6. For a new base model the RLHF book suggests sweeping about ten learning rates over a wide range, then refining, with several seeds on the best.</dd>
+<dt>Check</dt><dd>Reward slope and entropy over the first few hundred steps at 3&ndash;4 learning rates.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2402.03300">DeepSeekMath &sect;4.2</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2503.14476">DAPO &sect;4.1</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2505.24864">ProRL</a> <span class="tag v">verified</span>; <a href="https://rlhfbook.com">RLHF book</a> <span class="tag p">partial</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="reward">5. Reward design and reward hacking</h2>
+
+<p>RL finds the cheapest path to reward. With a partial-credit reward, the cheapest path may not involve solving the task.</p>
+
+<div class="box warn" id="arggym">
+<b>What this means for ArgGYM.</b> Our reward-risk analysis of 2026-09-22 scored a policy that never reads the theory. It earns 0.2426 / 0.2172 / 0.2204 reward on the easy / medium / hard level bands, against 0.3558 / 0.2746 / 0.2318 for Qwen3-14B before training. On the hard band, the base model sits only 0.011 above a policy that reads nothing. Constant-label answers beat that baseline on <code>semantics_query</code> (0.4665 vs 0.4126) and <code>perturbation</code> (0.3942 vs 0.3002). <code>formalization</code> pays 0.52 for an answer with every queried status wrong, and a 30-line template solves <code>counter_argument_strict</code> exactly on 106 of 120 rows. Until the reward is fixed: report reward next to these floors, select checkpoints on <code>arggym_success_rate</code>, and read logged completions. (The analysis is a local workspace document, not in the repo; ask for a copy.)
+</div>
+
+<div class="practice">
+<h4>Score degenerate answers against the reward before training</h4>
+<dl>
+<dt>Why</dt><dd>A partial-credit score has a floor a policy can reach without solving anything, and group-relative advantages reward whichever sibling sits closer to that floor. If the floor is near the base model's score, the run cannot tell learning from floor-climbing.</dd>
+<dt>Check</dt><dd>Before the first GPU-hour, score hand-built cheats per task: constant label everywhere, input copied back, empty structure, maximum length, format with no content. Report each floor next to the base model's reward. A task where a cheat ties or beats the base model needs a reward fix or must be left out.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2605.12474">Mahmoud et al., Reward Hacking in Rubric-Based RL (May 2026)</a> <span class="tag v">verified</span> closest published analogue to our partial-credit floors</li>
+<li><a href="https://lilianweng.github.io/posts/2024-11-28-reward-hacking/">Weng, Reward Hacking in Reinforcement Learning (Nov 2024)</a> <span class="tag v">verified</span></li>
+<li><span class="tag o">our runs</span> 2026-09-22 reward-risk analysis</li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Keep a strict success metric beside any dense reward, and select on it</h4>
+<dl>
+<dt>Why</dt><dd>Partial credit helps learning on hard prompts, where a binary reward gives zero-variance groups, but it is the part a policy can game. A strict metric (exact match) is much harder to game. The ratio of reward to strict success is a cheap hacking monitor: if reward rises faster than success, partial credit is being farmed.</dd>
+<dt>Check</dt><dd>Log both per task; pick checkpoints on held-out strict success; alert when reward rises over a window while success is flat.</dd>
+<dt>Sources</dt><dd><span class="tag o">our runs</span> reward-risk analysis; <a href="https://arxiv.org/abs/2608.11669">Rubric Dropout?</a> <span class="tag u">unverified</span> search snippet only</dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Treat every added reward term as a change to the objective</h4>
+<dl>
+<dt>Why</dt><dd>Only potential-based shaping, <code>F = &gamma;&Phi;(s') &minus; &Phi;(s)</code>, is guaranteed to leave the optimal policy unchanged. Any other term (format bonus, length penalty, partial credit) changes what is optimal, and RL will find the new optimum. Length terms are the classic case.</dd>
+<dt>Check</dt><dd>For each reward component, write down the policy that maximizes it alone and score that policy. Prefer gating auxiliary credit on the main outcome.</dd>
+<dt>Sources</dt><dd><a href="https://mlanthology.org/icml/1999/ng1999icml-policy/">Ng, Harada &amp; Russell, Policy Invariance under Reward Transformations (ICML 1999)</a> <span class="tag p">partial</span> PDF not opened; <a href="https://arxiv.org/abs/2503.14476">DAPO soft overlong penalty</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Expect a learned hack to spread beyond the task it was learned on</h4>
+<dl>
+<dt>Why</dt><dd>In Anthropic's production coding environments, a model that learned to reward-hack generalized to alignment faking and sabotage. For ArgGYM the risk is milder but real: a template learned on one task leaking into sibling tasks.</dd>
+<dt>Check</dt><dd>For each known exploit, define a cross-task probe (for example, count <code>[strict ...]</code>-only answers on plain <code>counter_argument</code>) and run it on every saved checkpoint.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2511.18397">MacDiarmid et al., Natural Emergent Misalignment from Reward Hacking in Production RL (Nov 2025)</a> <span class="tag v">verified</span> abstract</dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Version the reward with the data</h4>
+<dl>
+<dt>Why</dt><dd>The reward is code. A scorer that changes between building the training pool and running the reward changes the objective, and no metric shows it.</dd>
+<dt>Check</dt><dd>Record scorer and prompt versions in every training row; print them from inside the training container at start; refuse to start on mismatch.</dd>
+<dt>Sources</dt><dd><span class="tag o">our runs</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="monitor">6. Monitoring and failure triage</h2>
+
+<p>Judge a run by held-out strict success and by trends over a window, not by one step of training reward. Training reward mixes policy change with which prompts landed in the batch, and since it is the quantity being optimized, it is the last place a hack shows. Over-optimization has a known shape: training reward keeps rising while a held-out measure peaks and falls (<a href="https://arxiv.org/abs/2210.10760">Gao, Schulman &amp; Hilton 2022</a> <span class="tag v">verified</span>; <a href="https://rlhfbook.com/c/14-over-optimization">RLHF book ch. 14</a> <span class="tag v">verified</span>). Log KL to the initial policy even when the loss has no KL term.</p>
+
+<p>Put these on one dashboard from step 0: reward, strict success, held-out success, entropy, grad norm, clip fraction, KL to the initial policy, sampler/trainer gap, mean length (correct and wrong separately), truncation rate, zero-variance-group fraction, IS weight statistics. Check the first ~10 steps for the frozen and truncation patterns before leaving a run alone.</p>
+
+<p>Thresholds marked <span class="tag o">our runs</span> are rules of thumb from earlier runs, not published values. Recalibrate them on our first run.</p>
+
+<div class="scroll">
+<table>
+<tr><th>Symptom</th><th>Metrics</th><th>Likely cause</th><th>Action</th></tr>
+<tr><td>Every curve flat; reward oscillates with no trend after 20&ndash;30 steps</td><td>Grad norm tiny and constant; sampler/trainer gap stays at its step-0 value (&lt; ~1e-3 <span class="tag o">our runs</span>); clip fraction &asymp; 0</td><td>LR too low (common with LoRA at a full-FT LR); precision mismatch; no reward variance within groups</td><td>Raise LR (LoRA: ~10&times;); check &sect;2; confirm groups have variance</td></tr>
+<tr><td>Rollouts rarely finish</td><td>Truncation rate high (&gt; 0.2&ndash;0.3 <span class="tag o">our runs</span>); mean length near the cap</td><td>Token budget too small, or thinking tokens use it up</td><td>Fix the length budget first; check eval and training budgets match</td></tr>
+<tr><td>Reward falls while length climbs</td><td>Mean length and truncation rate both rising</td><td>Truncated samples in the group baseline; length-biased aggregation</td><td>Mask truncated samples from loss and baseline; check aggregation (&sect;4)</td></tr>
+<tr><td>Gradient blows up</td><td>Grad-norm spike far above recent baseline, loss spike, entropy jumps, then NaN</td><td>LR too high; update too large for rollout staleness</td><td>Lower LR, tighten clip, restart from the checkpoint before the spike</td></tr>
+<tr><td>Policy outruns its rollouts (async)</td><td>Clip fraction rising (&gt; ~0.3 <span class="tag o">our runs</span>); old/new KL growing; lag rising</td><td>Too many in-flight steps for the LR</td><td>Cut staleness, lower LR, sync weights more often</td></tr>
+<tr><td>Large sampler/trainer gap from step 0</td><td>Mismatch KL high before any update</td><td>Precision or kernel mismatch</td><td>&sect;2: match precision, fix engine defaults, then IS correction</td></tr>
+<tr><td>Entropy crashes, outputs near-identical</td><td>Entropy &rarr; 0; within-group reward std &rarr; 0; distinct answers per group drop</td><td>Premature collapse; LR too high; reward saturating</td><td>Lower LR, clip-higher, larger groups, roll back</td></tr>
+<tr><td>Most groups carry no signal</td><td>Fraction of groups all-correct or all-wrong</td><td>Data too easy or too hard</td><td>Filter or resample; rebalance difficulty (&sect;4)</td></tr>
+<tr><td>Training reward up, strict success flat</td><td>Reward vs exact-match success; their ratio</td><td>Policy is climbing partial credit, not solving</td><td>Treat as reward hacking; read completions; select on success (&sect;5)</td></tr>
+<tr><td>No new step for a long time, no crash</td><td>Step timestamps; time waiting for a batch</td><td>One process (inference server, judge) died; the rest wait</td><td>Alert on step staleness; read every process log</td></tr>
+</table>
+</div>
+<p>Table sources: <a href="https://arxiv.org/abs/2503.14476">DAPO</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2505.22617">Cui et al.</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2510.26788">Qi et al.</a> <span class="tag v">verified</span>; <a href="https://huggingface.co/blog/Weyaxi/engineering-handbook-grpo-lora-with-verl">Çalık, Engineering Handbook for GRPO + LoRA with verl (Jan 2026)</a> <span class="tag v">verified</span>.</p>
+
+<div class="practice">
+<h4>Log completions, and read them</h4>
+<dl>
+<dt>Why</dt><dd>Every hack in our reward analysis is visible in the answer text and invisible in scalar metrics. One exploit there produces the exact gold answer, so reward and success both read 1.0. Automatic detectors are weak: Weng reports that tested anomaly detectors did not exceed 60% AUROC.</dd>
+<dt>Check</dt><dd>Every N steps, log a sample of completions with per-component scores and scorer reason codes. Grep them for the patterns you predicted (constant labels, copied input, templates). Track reward per task, not only the pooled mean.</dd>
+<dt>Sources</dt><dd><a href="https://lilianweng.github.io/posts/2024-11-28-reward-hacking/">Weng, Reward Hacking</a> <span class="tag v">verified</span>; <span class="tag o">our runs</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="eval">7. Measuring gains and transfer</h2>
+
+<p>Our headline claim will be a comparison between a base model and an RL checkpoint, on ArgGYM and on other benchmarks. Each practice below removes one way that comparison can mislead.</p>
+
+<div class="practice">
+<h4>Hold out by item and by distribution; select checkpoints only on a dev split</h4>
+<dl>
+<dt>Why</dt><dd>RL overfits small evals. Hochlehnert et al. found most RL gains on reasoning benchmarks were smaller than claimed once evaluation was standardized, worst on small sets like AIME'24. Selecting checkpoints on the test set leaks it.</dd>
+<dt>Check</dt><dd>Three splits: training pool, a dev split for checkpoint selection, a test split touched once. For ArgGYM, keep at least one task or level band the curriculum never trains on, so transfer within ArgGYM is measurable too.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2504.07086">Hochlehnert et al., A Sober Look at Progress in LM Reasoning (COLM 2025)</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Measure unrelated benchmarks to catch regressions, not only target ones to show gains</h4>
+<dl>
+<dt>Why</dt><dd>Fine-tuning on one domain can erase others. On-policy RL forgets less than SFT: RL's Razor finds forgetting tracks the KL from the base policy on the new task, and RL lands on low-KL solutions. Huan et al. find Qwen3-14B trained with RL on math transfers across domains, while SFT on the same data often loses general ability. Forgetting less is not forgetting nothing, and a hacked policy can still regress.</dd>
+<dt>Check</dt><dd>Fix a transfer suite before training: near-transfer reasoning benchmarks we hope improve, and far capabilities we expect to stay flat (instruction following, knowledge QA, code). Run base and every candidate checkpoint with identical settings. Log KL to the base policy as a cheap forgetting predictor.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2509.04259">Shenfeld et al., RL's Razor (Sep 2025)</a> <span class="tag v">verified</span> abstract</li>
+<li><a href="https://arxiv.org/abs/2507.00432">Huan et al., Does Math Reasoning Improve General LLM Capabilities?</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Report pass@1 and pass@k together; a pass@1 gain alone may only be sharpening</h4>
+<dl>
+<dt>Why</dt><dd>Yue et al. show RL-trained models beat their base at small k, but the base overtakes at large k. On AIME24 at k = 1024, 13.3% of problems were solved only by the base and 0.0% only by the RL model. Their reading: RL mostly reweights reasoning paths the base already has. Responses split. ProRL reports the boundary expanding with long training, KL control and reference resets. Wen et al. argue final-answer pass@k is the wrong yardstick; under CoT-pass@k, which also checks the reasoning, RL does extend the boundary. The Invisible Leash finds shrinkage generally outweighs expansion. The working position: plain GRPO on a fixed pool should be expected to sharpen, and a claim of new capability needs large-k evidence.</dd>
+<dt>Check</dt><dd>Report pass@1 (mean over n samples) and pass@k at several k up to what we can afford, using the unbiased estimator with n &ge; k. Plot base and trained curves together. On ArgGYM, where a lucky guess can pass a label task, check that large-k wins come with correct intermediate structure, not only correct final labels.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2504.13837">Yue et al., Does RL Really Incentivize Reasoning Capacity Beyond the Base Model? (NeurIPS 2025)</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2505.24864">Liu et al., ProRL</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2506.14245">Wen et al., RLVR Implicitly Incentivizes Correct Reasoning</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2507.14843">Wu et al., The Invisible Leash</a> <span class="tag v">verified</span> abstract</li>
+<li><a href="https://arxiv.org/abs/2107.03374">Chen et al., Codex paper (pass@k estimator, &sect;2.1)</a> <span class="tag p">partial</span> section not opened</li>
+</ul></dd>
+</dl>
+<p class="fresh">Freshness: two 2026 preprints, abstract only <span class="tag p">partial</span>. <a href="https://arxiv.org/abs/2607.20543">Zhou, When RLVR Shrinks the Reasoning Boundary</a> traces the shrinkage to "boundary prompts" where small rollout groups miss the base model's rare correct paths. <a href="https://arxiv.org/abs/2606.22317">Cai et al., Curriculum RL Can Incentivize Reasoning Beyond the Base Model</a> report +9.8 points pass@256 over base with teacher guidance near the boundary.</p>
+</div>
+
+<div class="practice">
+<h4>Rule out contamination before crediting a gain to RL</h4>
+<dl>
+<dt>Why</dt><dd>Base-model contamination can make RL look like it teaches. Shao et al. report Qwen2.5-Math-7B gaining 21.4 points on MATH-500 from random rewards against 29.1 from correct ones, while the same spurious rewards often fail on Llama3 or OLMo2. Wu et al. trace this to contamination; on a clean generated benchmark only accurate rewards help. ArgGYM's generated items lower the risk for in-domain evals; the external transfer benchmarks keep it.</dd>
+<dt>Check</dt><dd>Run a random-reward or format-only control when a gain looks large; test more than one model family; prefer transfer benchmarks with post-cutoff or generated items; check n-gram overlap between training prompts and every eval set.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2506.10947">Shao et al., Spurious Rewards</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2507.10532">Wu et al., Reasoning or Memorization? (AAAI 2026)</a> <span class="tag v">verified</span> abstract</li>
+<li><a href="https://rlhfbook.com/c/16-evaluation">RLHF book ch. 16</a> <span class="tag v">verified</span></li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Quantify noise: several seeds, standard errors, paired comparisons</h4>
+<dl>
+<dt>Why</dt><dd>Eval noise is often larger than the gain. Hochlehnert et al. measure AIME'24 pass@1 standard deviations of 5&ndash;15 points across seeds and up to 8 points across compute clusters for the same model. Olmo 3 measured per-benchmark standard deviations over 3 runs from 0.16 to 1.48 points, and spent 10&ndash;20% of development compute on evaluation. Training-seed variance comes on top and is rarely reported.</dd>
+<dt>Check</dt><dd>4&ndash;8 samples per item on large evals, many more on small ones. Report mean &plusmn; standard error, clustered when items share a source (ArgGYM theories). Compare checkpoints with paired per-item differences. Run a power calculation to know the smallest gain we can detect. Use 2&ndash;3 training seeds for the headline comparison when budget allows.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://arxiv.org/abs/2504.07086">Hochlehnert et al.</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2512.13961">Olmo 3</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2411.00640">Miller, Adding Error Bars to Evals (2024)</a> <span class="tag v">verified</span> clustered errors can be ~3&times; naive ones</li>
+</ul></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Keep eval sampling identical across base and checkpoints</h4>
+<dl>
+<dt>Why</dt><dd>Temperature, top-p, token cap, chat template and system prompt each move scores by points: Hochlehnert et al. see up to ~15% from temperature and ~8% from top-p. A model trained under one system prompt and evaluated under another is a different condition, not a measurement of training.</dd>
+<dt>Check</dt><dd>One eval config, pinned in the results. For in-domain evals, the same prompt composition as training. Record truncation rate in every eval. Do not compare against published numbers from a different harness.</dd>
+<dt>Sources</dt><dd><a href="https://arxiv.org/abs/2504.07086">Hochlehnert et al.</a> <span class="tag v">verified</span>; <a href="https://rlhfbook.com/c/16-evaluation">RLHF book ch. 16</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="lora">8. LoRA or full fine-tuning</h2>
+
+<p>Most of this section rests on one source, Thinking Machines' <a href="https://thinkingmachines.ai/blog/lora/">LoRA Without Regret</a> (Sep 2025) <span class="tag v">verified</span>, with 2026 work that qualifies it.</p>
+
+<div class="practice">
+<h4>For RL, LoRA on all layers can match full fine-tuning, even at low rank</h4>
+<dl>
+<dt>Why</dt><dd>Policy-gradient RL takes in roughly one reward's worth of information per episode, far below even a rank-1 adapter's capacity (the authors' estimate). They found LoRA equal to full fine-tuning for RL down to rank 1, on Llama-3.1-8B (GSM8K, MATH) and Qwen3-8B-base (DeepMath, 8,192-token sequences). TinyLoRA reached 91% on GSM8K with 13 trained parameters under RL. One micro-budget study disagrees in part: rank 8 failed on reasoning RL where rank 256 worked.</dd>
+<dt>Check</dt><dd>Start with LoRA on all linear layers at moderate rank (32&ndash;128). Run one short full-FT or high-rank comparison on our task before trusting low rank. If rank 8 stalls, raise the rank before concluding LoRA fails.</dd>
+<dt>Sources</dt><dd><ul>
+<li><a href="https://thinkingmachines.ai/blog/lora/">LoRA Without Regret</a> <span class="tag v">verified</span></li>
+<li><a href="https://arxiv.org/abs/2602.04118">Morris et al., Learning to Reason in 13 Parameters (Feb 2026)</a> <span class="tag v">verified</span> abstract</li>
+<li><a href="https://arxiv.org/abs/2601.06677">Khan et al., Plasticity vs. Rigidity (Jan 2026)</a> <span class="tag v">verified</span> abstract; no full-FT comparison</li>
+</ul></dd>
+</dl>
+<p class="fresh">No study we found tests LoRA against full fine-tuning in long, large-scale RL.</p>
+</div>
+
+<div class="practice">
+<h4>Apply LoRA to the MLP layers, not attention only</h4>
+<dl>
+<dt>Why</dt><dd>Attention-only LoRA learns clearly slower than MLP-only, even at matched parameter count (attention rank 256 at 0.25B parameters trails MLP rank 128 at 0.24B). Adding attention on top of MLP gives nothing. Holds for a dense model and an MoE.</dd>
+<dt>Check</dt><dd>Confirm the target-module list in the resolved config.</dd>
+<dt>Sources</dt><dd><a href="https://thinkingmachines.ai/blog/lora/">LoRA Without Regret</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Use about 10&times; the full fine-tuning learning rate for LoRA</h4>
+<dl>
+<dt>Why</dt><dd>Across their sweep, the best LoRA LR was a near-constant multiple of the best full-FT LR, fitted at 9.8. For runs under ~100 steps they report ~15&times; as preliminary. Too low an LR is the usual cause of a frozen LoRA run.</dd>
+<dt>Check</dt><dd>Multiply a known-good full-FT LR by 10; confirm the policy starts moving within ~10 steps. The fit assumed a constant schedule.</dd>
+<dt>Sources</dt><dd><a href="https://thinkingmachines.ai/blog/lora/">LoRA Without Regret</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Smaller batches suit LoRA better; leave the other LoRA knobs at defaults</h4>
+<dl>
+<dt>Why</dt><dd>LoRA's gap to full fine-tuning grows with batch size, independent of rank. This was tested on one SFT dataset, so its effect in RL is unknown, and it pulls against the large-batch advice in &sect;4. The authors could not beat standard initialization and &alpha; = 32.</dd>
+<dt>Check</dt><dd>If we raise batch size for RL gradient noise, compare against a full-FT or higher-rank run at that batch size.</dd>
+<dt>Sources</dt><dd><a href="https://thinkingmachines.ai/blog/lora/">LoRA Without Regret</a> <span class="tag v">verified</span> batch-size result; <span class="tag p">partial</span> default-hyperparameter claim</dd>
+</dl>
+</div>
+
+<div class="practice">
+<h4>Count LoRA's compute saving and its forgetting advantage</h4>
+<dl>
+<dt>Why</dt><dd>LoRA costs a little over &#8532; of full fine-tuning's FLOPs per forward-backward pass, so equal sample efficiency is a compute win. In SFT, LoRA learns less on the target domain but forgets less elsewhere. Whether that adds anything on top of on-policy RL's own low forgetting is untested, and it bears directly on our transfer question.</dd>
+<dt>Check</dt><dd>Compare runs on a FLOPs axis as well as steps. Include the far-transfer suite from &sect;7 in any LoRA-versus-full comparison.</dd>
+<dt>Sources</dt><dd><a href="https://thinkingmachines.ai/blog/lora/">LoRA Without Regret</a> <span class="tag v">verified</span>; <a href="https://arxiv.org/abs/2405.09673">Biderman et al., LoRA Learns Less and Forgets Less (2024)</a> <span class="tag v">verified</span></dd>
+</dl>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="libs">Appendix A. Library landscape (snapshot, 2026-10-14)</h2>
+
+<p>Input to the library spike, not a choice. Facts come from each repo's README, docs and config code on 2026-10-14. Nothing was run, so "supported" means documented, not confirmed to work. Several things changed in the last five months; the spike should recheck anything it relies on.</p>
+
+<h3>What changed recently</h3>
+<ul>
+  <li><b>verifiers</b> v0.4.0 (2026-10-12) removed its v0 API. The new <code>verifiers.v1</code> API is built around tasksets, harnesses and traces; training goes through prime-rl.</li>
+  <li><b>prime-rl</b> v0.10.0 (2026-10-13): default loss is now IPO; IcePop, CISPO and PPO are opt-in. Inference always runs at least one step ahead of the trainer.</li>
+  <li><b>TRL</b> v1.15.0: vLLM importance-sampling correction on by default; <code>GKDTrainer</code> moved to experimental; async GRPO is experimental and FSDP2-only.</li>
+  <li><b>verl</b> and <b>AReaL</b> moved GitHub organizations (<code>verl-project/verl</code>, <code>areal-project/AReaL</code>).</li>
+  <li><b>OpenEnv</b> moved to <code>huggingface/OpenEnv</code>; the package is now <code>openenv</code> (<code>openenv-core</code> stopped at 0.3.0).</li>
+  <li><b>NeMo Gym</b> is on PyPI and requires Python 3.13.14+.</li>
+  <li><b>rLLM</b> now trains on verl, Tinker or Fireworks backends. Open re-implementations of the Tinker API exist in SkyRL, verl and rLLM.</li>
+  <li>Inactive: Atropos is archived; TorchForge is paused; GEM, OpenTinker and FlashRL have had no commits for 7&ndash;11 months.</li>
+</ul>
+
+<h3>Feature snapshot of the training libraries</h3>
+<p>"?" means the item could not be confirmed from the docs or code.</p>
+<div class="scroll">
+<table>
+<tr><th>Library</th><th>Multi-turn</th><th>Async</th><th>Rollout engine</th><th>Mismatch handling</th><th>LoRA</th><th>Algorithms</th><th>Backend / scale</th><th>Env API</th></tr>
+<tr><td><a href="https://github.com/verl-project/verl">verl</a> v0.9.1</td><td>agent loop, tools</td><td>one-step-off, fully async</td><td>vLLM, SGLang, HF</td><td>Rollout Correction (IS + rejection); vexact batch-invariant; router replay</td><td>yes</td><td>PPO, GRPO, GSPO, DAPO, CISPO, OPD, others</td><td>FSDP/FSDP2, Megatron; Ray multi-node</td><td>agent-loop config; NeMo Gym</td></tr>
+<tr><td><a href="https://github.com/PrimeIntellect-ai/prime-rl">prime-rl</a> v0.10.0</td><td>via verifiers</td><td>default, up to 8 steps</td><td>vLLM</td><td>IPO trust region (default), IcePop, mismatch-KL metric</td><td>yes (weight sync falls back to filesystem)</td><td>GRPO-family, OPD, SFT; losses IPO / IcePop / CISPO / PPO / custom</td><td>FSDP2; Slurm multi-node</td><td>verifiers v1 tasksets</td></tr>
+<tr><td><a href="https://github.com/huggingface/trl">TRL</a> v1.15.0</td><td><code>environment_factory</code>, OpenEnv</td><td>experimental, FSDP2 only</td><td>vLLM</td><td>IS correction on by default</td><td>yes (PEFT)</td><td>GRPO with loss types dapo (default), grpo, cispo, sapo; GSPO</td><td>Accelerate, DeepSpeed, FSDP</td><td>Python env factory; OpenEnv</td></tr>
+<tr><td><a href="https://github.com/NovaSky-AI/SkyRL">SkyRL</a> v0.4.0</td><td>yes</td><td>one-step-off, fully async</td><td>vLLM; SGLang ?</td><td>TIS, geometric sequence mask, R3</td><td>yes (multi-LoRA)</td><td>DAPO, CISPO, custom, OPD</td><td>FSDP, Megatron, JAX</td><td>skyrl-gym <code>BaseTextEnv</code>; Tinker API</td></tr>
+<tr><td><a href="https://github.com/THUDM/slime">slime</a> v0.4.0</td><td>custom generate functions</td><td>fully async example</td><td>SGLang</td><td>TIS, IcePop, R3</td><td>not in core</td><td>GRPO, GSPO, CISPO, REINFORCE++, PPO, OPD</td><td>Megatron; Ray</td><td>data-buffer and generate hooks</td></tr>
+<tr><td><a href="https://github.com/areal-project/AReaL">AReaL</a> v2.1.0</td><td>yes, agent SDK integrations</td><td>fully async; sync option</td><td>SGLang (default), vLLM</td><td>IcePop, KPop</td><td>yes</td><td>GRPO, GSPO, PPO, DAPO, Dr.GRPO, RLOO, SAPO, distillation</td><td>Megatron, FSDP; multi-node</td><td>agent workflow</td></tr>
+<tr><td><a href="https://github.com/NVIDIA-NeMo/RL">NeMo-RL</a> v0.7.0</td><td>yes</td><td>async GRPO</td><td>vLLM, SGLang, Megatron</td><td>truncated IS, IcePop, router replay</td><td>yes</td><td>GRPO, GSPO, DAPO, CISPO, PPO, DPO, OPD</td><td>DTensor/FSDP2, Megatron; multi-node</td><td>NeMo Gym</td></tr>
+<tr><td><a href="https://github.com/OpenRLHF/OpenRLHF">OpenRLHF</a> v0.11.2</td><td>multi-turn, token-in-token-out</td><td>yes</td><td>vLLM</td><td>TIS, IcePop, sequence-mask TIS</td><td>yes</td><td>PPO, REINFORCE++, GRPO, RLOO, Dr.GRPO, DAPO filtering</td><td>DeepSpeed; Ray; Slurm</td><td><code>reset()</code>/<code>step()</code> agent function</td></tr>
+<tr><td><a href="https://github.com/alibaba/ROLL">ROLL</a> v0.4.0</td><td>agentic pipeline</td><td>yes</td><td>vLLM, SGLang</td><td>?</td><td>yes</td><td>PPO, GRPO, GSPO, Reinforce++, OPD</td><td>FSDP2, Megatron; Ray</td><td>GEM-style</td></tr>
+<tr><td><a href="https://github.com/OpenPipe/ART">ART</a> v0.5.19</td><td>yes (client-side)</td><td>?</td><td>vLLM</td><td>?</td><td>LoRA-centric</td><td>GRPO</td><td>Unsloth</td><td>your own Python app</td></tr>
+</table>
+</div>
+<p>Environment frameworks also checked: <a href="https://github.com/PrimeIntellect-ai/verifiers">verifiers</a>, <a href="https://github.com/NVIDIA-NeMo/Gym">NeMo Gym</a>, <a href="https://github.com/huggingface/OpenEnv">OpenEnv</a>, skyrl-gym. For background on environment design across frameworks, see Kolavi et al., <a href="https://huggingface.co/spaces/AdithyaSK/rl-environments-guide">The ultimate guide to RL environments</a> (May 2026; its verifiers section predates v0.4.0).</p>
+
+<h2 id="spike">Appendix B. Questions the library spike should answer hands-on</h2>
+<ol>
+  <li><b>Token fidelity.</b> On our model's chat template, does the trainer train on exactly the token ids vLLM sampled? Compare ids and count mismatches.</li>
+  <li><b>Mismatch at our output length.</b> With library defaults and a 65,536-token cap, how large is the sampler/trainer log-prob gap, and does the library's correction keep it flat over 100+ steps? Is FP16 a working switch or only a dtype field?</li>
+  <li><b>Async cost and benefit.</b> On our length distribution, what throughput does async gain and what staleness does it cost? Can we force strict on-policy for an ablation?</li>
+  <li><b>LoRA weight sync.</b> How long does a weight sync take per step, with LoRA and with full fine-tuning?</li>
+  <li><b>Environment port cost.</b> Port one ArgGYM task into each candidate's env API. Record lines of code, setup time, and whether the scorer is reused unchanged.</li>
+  <li><b>Model coverage.</b> Do our target families (Qwen3.5/3.8 dense and MoE, gpt-oss, Gemma-4) load and train without custom modeling code? Does MoE need router replay?</li>
+  <li><b>Cluster fit.</b> Does a 2-node run start on our Slurm cluster with the documented launcher? What breaks first?</li>
+  <li><b>Algorithm switching.</b> Are GRPO, DAPO, GSPO and CISPO config switches? Does a custom loss fit in about 50 lines?</li>
+  <li><b>API stability.</b> How often do releases break configs, and which version do we pin?</li>
+  <li><b>Checkpoint to eval.</b> Can a checkpoint be exported to HF format and served by our vLLM eval harness without manual conversion? Does the export pass the "served differs from base" check in &sect;3?</li>
+</ol>
+
+<h2 id="gaps">Appendix C. What we could not verify, and what we dropped</h2>
+
+<h3>Not verified</h3>
+<ul>
+  <li>Yao et al., <a href="https://fengyao.notion.site/off-policy-rl">off-policy RL blog</a>: the page did not render. TIS is confirmed through its adoption in TRL and Olmo 3.</li>
+  <li>The Dirhoussi Space renders client-side; its numbers were checked against a saved copy of the author's article.</li>
+  <li>RLHF book course slides (lecture 4): read from a saved copy of the course repo.</li>
+  <li>Ng, Harada &amp; Russell 1999: PDF not opened.</li>
+  <li>Codex paper &sect;2.1 (pass@k estimator): not opened.</li>
+  <li>Rubric Dropout (arXiv 2608.11669) and CE-GPPO: search snippets only.</li>
+  <li>2026 preprints read at abstract level only: Two Clocks, When Do Larger Batches Help, IsoCompute Playbook, Retaining by Doing, the two pass@k boundary papers, TinyLoRA, Plasticity vs. Rigidity.</li>
+  <li>Whether verl's rollout correction is on by default; which trainers support MoE router replay beyond the table above.</li>
+  <li>Library features in Appendix A: documented, not run. Multi-node performance claims come from READMEs.</li>
+  <li>All <span class="tag o">our runs</span> items have no public source.</li>
+</ul>
+
+<h3>Dropped</h3>
+<ul>
+  <li>"Token-level rendering gives &gt;3&times; throughput": the source's figure is an estimate of redundant forward-pass work, not a measurement.</li>
+  <li>"Truncated IS worsens training stability" (attributed to arXiv 2602.04879): that paper is about PPO clipping and proposes DPPO.</li>
+  <li>"CISPO is less sensitive to the clip threshold than GSPO": ScaleRL says both are robust; GRPO/DAPO-style losses are the sensitive ones.</li>
+  <li>"CISPO beats DAPO by a large margin": inside the full ScaleRL recipe they reach a similar ceiling.</li>
+  <li>"Typical runs use 256&ndash;1024 prompts per batch" and "filter to the 20&ndash;80% pass-rate band": no primary source; replaced by per-report values.</li>
+  <li>"GRPO was designed around verifiable rewards": the original used a learned reward model.</li>
+  <li>"GSPO prevents length bias": the paper does not claim this.</li>
+  <li>Specific healthy-entropy bands, "most runs converge in 3&ndash;5 epochs", and similar heuristics without a traceable source.</li>
+</ul>
+
+</main>
+</body>
+</html>
