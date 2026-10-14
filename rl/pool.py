@@ -32,7 +32,13 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 import yaml
 
 import arggym
-from arggym.core.freeze import freeze, taskset_hash, usable_cores
+from arggym.core.freeze import (
+    PROMPT_VERSION,
+    SCORING_VERSION,
+    freeze,
+    taskset_hash,
+    usable_cores,
+)
 from arggym.core.spec import ALL_ORDERINGS, SeedPolicy, TasksetSpec
 from evals import taskset
 from evals.client import ChatClient, Endpoint
@@ -76,10 +82,13 @@ def theory_key(row: Dict[str, Any]) -> str:
 
     Two rows that differ only in which ordering the question names still share
     every fact a model could memorise, so the ordering does not make them
-    different items. `formalization` carries its theory in `state` alone.
+    different items. `formalization` has no `base_ops`: its theory is the gold
+    answer, `gold.reference_ops`, and `state` holds only the queried literals.
     """
     m = row["metadata"]
     content = {k: m.get(k) for k in ("base_ops", "pert_ops", "state")}
+    if m.get("base_ops") is None:
+        content["reference_ops"] = (m.get("gold") or {}).get("reference_ops")
     return hashlib.sha256(json.dumps(content, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -205,10 +214,28 @@ def pool_dir(cfg: Dict[str, Any]) -> Path:
 
 
 def load_split(cfg: Dict[str, Any], split: str) -> List[Dict[str, Any]]:
+    """A built split, refused if it was frozen under other prompt or scoring rules.
+
+    The pool is named by `data` alone, so a generator or scorer change would
+    otherwise leave an old pool in place while the eval tasksets are re-frozen.
+    Same rule as the eval harness (`evals.run.refuse_a_stale_taskset`), but a
+    missing version is refused too: every pool is built by `build`, which
+    records both.
+    """
     path = pool_dir(cfg) / f"{split}.jsonl"
     if not path.exists():
         raise SystemExit(f"{path} is missing; build it with `python -m rl.pool <config>`")
-    return taskset.load(str(path))[1]
+    manifest, rows = taskset.load(str(path))
+    versions = manifest.get("versions") or {}
+    installed = {"prompt_version": PROMPT_VERSION, "scoring_version": SCORING_VERSION}
+    stale = [f"{k} {versions.get(k)} (installed: {v})" for k, v in installed.items()
+             if versions.get(k) != v]
+    if stale:
+        raise SystemExit(
+            f"{path} was frozen under {' and '.join(stale)}: its questions or its gold "
+            f"follow other rules than the installed scorer rewards. Delete "
+            f"{pool_dir(cfg)} and rebuild it with `python -m rl.pool <config>`.")
+    return rows
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -220,6 +247,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     a = p.parse_args(argv)
     cfg = rl_config.load(a.config, a.overrides)
     if (pool_dir(cfg) / "summary.json").exists():
+        for split in ("train", "dev"):
+            load_split(cfg, split)  # refuses a pool frozen under other rules
         print(f"pool exists: {pool_dir(cfg)}")
         return 0
     summary = build(cfg, a.workers or min(64, usable_cores()))

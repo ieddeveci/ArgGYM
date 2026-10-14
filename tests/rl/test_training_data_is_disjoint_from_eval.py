@@ -94,3 +94,40 @@ def test_every_pool_on_disk_shares_nothing_with_eval(summary, eval_keys):
     cfg = {"data": data, "output_root": "outputs/rl"}
     assert pool.pool_dir(cfg) == summary.parent
     _check(cfg, eval_keys)
+
+
+def test_a_pool_frozen_under_other_rules_is_refused(small_pool):
+    import json
+
+    path = pool.pool_dir(small_pool) / "dev.jsonl"
+    lines = path.read_text().splitlines()
+    head = json.loads(lines[0])
+    head["__manifest__"]["versions"]["scoring_version"] -= 1
+    path.write_text("\n".join([json.dumps(head), *lines[1:]]) + "\n")
+    try:
+        with pytest.raises(SystemExit, match="scoring_version"):
+            pool.load_split(small_pool, "dev")
+        with pytest.raises(SystemExit, match="scoring_version"):
+            pool.main([str(ROOT / CONFIGS[1]), f"output_root={small_pool['output_root']}",
+                       "data.levels=[1]", "data.train.take=1"])
+    finally:
+        path.write_text("\n".join(lines) + "\n")
+
+
+def test_a_formalization_theory_is_keyed_by_its_reference_theory(eval_keys):
+    _, rows = taskset.load(str(ROOT / "data/taskset-lite.jsonl"))
+    forms = [r for r in rows if r["task"] == "formalization"]
+    a, b = forms[0], json_copy(forms[0])
+    b["metadata"]["gold"]["reference_ops"] = b["metadata"]["gold"]["reference_ops"][:-1]
+    assert a["metadata"]["state"] == b["metadata"]["state"]
+    assert pool.theory_key(a) != pool.theory_key(b)
+    # The same theory asked under another ordering is the same item.
+    c = json_copy(a)
+    c["metadata"]["ordering"] = "weakest_link_democratic"
+    assert pool.theory_key(c) == pool.theory_key(a)
+
+
+def json_copy(row):
+    import json
+
+    return json.loads(json.dumps(row))

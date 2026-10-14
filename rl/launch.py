@@ -10,12 +10,13 @@ server is torn down on every exit path, Ctrl-C and SIGTERM included, by killing
 its whole process group: vLLM forks an engine process that would otherwise
 outlive the parent and hold the GPU.
 
-`--no-export` stops after training. Logs go to `<run>/vllm.log` and the
+`--no-export` stops after training. Logs go to `<run>/vllm-<start time>.log` and the
 terminal.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import signal
@@ -26,7 +27,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Sequence
 
 from rl import config as rl_config
-from rl.train import output_dir
+from rl.train import SELECTION, output_dir
 
 
 def vllm_command(cfg: Dict[str, Any]) -> List[str]:
@@ -36,10 +37,13 @@ def vllm_command(cfg: Dict[str, Any]) -> List[str]:
     the distribution actually sampled from. The weight-transfer config enables
     the NCCL endpoint the trainer pushes weights through; it needs
     `VLLM_SERVER_DEV_MODE=1`, which also exposes the prefix-cache reset the
-    trainer calls after every sync.
+    trainer calls after every sync. The served name is the eval config's `model`,
+    so the eval harness can query this server, or one serving the export, under
+    the name it already sends.
     """
     v, m = cfg["vllm"], cfg["model"]
     return [sys.executable, "-m", "vllm.entrypoints.cli.main", "serve", m["name"],
+            "--served-model-name", rl_config.eval_model(cfg)["model"],
             "--revision", m["revision"], "--dtype", "bfloat16",
             "--host", "127.0.0.1", "--port", str(v["port"]),
             "--max-model-len", str(v["max_model_len"]),
@@ -47,6 +51,22 @@ def vllm_command(cfg: Dict[str, Any]) -> List[str]:
             "--weight-transfer-config", '{"backend": "nccl"}',
             "--logprobs-mode", "processed_logprobs", "--max-logprobs", "-1",
             *v.get("extra_args", [])]
+
+
+def vllm_env(cfg: Dict[str, Any], env: Dict[str, str]) -> Dict[str, str]:
+    """The server's environment.
+
+    FlashInfer's top-k/top-p sampler compiles itself at first use with the
+    system `nvcc` and `ninja`. On this machine `/usr/bin/nvcc` is too old for its
+    flags (`Unknown option '--compress-mode=size'`), so dev evaluation, the first
+    request with top-k on, would crash the server; vLLM's own sampler is used
+    instead. The venv's `bin` goes first on PATH because that is where `ninja`
+    is when anything else does compile.
+    """
+    bin_dir = os.path.dirname(sys.executable)
+    return {**env, "CUDA_VISIBLE_DEVICES": str(cfg["vllm"]["gpu"]),
+            "VLLM_SERVER_DEV_MODE": "1", "VLLM_USE_FLASHINFER_SAMPLER": "0",
+            "PATH": os.pathsep.join([bin_dir, env.get("PATH", "")])}
 
 
 def wait_ready(port: int, proc: subprocess.Popen, timeout_s: float) -> None:
@@ -110,12 +130,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     server = trainer = None
     try:
         cmd = vllm_command(cfg)
-        print("+", shlex.join(cmd), f"> {out / 'vllm.log'}", flush=True)
-        with open(out / "vllm.log", "a") as log:
-            server = subprocess.Popen(
-                cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-                env={**env, "CUDA_VISIBLE_DEVICES": str(cfg["vllm"]["gpu"]),
-                     "VLLM_SERVER_DEV_MODE": "1"})
+        # One log per launch, so a rerun of the same config does not append to
+        # the previous run's server log.
+        log_path = out / f"vllm-{time.strftime('%Y%m%d-%H%M%S')}.log"
+        print("+", shlex.join(cmd), f"> {log_path}", flush=True)
+        with open(log_path, "w") as log:
+            server = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT,
+                                      start_new_session=True, env=vllm_env(cfg, env))
         wait_ready(cfg["vllm"]["port"], server, cfg["vllm"]["ready_timeout_s"])
 
         gpus = str(cfg["trainer_gpus"])
@@ -132,8 +153,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         _stop(trainer)
         _stop(server)
 
+    selection = json.loads((out / SELECTION).read_text())
+    print(f"selected {selection['best_model_checkpoint']}: {selection['metric']} "
+          f"{selection['best_metric']} against the base model's {selection['base_metric']} "
+          f"(improved_over_base={selection['improved_over_base']})", flush=True)
     if not a.no_export:
         _run([py, "-m", "rl.export", str(out)], {**env, "CUDA_VISIBLE_DEVICES": ""})
+        print(f"serve it for the eval harness: vllm serve {out / 'merged'} "
+              f"--served-model-name {rl_config.eval_model(cfg)['model']}", flush=True)
     return 0
 
 

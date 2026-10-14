@@ -14,10 +14,11 @@ model:
   name: Qwen/Qwen3-4B
   revision: 1cfa9a7208912126459214e8b04321603b3df60c
 
+eval_model: hf-qwen3-4b
+
 prompt:
   template: xml_tags
   elicitation: cot
-  enable_thinking: true
 
 data:
   tasks: all
@@ -41,7 +42,9 @@ vllm:
 
 trainer_gpus: "1,2"
 prompts_per_step: 4                                      # smoke
-eval_sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
+# Dev evaluation at a 4k cap instead of the eval config's 32k. Real configs
+# must not set this (tests/rl).
+dev_max_tokens: 4096                                     # smoke
 completions_every: 5                                     # smoke
 
 grpo:
@@ -71,6 +74,8 @@ grpo:
   mask_truncated_completions: true
   importance_sampling_level: token
   vllm_importance_sampling_correction: true
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_clip_max: 2.0
 
   temperature: 1.0
   top_p: 1.0

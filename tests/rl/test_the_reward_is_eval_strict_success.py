@@ -110,6 +110,8 @@ def test_metrics_split_groups_lengths_and_count_truncation_as_failure(rows):
     assert m["arggym_groups/all_correct"] == 1 / 4
     assert m["arggym_groups/all_wrong"] == 1 / 4
     assert m["arggym_groups/no_scored_member"] == 1 / 4
+    # p0 agrees, p1 has one scored member, p3 none: only p2 carries a gradient.
+    assert m["arggym_groups/no_signal"] == 3 / 4
     assert m["arggym_length/correct"] == (10 + 10 + 20) / 3
     assert m["arggym_length/wrong"] == (10 + 40) / 2
     assert m["arggym_success_rate/attack"] == 3 / 8

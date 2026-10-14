@@ -1,9 +1,11 @@
 """A training prompt is the prompt the eval harness sends for the same row.
 
-Three levels, each closer to the wire. The messages: the eval side is the
-harness's own solver, built from the Hydra config the eval lane runs
-(`model=hf-qwen3-4b`, default template and elicitation), and the request body it
-would put on the socket. The token ids, offline: TRL's own prompt tokenizer
+Every rl config names its eval model config (`eval_model`), and every check here
+runs against that config. Three levels, each closer to the wire. The messages:
+the eval side is the harness's own solver, built from the Hydra config the eval
+lane runs (`model=<eval_model>`, default template and elicitation), and the
+request body it would put on the socket. Dev evaluation's sampling comes from
+the same body. The token ids, offline: TRL's own prompt tokenizer
 against the chat template rendered the way vLLM's chat endpoint renders it.
 The token ids, online: vLLM's `/tokenize` on a live server, which runs only when
 `ARGGYM_VLLM_URL` names one (the smoke run sets it).
@@ -23,7 +25,8 @@ from rl import config as rl_config
 from rl import pool
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/smoke.yaml")
+CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/qwen3-4b-nothink.yaml",
+           "rl/configs/smoke.yaml")
 
 
 def sample_rows():
@@ -38,7 +41,7 @@ def sample_rows():
     return out
 
 
-def eval_body(row, model="hf-qwen3-4b"):
+def eval_body(row, model):
     from hydra import compose, initialize_config_dir
 
     from evals.run import build_solver
@@ -53,12 +56,22 @@ def eval_body(row, model="hf-qwen3-4b"):
 def test_the_messages_are_the_eval_request_messages(path):
     cfg = rl_config.load(str(ROOT / path))
     elicit = pool.elicitation(cfg["prompt"]["elicitation"])
+    em = rl_config.eval_model(cfg)
     for row in sample_rows():
-        body = eval_body(row)
+        body = eval_body(row, cfg["eval_model"])
         assert pool.messages(row, cfg["prompt"]["template"], elicit) == body["messages"]
         assert body["model"] == cfg["model"]["name"]
-        assert body["extra_body"]["chat_template_kwargs"] == {
-            "enable_thinking": cfg["prompt"]["enable_thinking"]}
+        assert body["extra_body"]["chat_template_kwargs"] == em["chat_template_kwargs"]
+
+
+@pytest.mark.parametrize("path", CONFIGS)
+def test_dev_evaluation_samples_as_the_eval_request_asks(path):
+    cfg = rl_config.load(str(ROOT / path))
+    body = eval_body(sample_rows()[0], cfg["eval_model"])
+    want = {"temperature": body["temperature"], "top_p": body["top_p"],
+            "top_k": body["extra_body"]["top_k"], "min_p": body["extra_body"]["min_p"],
+            "max_completion_length": cfg.get("dev_max_tokens") or body["max_tokens"]}
+    assert rl_config.dev_sampling(cfg) == want
 
 
 def test_a_training_row_carries_the_row_it_is_scored_against():
@@ -89,13 +102,14 @@ def trl_prompt_ids(tokenizer, messages, chat_template_kwargs):
     return list(ids[0])
 
 
-def test_the_token_ids_are_the_ids_the_eval_server_renders():
-    cfg = rl_config.load(str(ROOT / CONFIGS[0]))
+@pytest.mark.parametrize("path", CONFIGS)
+def test_the_token_ids_are_the_ids_the_eval_server_renders(path):
+    cfg = rl_config.load(str(ROOT / path))
     tok = _tokenizer(cfg)
     elicit = pool.elicitation(cfg["prompt"]["elicitation"])
-    kwargs = {"enable_thinking": cfg["prompt"]["enable_thinking"]}
+    kwargs = rl_config.eval_model(cfg)["chat_template_kwargs"]
     for row in sample_rows():
-        body = eval_body(row)
+        body = eval_body(row, cfg["eval_model"])
         # vLLM's chat endpoint renders the template to text, then tokenizes the
         # text without adding special tokens.
         text = tok.apply_chat_template(body["messages"], tokenize=False,
@@ -108,14 +122,15 @@ def test_the_token_ids_are_the_ids_the_eval_server_renders():
 
 @pytest.mark.skipif(not os.environ.get("ARGGYM_VLLM_URL"),
                     reason="needs a live vLLM server: set ARGGYM_VLLM_URL=http://host:port")
-def test_the_token_ids_are_the_ids_a_live_vllm_server_renders():
+@pytest.mark.parametrize("path", CONFIGS[:2])
+def test_the_token_ids_are_the_ids_a_live_vllm_server_renders(path):
     url = os.environ["ARGGYM_VLLM_URL"].rstrip("/")
-    cfg = rl_config.load(str(ROOT / CONFIGS[0]))
+    cfg = rl_config.load(str(ROOT / path))
     tok = _tokenizer(cfg)
     elicit = pool.elicitation(cfg["prompt"]["elicitation"])
-    kwargs = {"enable_thinking": cfg["prompt"]["enable_thinking"]}
+    kwargs = rl_config.eval_model(cfg)["chat_template_kwargs"]
     for row in sample_rows():
-        body = eval_body(row)
+        body = eval_body(row, cfg["eval_model"])
         req = {"model": body["model"], "messages": body["messages"],
                "add_generation_prompt": True, **body["extra_body"]}
         r = urllib.request.Request(f"{url}/tokenize", data=json.dumps(req).encode(),

@@ -9,7 +9,10 @@ file adds to TRL's trainer is small and listed in `ArgGymGRPOTrainer`.
 Checkpoints are selected on the dev split's strict success,
 `eval_arggym_success_rate`, never on reward. With `load_best_model_at_end` the
 best checkpoint survives `save_total_limit`; `selection.json` names it when the
-run ends, and `rl.export` merges it.
+run ends, beside the base model's step-0 score and whether the checkpoint beats
+it, and `rl.export` merges it. Dev success is a selection signal over a few
+hundred samples, picked as the maximum of many evaluations; quote the selected
+checkpoint's score on the eval taskset, not its dev score.
 """
 from __future__ import annotations
 
@@ -31,6 +34,24 @@ SELECTION = "selection.json"
 
 def output_dir(cfg: Dict[str, Any]) -> Path:
     return pool.ROOT / cfg["output_root"] / "runs" / rl_config.run_name(cfg)
+
+
+def select(state: Any, metric: str) -> Dict[str, Any]:
+    """The selected checkpoint, and whether it beats the base model on the same metric.
+
+    Transformers never compares the step-0 evaluation against the checkpoints,
+    so the first checkpoint saved is "best" against minus infinity even when
+    every checkpoint is worse than the model training started from. The base
+    score is read back from the log history instead.
+    """
+    base = next((e[metric] for e in state.log_history
+                 if e.get("step") == 0 and metric in e), None)
+    best = state.best_metric
+    return {"metric": metric, "best_metric": best,
+            "best_model_checkpoint": state.best_model_checkpoint,
+            "base_metric": base,
+            "improved_over_base": (None if base is None or best is None else best > base),
+            "global_step": state.global_step}
 
 
 def _versions() -> Dict[str, Optional[str]]:
@@ -90,47 +111,63 @@ def _trainer_class():
     from trl import GRPOTrainer
 
     class ArgGymGRPOTrainer(GRPOTrainer):
-        """TRL's trainer plus four things it does not do.
+        """TRL's trainer plus what it does not do.
 
         - Weight sync to vLLM merges the adapter out of place (`merged_params`).
         - The completions table goes to wandb every `completions_every` steps and
-          on every eval, rather than on every logging step.
-        - Dev evaluation samples with `eval_sampling` (the eval harness's model-card
-          values) instead of the training temperature, so dev success is measured
-          the way the eval harness measures it. Eval's IS and loss metrics are
-          meaningless under this swap and should be ignored.
+          on every eval, rather than on every logging step. A training step that
+          is also an eval step logs only the eval table: TRL writes both to
+          `completions_<step>.parquet` and the wandb key `completions`, so the
+          second would overwrite the first.
+        - Dev evaluation is generation and scoring only, under `dev_sampling`:
+          the eval config's temperature, top-p, top-k, min-p and token cap. TRL
+          would also run two trainer forward passes over every eval batch, the
+          importance-sampling one and the loss one; both measure nothing at a
+          sampling temperature the trainer does not divide by, and at a 32k cap
+          they are the largest forward passes of the run. Without them the eval
+          batch size sets only how many sequences vLLM gets at once.
         - The share of importance weights the vLLM correction zeroed and their
-          effective sample size, which TRL does not log. Under `sequence_mask` a
-          long completion whose summed log-prob gap is large loses all its
-          gradient, and nothing else on the dashboard says so.
+          effective sample size, which TRL does not log.
         """
 
-        def __init__(self, *args, completions_every: int, eval_sampling: Dict[str, Any],
+        def __init__(self, *args, completions_every: int, dev_sampling: Dict[str, Any],
                      **kwargs):
             super().__init__(*args, **kwargs)
             self.completions_every = completions_every
-            self.eval_sampling = eval_sampling
+            self.dev_sampling = dev_sampling
             gen = self.vllm_generation
             if not is_peft_model(gen.model) or gen._dist.is_fsdp or gen._dist.is_zero3:
                 raise SystemExit("rl.train syncs LoRA weights under DDP only")
             gen._iter_named_params = types.MethodType(merged_params, gen)
 
         def log(self, logs, start_time=None):
-            training = self.model.training
-            self.log_completions = self.args.log_completions and (
-                not training or self.state.global_step % self.completions_every == 0)
+            step = self.state.global_step
+            if self.model.training:
+                eval_step = self.args.eval_steps and step % self.args.eval_steps == 0
+                self.log_completions = self.args.log_completions and (
+                    step % self.completions_every == 0 and not eval_step)
+            else:
+                self.log_completions = self.args.log_completions
             super().log(logs, start_time)
 
         def evaluate(self, *args, **kwargs):
             gen = self.vllm_generation
-            saved = {k: getattr(gen, k) for k in self.eval_sampling}
-            for k, v in self.eval_sampling.items():
-                setattr(gen, k, v)
+            swap = [(gen, k, v) for k, v in self.dev_sampling.items()]
+            swap.append((self, "vllm_importance_sampling_correction", False))
+            saved = [(obj, k, getattr(obj, k)) for obj, k, _ in swap]
+            for obj, k, v in swap:
+                setattr(obj, k, v)
             try:
                 return super().evaluate(*args, **kwargs)
             finally:
-                for k, v in saved.items():
-                    setattr(gen, k, v)
+                for obj, k, v in saved:
+                    setattr(obj, k, v)
+
+        def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+            import torch
+
+            self._prepare_inputs(inputs)  # generates, scores and logs the metrics
+            return torch.zeros((), device=self.accelerator.device), None, None
 
         def _generate_and_score_completions(self, inputs):
             import torch
@@ -190,11 +227,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"Change the batch fields, or prompts_per_step if the change is meant.")
 
     tokenizer = AutoTokenizer.from_pretrained(m["name"], revision=m["revision"])
+    # TRL decodes completions with `parse_response` when the tokenizer carries a
+    # response template, which moves the think block out of `content` and would
+    # hide an answer left in the reasoning from the reward, while the eval
+    # harness still finds it there.
+    for attr in ("response_template", "response_schema"):
+        if getattr(tokenizer, attr, None) is not None:
+            raise SystemExit(f"the tokenizer sets {attr}; rl.reward reads raw content")
     stop_ids = {tokenizer.eos_token_id, tokenizer.pad_token_id}
     elicit = pool.elicitation(cfg["prompt"]["elicitation"])
     template = cfg["prompt"]["template"]
-    train = Dataset.from_list(pool.trl_rows(pool.load_split(cfg, "train"), template, elicit))
-    dev = Dataset.from_list(pool.trl_rows(pool.load_split(cfg, "dev"), template, elicit))
+    template_kwargs = rl_config.eval_model(cfg)["chat_template_kwargs"]
+    dev_sampling = rl_config.dev_sampling(cfg)
+    train_rows = pool.trl_rows(pool.load_split(cfg, "train"), template, elicit)
+    dev_rows = pool.trl_rows(pool.load_split(cfg, "dev"), template, elicit)
+    texts = [tokenizer.apply_chat_template(r["prompt"], add_generation_prompt=True,
+                                           tokenize=False, **template_kwargs)
+             for r in train_rows + dev_rows]
+    longest = max(len(ids) for ids in tokenizer(texts, add_special_tokens=False)["input_ids"])
+    need = longest + max(g["max_completion_length"], dev_sampling["max_completion_length"])
+    if need > cfg["vllm"]["max_model_len"]:
+        raise SystemExit(f"vllm.max_model_len {cfg['vllm']['max_model_len']} is below the "
+                         f"longest prompt ({longest}) plus the larger completion cap: {need}")
+    train, dev = Dataset.from_list(train_rows), Dataset.from_list(dev_rows)
     n_eval = g.get("num_generations_eval") or g["num_generations"]
     eval_batch = g["per_device_eval_batch_size"] * world
     if len(dev) * n_eval % eval_batch:
@@ -206,7 +261,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = GRPOConfig(
         output_dir=str(out), run_name=name, seed=cfg["seed"], report_to=["wandb"],
         model_init_kwargs={"dtype": torch.bfloat16, "revision": m["revision"]},
-        chat_template_kwargs={"enable_thinking": cfg["prompt"]["enable_thinking"]},
+        chat_template_kwargs=template_kwargs,
         use_vllm=True, vllm_mode="server",
         vllm_server_base_url=f"http://127.0.0.1:{cfg['vllm']['port']}",
         metric_for_best_model="eval_arggym_success_rate", greater_is_better=True,
@@ -220,7 +275,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         model=m["name"], args=args, train_dataset=train, eval_dataset=dev,
         reward_funcs=make_reward(stop_ids, template), processing_class=tokenizer,
         peft_config=lora, completions_every=cfg["completions_every"],
-        eval_sampling=cfg["eval_sampling"])
+        dev_sampling=dev_sampling)
 
     # The optimizer updates the adapter, so the adapter is what must be FP32: a
     # BF16 weight near 1.0 cannot take a step smaller than 2^-7.
@@ -248,10 +303,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     trainer.train()
 
     if trainer.accelerator.is_main_process:
-        selection = {"metric": args.metric_for_best_model,
-                     "best_metric": trainer.state.best_metric,
-                     "best_model_checkpoint": trainer.state.best_model_checkpoint,
-                     "global_step": trainer.state.global_step}
+        selection = select(trainer.state, args.metric_for_best_model)
         (out / SELECTION).write_text(json.dumps(selection, indent=2) + "\n")
         print(json.dumps(selection, indent=2))
         import wandb

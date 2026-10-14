@@ -5,7 +5,10 @@
 
 The merged model is written to `<run>/merged` as plain safetensors that
 `vllm serve <run>/merged` loads with no LoRA flag, so nothing can serve the base
-model while claiming to serve the adapter. The check then reads the files back
+model while claiming to serve the adapter. Serve it with
+`--served-model-name <the eval config's model>` (`Qwen/Qwen3-4B`): vLLM
+otherwise registers the directory path as the name and the eval harness's first
+request is refused. The check then reads the files back
 from disk, the bytes vLLM would load, and compares every tensor against the
 pinned base checkpoint: every tensor the adapter trained must differ from base
 and every other tensor must be identical. Either failure exits non-zero.

@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import copy
 import re
+from pathlib import Path
 from typing import Any, Dict, Sequence
 
 import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class _Loader(yaml.SafeLoader):
@@ -63,9 +66,50 @@ def apply(cfg: Dict[str, Any], overrides: Sequence[str]) -> Dict[str, Any]:
 def run_name(cfg: Dict[str, Any]) -> str:
     """Model, loss, learning rate and seed, which is what tells two curves apart.
 
-    Prefixed with the config's name when that is not the model's (`smoke-...`).
+    Led by the config's name, with the model added when the name lacks it:
+    `qwen3-4b-nothink-dapo-...`, `smoke-qwen3-4b-dapo-...`.
     """
     model = cfg["model"]["name"].split("/")[-1].lower()
     g = cfg["grpo"]
-    name = f"{model}-{g['loss_type']}-lr{g['learning_rate']:g}-s{cfg['seed']}"
-    return name if cfg["name"] == model else f"{cfg['name']}-{name}"
+    head = cfg["name"] if model in cfg["name"] else f"{cfg['name']}-{model}"
+    return f"{head}-{g['loss_type']}-lr{g['learning_rate']:g}-s{cfg['seed']}"
+
+
+#: What an eval model config may set. Any other key would change how the eval
+#: lane samples without dev evaluation following, so it is refused, not ignored.
+_SAMPLING = {"max_tokens", "temperature", "top_p", "seed"}
+_EXTRA_BODY = {"top_k", "min_p", "chat_template_kwargs"}
+
+
+def eval_model(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """The eval lane's model config that `eval_model` names, as training reads it.
+
+    One file decides the chat-template arguments (thinking on or off) of the
+    training prompts and the sampling and token cap of dev evaluation, so a run
+    cannot drift from how the final eval asks the same model.
+    """
+    path = ROOT / "evals/conf/model" / f"{cfg['eval_model']}.yaml"
+    m = yaml.safe_load(path.read_text())
+    if m["model"] != cfg["model"]["name"]:
+        raise SystemExit(f"{path} serves {m['model']!r}; the run trains {cfg['model']['name']!r}")
+    sampling, extra = m.get("sampling") or {}, m.get("extra_body") or {}
+    stray = sorted(set(sampling) - _SAMPLING) + sorted(set(extra) - _EXTRA_BODY)
+    if stray:
+        raise SystemExit(f"{path} sets {stray}, which dev evaluation does not reproduce")
+    return {"name": m["name"], "model": m["model"],
+            "temperature": sampling["temperature"], "top_p": sampling.get("top_p", 1.0),
+            "top_k": extra.get("top_k", 0), "min_p": extra.get("min_p", 0.0),
+            "max_tokens": sampling["max_tokens"],
+            "chat_template_kwargs": dict(extra.get("chat_template_kwargs") or {})}
+
+
+def dev_sampling(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """The `VLLMGeneration` attributes dev evaluation runs under.
+
+    `dev_max_tokens` lowers the cap for the smoke config only; a real run takes
+    the eval config's `max_tokens`.
+    """
+    em = eval_model(cfg)
+    return {"temperature": em["temperature"], "top_p": em["top_p"], "top_k": em["top_k"],
+            "min_p": em["min_p"],
+            "max_completion_length": cfg.get("dev_max_tokens") or em["max_tokens"]}

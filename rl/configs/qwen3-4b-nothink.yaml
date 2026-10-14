@@ -1,0 +1,128 @@
+# Qwen3-4B with thinking off; everything else as qwen3-4b.yaml except where marked.
+#
+#   uv run --group rl python -m rl.launch rl/configs/qwen3-4b-nothink.yaml
+#
+# Every value here is a decision; `key.sub=value` on the command line overrides
+# one (rl/config.py). `grpo:` is passed to TRL's GRPOConfig as written.
+
+name: qwen3-4b-nothink
+seed: 0
+output_root: outputs/rl
+wandb_project: arggym-rl
+
+model:
+  name: Qwen/Qwen3-4B
+  # The revision the eval lane serves, so the trained and the evaluated base are
+  # the same weights. BF16, the published precision.
+  revision: 1cfa9a7208912126459214e8b04321603b3df60c
+
+# The eval lane's model config this run is measured by. Training prompts take
+# its chat-template arguments (thinking on or off); dev evaluation takes its
+# temperature, top-p, top-k, min-p and token cap. Nothing here repeats them.
+eval_model: hf-qwen3-4b-nothink                       # nothink
+
+# The eval harness's composition: the xml_tags template and the cot system
+# prompt, read from evals/conf/ at run time.
+prompt:
+  template: xml_tags
+  elicitation: cot
+
+data:
+  tasks: all
+  # Levels 1-8 first. Higher levels are where the base model mostly fails, and
+  # an all-wrong group carries no gradient; widen once these move.
+  levels: [1, 2, 3, 4, 5, 6, 7, 8]
+  # Seed windows far from the eval specs' 0..39; rl/pool.py refuses an overlap.
+  # 12 tasks x 8 levels x 4 orderings x 25 = 9,600 rows before dropping any an
+  # eval taskset holds: 300 steps of 32 prompts is one pass.
+  train: {seed_start: 1000000, take: 25, scan_limit: 100}
+  # One row per (task, level), orderings rotated: 96 dev prompts.
+  dev: {seed_start: 2000000, take: 1, scan_limit: 40, per_task_level: 1}
+
+lora:
+  r: 32
+  alpha: 32
+  dropout: 0.0
+  target_modules: all-linear
+
+vllm:
+  gpu: 0
+  port: 8000
+  # The eval lane's context: dev evaluation runs at the eval config's
+  # 32,768-token cap, plus an 8,192-token prompt reserve. rl.train refuses to
+  # start if the longest prompt plus the larger cap does not fit.
+  max_model_len: 40960
+  gpu_memory_utilization: 0.9
+  ready_timeout_s: 1800
+  extra_args: []
+
+trainer_gpus: "1,2"
+
+# Checked against the batch fields below and the number of trainer GPUs.
+prompts_per_step: 32
+
+# Completions table to wandb every this many steps, and on every eval.
+completions_every: 10
+
+grpo:
+  learning_rate: 1.0e-5
+  lr_scheduler_type: constant_with_warmup
+  warmup_steps: 10
+  max_steps: 300
+  optim: adamw_torch_fused
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  bf16: true
+  gradient_checkpointing: true
+  disable_dropout: true
+  shuffle_dataset: true
+
+  # 4 completions x 2 GPUs x 32 accumulation = 256 = 32 prompts x 8.
+  # One vLLM generation per optimizer step (steps_per_generation defaults to the
+  # accumulation), so every sample is on-policy up to the sampler/trainer gap.
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 32
+  num_generations: 8
+  num_iterations: 1
+
+  loss_type: dapo
+  beta: 0.0
+  epsilon: 0.2
+  epsilon_high: 0.28
+  scale_rewards: none
+  mask_truncated_completions: true
+  importance_sampling_level: token
+  # Truncated IS per token, capped at 2 as in Olmo 3 and Open Instruct
+  # (practices guide, section 2). TRL's default, one weight per sequence with
+  # the sequence masked above 3, sums a per-token engine gap of about 0.017
+  # (smoke run) over thousands of tokens: at 3.5k tokens the effective sample
+  # size was 0.20-0.46, so at 16k it would train mostly on short completions.
+  vllm_importance_sampling_correction: true
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_clip_max: 2.0
+
+  # Training rollouts at T=1 with no truncation, so the trainer's full-vocabulary
+  # log-probs and vLLM's processed log-probs describe the same distribution.
+  temperature: 1.0
+  top_p: 1.0
+  top_k: 0
+  max_completion_length: 8192                           # nothink: for now
+  vllm_server_timeout: 1800
+
+  # 96 dev rows x 4 samples = 384 = 12 batches of 16 x 2 GPUs. Dev evaluation
+  # runs no trainer forward pass (rl/train.py), so this sets only how many
+  # sequences vLLM decodes at once: 32 per call. Its KV cache holds about 450k
+  # tokens (61.6 GiB on the smoke run), which fits 32 completions averaging
+  # under 14k tokens without preemption.
+  num_generations_eval: 4
+  per_device_eval_batch_size: 16
+  eval_strategy: steps
+  eval_steps: 25
+  eval_on_start: true
+  save_strategy: steps
+  save_steps: 25
+  # The best checkpoint by eval_arggym_success_rate and the latest.
+  save_total_limit: 2
+
+  logging_steps: 1
+  log_completions: true

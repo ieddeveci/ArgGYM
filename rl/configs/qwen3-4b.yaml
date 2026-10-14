@@ -1,4 +1,4 @@
-# First real run: Qwen3-4B, GRPO with the DAPO loss, LoRA, levels 1-8.
+# First real run: Qwen3-4B, GRPO with the DAPO loss, LoRA, levels 1-8, thinking on.
 #
 #   uv run --group rl python -m rl.launch rl/configs/qwen3-4b.yaml
 #
@@ -16,12 +16,16 @@ model:
   # the same weights. BF16, the published precision.
   revision: 1cfa9a7208912126459214e8b04321603b3df60c
 
+# The eval lane's model config this run is measured by. Training prompts take
+# its chat-template arguments (thinking on or off); dev evaluation takes its
+# temperature, top-p, top-k, min-p and token cap. Nothing here repeats them.
+eval_model: hf-qwen3-4b
+
 # The eval harness's composition: the xml_tags template and the cot system
-# prompt, read from evals/conf/ at run time. Thinking on, the Qwen3 default.
+# prompt, read from evals/conf/ at run time.
 prompt:
   template: xml_tags
   elicitation: cot
-  enable_thinking: true
 
 data:
   tasks: all
@@ -44,8 +48,10 @@ lora:
 vllm:
   gpu: 0
   port: 8000
-  # Longest prompt at levels 1-8 plus the completion cap, with room to spare.
-  max_model_len: 20480
+  # The eval lane's context: dev evaluation runs at the eval config's
+  # 32,768-token cap, plus an 8,192-token prompt reserve. rl.train refuses to
+  # start if the longest prompt plus the larger cap does not fit.
+  max_model_len: 40960
   gpu_memory_utilization: 0.9
   ready_timeout_s: 1800
   extra_args: []
@@ -54,10 +60,6 @@ trainer_gpus: "1,2"
 
 # Checked against the batch fields below and the number of trainer GPUs.
 prompts_per_step: 32
-
-# Dev evaluation samples as the eval harness does (the model card's values,
-# evals/conf/model/hf-qwen3-4b.yaml), not at the training temperature.
-eval_sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
 
 # Completions table to wandb every this many steps, and on every eval.
 completions_every: 10
@@ -90,7 +92,14 @@ grpo:
   scale_rewards: none
   mask_truncated_completions: true
   importance_sampling_level: token
+  # Truncated IS per token, capped at 2 as in Olmo 3 and Open Instruct
+  # (practices guide, section 2). TRL's default, one weight per sequence with
+  # the sequence masked above 3, sums a per-token engine gap of about 0.017
+  # (smoke run) over thousands of tokens: at 3.5k tokens the effective sample
+  # size was 0.20-0.46, so at 16k it would train mostly on short completions.
   vllm_importance_sampling_correction: true
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_clip_max: 2.0
 
   # Training rollouts at T=1 with no truncation, so the trainer's full-vocabulary
   # log-probs and vLLM's processed log-probs describe the same distribution.
@@ -100,9 +109,13 @@ grpo:
   max_completion_length: 16384
   vllm_server_timeout: 1800
 
-  # 96 dev rows x 4 samples = 384 = 3 batches of 64 x 2 GPUs.
+  # 96 dev rows x 4 samples = 384 = 12 batches of 16 x 2 GPUs. Dev evaluation
+  # runs no trainer forward pass (rl/train.py), so this sets only how many
+  # sequences vLLM decodes at once: 32 per call. Its KV cache holds about 450k
+  # tokens (61.6 GiB on the smoke run), which fits 32 completions averaging
+  # under 14k tokens without preemption.
   num_generations_eval: 4
-  per_device_eval_batch_size: 64
+  per_device_eval_batch_size: 16
   eval_strategy: steps
   eval_steps: 25
   eval_on_start: true

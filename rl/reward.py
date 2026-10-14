@@ -142,6 +142,11 @@ def batch_metrics(records: Sequence[Dict[str, Any]]) -> Dict[str, float]:
         out["arggym_groups/all_wrong"] = sum(not any(r["success"] for r in g)
                                              for g in scored) / len(groups)
     out["arggym_groups/no_scored_member"] = (len(groups) - len(scored)) / len(groups)
+    # Every group whose advantages are all zero: no scored member, one, or
+    # members that all agree. TRL's `frac_reward_zero_std` misses the one-member
+    # case, whose std is NaN rather than zero, so read this one instead.
+    alive = sum(len(g) > 1 and len({bool(r["success"]) for r in g}) > 1 for g in scored)
+    out["arggym_groups/no_signal"] = 1 - alive / len(groups)
     return out
 
 
