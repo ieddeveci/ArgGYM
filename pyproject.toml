@@ -50,6 +50,12 @@ dev = [
     # that skips in the default suite catches nothing.
     "matplotlib>=3.8",
 ]
+# GRPO training under `rl/`. Opt-in (`uv sync --group rl`) and never part of
+# the wheel: torch and vLLM are gigabytes an adopter scoring answers never needs.
+rl = [
+    "trl[vllm,peft]==1.15.0",
+    "wandb",
+]
 
 [project.scripts]
 arggym = "arggym.cli:main"
@@ -95,3 +101,6 @@ ignore = [
     # worth doing, but not inside a change that also moves every scorer.
     "E741",
 ]
+
+[tool.uv.dependency-groups]
+rl = {requires-python = ">=3.11"}

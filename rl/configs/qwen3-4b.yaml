@@ -1,0 +1,115 @@
+# First real run: Qwen3-4B, GRPO with the DAPO loss, LoRA, levels 1-8.
+#
+#   uv run --group rl python -m rl.launch rl/configs/qwen3-4b.yaml
+#
+# Every value here is a decision; `key.sub=value` on the command line overrides
+# one (rl/config.py). `grpo:` is passed to TRL's GRPOConfig as written.
+
+name: qwen3-4b
+seed: 0
+output_root: outputs/rl
+wandb_project: arggym-rl
+
+model:
+  name: Qwen/Qwen3-4B
+  # The revision the eval lane serves, so the trained and the evaluated base are
+  # the same weights. BF16, the published precision.
+  revision: 1cfa9a7208912126459214e8b04321603b3df60c
+
+# The eval harness's composition: the xml_tags template and the cot system
+# prompt, read from evals/conf/ at run time. Thinking on, the Qwen3 default.
+prompt:
+  template: xml_tags
+  elicitation: cot
+  enable_thinking: true
+
+data:
+  tasks: all
+  # Levels 1-8 first. Higher levels are where the base model mostly fails, and
+  # an all-wrong group carries no gradient; widen once these move.
+  levels: [1, 2, 3, 4, 5, 6, 7, 8]
+  # Seed windows far from the eval specs' 0..39; rl/pool.py refuses an overlap.
+  # 12 tasks x 8 levels x 4 orderings x 25 = 9,600 rows before dropping any an
+  # eval taskset holds: 300 steps of 32 prompts is one pass.
+  train: {seed_start: 1000000, take: 25, scan_limit: 100}
+  # One row per (task, level), orderings rotated: 96 dev prompts.
+  dev: {seed_start: 2000000, take: 1, scan_limit: 40, per_task_level: 1}
+
+lora:
+  r: 32
+  alpha: 32
+  dropout: 0.0
+  target_modules: all-linear
+
+vllm:
+  gpu: 0
+  port: 8000
+  # Longest prompt at levels 1-8 plus the completion cap, with room to spare.
+  max_model_len: 20480
+  gpu_memory_utilization: 0.9
+  ready_timeout_s: 1800
+  extra_args: []
+
+trainer_gpus: "1,2"
+
+# Checked against the batch fields below and the number of trainer GPUs.
+prompts_per_step: 32
+
+# Dev evaluation samples as the eval harness does (the model card's values,
+# evals/conf/model/hf-qwen3-4b.yaml), not at the training temperature.
+eval_sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
+
+# Completions table to wandb every this many steps, and on every eval.
+completions_every: 10
+
+grpo:
+  learning_rate: 1.0e-5
+  lr_scheduler_type: constant_with_warmup
+  warmup_steps: 10
+  max_steps: 300
+  optim: adamw_torch_fused
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  bf16: true
+  gradient_checkpointing: true
+  disable_dropout: true
+  shuffle_dataset: true
+
+  # 4 completions x 2 GPUs x 32 accumulation = 256 = 32 prompts x 8.
+  # One vLLM generation per optimizer step (steps_per_generation defaults to the
+  # accumulation), so every sample is on-policy up to the sampler/trainer gap.
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 32
+  num_generations: 8
+  num_iterations: 1
+
+  loss_type: dapo
+  beta: 0.0
+  epsilon: 0.2
+  epsilon_high: 0.28
+  scale_rewards: none
+  mask_truncated_completions: true
+  importance_sampling_level: token
+  vllm_importance_sampling_correction: true
+
+  # Training rollouts at T=1 with no truncation, so the trainer's full-vocabulary
+  # log-probs and vLLM's processed log-probs describe the same distribution.
+  temperature: 1.0
+  top_p: 1.0
+  top_k: 0
+  max_completion_length: 16384
+  vllm_server_timeout: 1800
+
+  # 96 dev rows x 4 samples = 384 = 3 batches of 64 x 2 GPUs.
+  num_generations_eval: 4
+  per_device_eval_batch_size: 64
+  eval_strategy: steps
+  eval_steps: 25
+  eval_on_start: true
+  save_strategy: steps
+  save_steps: 25
+  # The best checkpoint by eval_arggym_success_rate and the latest.
+  save_total_limit: 2
+
+  logging_steps: 1
+  log_completions: true

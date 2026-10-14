@@ -1,0 +1,92 @@
+# End-to-end check of the pipeline: the real model and every moving part, tiny
+# batches and a short cap. It proves the plumbing, not learning.
+#
+#   uv run --group rl python -m rl.launch rl/configs/smoke.yaml
+#
+# Differs from qwen3-4b.yaml only where marked.
+
+name: smoke
+seed: 0
+output_root: outputs/rl
+wandb_project: arggym-rl
+
+model:
+  name: Qwen/Qwen3-4B
+  revision: 1cfa9a7208912126459214e8b04321603b3df60c
+
+prompt:
+  template: xml_tags
+  elicitation: cot
+  enable_thinking: true
+
+data:
+  tasks: all
+  levels: [1, 2]                                         # smoke
+  train: {seed_start: 1000000, take: 2, scan_limit: 40}  # smoke: 192 rows
+  dev: {seed_start: 2000000, take: 1, scan_limit: 40, per_task_level: 1}
+
+lora:
+  r: 32
+  alpha: 32
+  dropout: 0.0
+  target_modules: all-linear
+
+vllm:
+  gpu: 0
+  port: 8000
+  max_model_len: 8192                                    # smoke
+  gpu_memory_utilization: 0.9
+  ready_timeout_s: 1800
+  extra_args: []
+
+trainer_gpus: "1,2"
+prompts_per_step: 4                                      # smoke
+eval_sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
+completions_every: 5                                     # smoke
+
+grpo:
+  learning_rate: 1.0e-5
+  lr_scheduler_type: constant_with_warmup
+  warmup_steps: 2                                        # smoke
+  max_steps: 20                                          # smoke
+  optim: adamw_torch_fused
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  bf16: true
+  gradient_checkpointing: true
+  disable_dropout: true
+  shuffle_dataset: true
+
+  # 4 x 2 GPUs x 4 = 32 = 4 prompts x 8.
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4                         # smoke
+  num_generations: 8
+  num_iterations: 1
+
+  loss_type: dapo
+  beta: 0.0
+  epsilon: 0.2
+  epsilon_high: 0.28
+  scale_rewards: none
+  mask_truncated_completions: true
+  importance_sampling_level: token
+  vllm_importance_sampling_correction: true
+
+  temperature: 1.0
+  top_p: 1.0
+  top_k: 0
+  max_completion_length: 4096                            # smoke
+  vllm_server_timeout: 1800
+
+  # 24 dev rows x 2 samples = 48 = 2 batches of 12 x 2 GPUs.
+  num_generations_eval: 2                                # smoke
+  per_device_eval_batch_size: 12                         # smoke
+  eval_strategy: steps
+  eval_steps: 10                                         # smoke
+  eval_on_start: true
+  save_strategy: steps
+  save_steps: 10                                         # smoke
+  save_total_limit: 2
+
+  logging_steps: 1
+  log_completions: true
