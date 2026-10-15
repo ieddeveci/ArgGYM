@@ -30,6 +30,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from evals.score import score_one
 
 THINK_END = "</think>"
+#: Level bands with their own success rate in the logs.
+LEVEL_BANDS = ((1, 4), (5, 8), (9, 12), (13, 15))
 
 
 def split_reasoning(text: str) -> Dict[str, str]:
@@ -90,13 +92,17 @@ def make_reward(stop_ids: Sequence[int], template: str = "xml_tags",
             log_extra("partial_score", [r["score"] for r in records])
             log_extra("reason", [str(r["reason"])[:200] for r in records])
             log_extra("truncated", [r["truncated"] for r in records])
+        slim = [{k: r[k] for k in ("id", "task", "level", "success", "score", "truncated",
+                                   "length", "no_answer_region")} for r in records]
+        # The whole batch, every rank's share, in the same order on every rank:
+        # what the curriculum learns from (`rl.curriculum.group_outcomes`).
+        arggym_success.last_batch = gather(slim)
         if log_metric is not None:
-            slim = [{k: r[k] for k in ("id", "task", "success", "score", "truncated",
-                                       "length", "no_answer_region")} for r in records]
-            for name, value in batch_metrics(gather(slim)).items():
+            for name, value in batch_metrics(arggym_success.last_batch).items():
                 log_metric(name, value)
         return rewards
 
+    arggym_success.last_batch = []
     return arggym_success
 
 
@@ -128,6 +134,13 @@ def batch_metrics(records: Sequence[Dict[str, Any]]) -> Dict[str, float]:
         by_task[r["task"]].append(bool(r["success"]))
     for task, s in sorted(by_task.items()):
         out[f"arggym_success_rate/{task}"] = sum(s) / len(s)
+    # Level bands, so a run that widens its levels stays comparable on the old
+    # ones. Over dev evaluation this is a mean of per-batch means, exact only
+    # when every batch holds the band equally; the overall rate is exact.
+    for lo, hi in LEVEL_BANDS:
+        band = [bool(r["success"]) for r in ok if lo <= r.get("level", 0) <= hi]
+        if band:
+            out[f"arggym_success_rate/levels_{lo}-{hi}"] = sum(band) / len(band)
     groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for r in records:
         groups[r["id"]].append(r)

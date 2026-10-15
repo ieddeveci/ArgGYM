@@ -14,8 +14,9 @@ from rl import config as rl_config
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/qwen3-4b-nothink.yaml",
-           "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b.yaml")
-REAL = (CONFIGS[0], CONFIGS[1], CONFIGS[3])
+           "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b.yaml",
+           "rl/configs/qwen3.5-4b-curriculum.yaml")
+REAL = (CONFIGS[0], CONFIGS[1], CONFIGS[3], CONFIGS[4])
 #: The longest prompt in data/taskset.jsonl: 4,066 tokens with the Qwen3
 #: tokenizer, 5,336 with Qwen3.5's (their eval configs). rl.train measures the
 #: real number at start-up and refuses a context that does not fit.
@@ -130,7 +131,8 @@ def test_the_run_name_encodes_model_loss_lr_and_seed():
     assert names == {CONFIGS[0]: "qwen3-4b-dapo-lr1e-05-s7",
                      CONFIGS[1]: "qwen3-4b-nothink-dapo-lr1e-05-s7",
                      CONFIGS[2]: "smoke-qwen3-4b-dapo-lr1e-05-s7",
-                     CONFIGS[3]: "qwen3.5-4b-dapo-lr1e-05-s7"}
+                     CONFIGS[3]: "qwen3.5-4b-dapo-lr1e-05-s7",
+                     CONFIGS[4]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7"}
 
 
 def test_an_eval_model_the_run_cannot_follow_is_refused(tmp_path, monkeypatch):
@@ -146,3 +148,16 @@ def test_an_eval_model_the_run_cannot_follow_is_refused(tmp_path, monkeypatch):
     (conf / "hf-qwen3-4b.yaml").write_text(yaml.safe_dump({**base, "model": "Qwen/Qwen3-8B"}))
     with pytest.raises(SystemExit, match="Qwen3-8B"):
         rl_config.eval_model(cfg)
+
+
+def test_the_curriculum_config_differs_from_qwen35_only_where_it_says():
+    base = rl_config.load(str(ROOT / "rl/configs/qwen3.5-4b.yaml"))
+    cur = rl_config.load(str(ROOT / "rl/configs/qwen3.5-4b-curriculum.yaml"))
+    assert cur["data"]["levels"] == list(range(1, 9)) and cur["data"]["tasks"] == "all"
+    assert cur["grpo"]["num_generations_eval"] == 2
+    assert cur["curriculum"] == {"prior": "results/hf-qwen3.5-4b__xml_tags__cot/metrics.json",
+                                 "half_life": 10, "floor": 0.01, "table_every": 5}
+    for c in (base, cur):
+        del c["name"], c["data"]["levels"], c["grpo"]["num_generations_eval"]
+    del cur["curriculum"]
+    assert base == cur

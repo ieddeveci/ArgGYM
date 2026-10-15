@@ -115,6 +115,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("config")
     p.add_argument("overrides", nargs="*")
     p.add_argument("--no-export", action="store_true")
+    p.add_argument("--resume", default=None, help="a checkpoint of this run to continue from")
     a = p.parse_args(argv)
     cfg = rl_config.load(a.config, a.overrides)
     out = output_dir(cfg)
@@ -143,7 +144,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cmd = [py, "-m", "accelerate.commands.launch",
                "--num_processes", str(len(gpus.split(","))), "--num_machines", "1",
                "--mixed_precision", "bf16", "--dynamo_backend", "no",
-               "-m", "rl.train", a.config, *a.overrides]
+               "-m", "rl.train", a.config, *a.overrides,
+               *(["--resume", a.resume] if a.resume else [])]
         print("+", shlex.join(cmd), flush=True)
         trainer = subprocess.Popen(cmd, start_new_session=True,
                                    env={**env, "CUDA_VISIBLE_DEVICES": gpus})

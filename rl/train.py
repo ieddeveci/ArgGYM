@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional, Sequence
 
 from rl import config as rl_config
 from rl import pool
+from rl.curriculum import Curriculum, base_pass_counts, group_outcomes, summary
 from rl.export import SELECTION, checkpoint_keys
 from rl.reward import make_reward
 
@@ -199,6 +200,36 @@ def merged_params(gen):
             yield ckpt, tensor
 
 
+def build_curriculum(cfg: Dict[str, Any], train_rows: Sequence[Dict[str, Any]]) -> Curriculum:
+    """The sampler `curriculum:` describes, over the training rows' (task, level) cells."""
+    c, g = cfg["curriculum"], cfg["grpo"]
+    if g.get("num_iterations", 1) != 1 or g.get("steps_per_generation") or g.get(
+            "generation_batch_size"):
+        raise SystemExit("the curriculum draws one block per optimizer step; it needs "
+                         "num_iterations 1 and the default steps_per_generation")
+    cells: Dict[Any, list] = {}
+    for i, r in enumerate(train_rows):
+        cells.setdefault((r["task"], r["level"]), []).append(i)
+    return Curriculum(cells, base_pass_counts(str(pool.ROOT / c["prior"])),
+                      prompts_per_step=cfg["prompts_per_step"],
+                      num_generations=g["num_generations"],
+                      steps_per_generation=g["gradient_accumulation_steps"], seed=cfg["seed"],
+                      half_life=c["half_life"], floor=c["floor"])
+
+
+def _save_curriculum(curriculum: Curriculum):
+    """A callback that saves the curriculum's state into every checkpoint."""
+    from transformers import TrainerCallback
+
+    class SaveCurriculum(TrainerCallback):
+        def on_save(self, args, state, control, **kwargs):
+            if state.is_world_process_zero:
+                ckpt = Path(args.output_dir) / f"checkpoint-{state.global_step}"
+                curriculum.save(ckpt, state.global_step)
+
+    return SaveCurriculum()
+
+
 def _trainer_class():
     import types
 
@@ -224,10 +255,17 @@ def _trainer_class():
           batch size sets only how many sequences vLLM gets at once.
         - The share of importance weights the vLLM correction zeroed and their
           effective sample size, which TRL does not log.
+        - With `curriculum`, training prompts come from `rl.curriculum`, which
+          learns from every step's gathered rewards and is logged every step.
         """
 
         def __init__(self, *args, completions_every: int, dev_sampling: Dict[str, Any],
-                     checkpoint_keys: set, guard: FallbackGuard, **kwargs):
+                     checkpoint_keys: set, guard: FallbackGuard,
+                     curriculum: Optional[Curriculum] = None, curriculum_log: Any = None,
+                     table_every: int = 5, **kwargs):
+            self.curriculum = curriculum
+            self.curriculum_log = curriculum_log
+            self.table_every = table_every
             super().__init__(*args, **kwargs)
             self.completions_every = completions_every
             self.dev_sampling = dev_sampling
@@ -251,9 +289,36 @@ def _trainer_class():
                 eval_step = self.args.eval_steps and step % self.args.eval_steps == 0
                 self.log_completions = self.args.log_completions and (
                     step % self.completions_every == 0 and not eval_step)
+                if self.curriculum is not None:
+                    logs.update(self._log_curriculum(step))
             else:
                 self.log_completions = self.args.log_completions
             super().log(logs, start_time)
+
+        def _log_curriculum(self, step: int) -> Dict[str, float]:
+            """The step's draw and outcomes; every `table_every` steps, every cell's estimate."""
+            draw = self.curriculum.draws.get(step - 1)
+            if not self.accelerator.is_main_process or draw is None:
+                return summary(draw)
+            import wandb
+
+            with open(self.curriculum_log, "a") as f:
+                f.write(json.dumps({"step": step, **draw}) + "\n")
+            if wandb.run is not None:
+                cols = ["step", "task", "level", "pass_rate", "signal"]
+                tables = {"curriculum/drawn": wandb.Table(
+                    columns=cols, data=[[step] + [c[k] for k in cols[1:]] for c in draw["cells"]])}
+                if step % self.table_every == 0 or step == 1:
+                    rows = self.curriculum.table()
+                    tables["curriculum/cells"] = wandb.Table(
+                        columns=list(rows[0]), data=[list(r.values()) for r in rows])
+                wandb.log(tables, commit=False)
+            return summary(draw)
+
+        def _get_train_sampler(self, dataset=None):
+            if self.curriculum is not None:
+                return self.curriculum
+            return super()._get_train_sampler(dataset)
 
         def evaluate(self, *args, **kwargs):
             with dev_sampling_swap(self, self.vllm_generation, self.dev_sampling):
@@ -269,6 +334,9 @@ def _trainer_class():
             import torch
 
             out = super()._generate_and_score_completions(inputs)
+            if self.curriculum is not None and self.model.training:
+                # Every rank, the same gathered batch, once per optimizer step.
+                self.curriculum.update(group_outcomes(self.reward_funcs[0].last_batch))
             ratio = out.get("importance_sampling_ratio")
             if ratio is None:
                 return out
@@ -294,6 +362,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("config")
     p.add_argument("overrides", nargs="*")
+    p.add_argument("--resume", default=None,
+                   help="a checkpoint directory of this run to continue from")
     a = p.parse_args(argv)
     cfg = rl_config.load(a.config, a.overrides)
 
@@ -372,6 +442,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         vllm_server_base_url=f"http://127.0.0.1:{cfg['vllm']['port']}",
         metric_for_best_model="eval_arggym_success_rate", greater_is_better=True,
         load_best_model_at_end=True, remove_unused_columns=False,
+        # On resume Transformers would replay the consumed batches to skip them,
+        # which would advance the curriculum; its state is restored instead.
+        ignore_data_skip=bool(cfg.get("curriculum")),
         **g)
     lora = LoraConfig(r=cfg["lora"]["r"], lora_alpha=cfg["lora"]["alpha"],
                       lora_dropout=cfg["lora"]["dropout"], bias="none",
@@ -382,12 +455,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # tensor names differ from the checkpoint's; `merged_params` maps them.
     model = AutoModelForCausalLM.from_pretrained(m["name"], revision=m["revision"],
                                                  dtype=torch.bfloat16)
+    curriculum = build_curriculum(cfg, train_rows) if cfg.get("curriculum") else None
+    if curriculum is not None and a.resume:
+        curriculum.load(Path(a.resume))
     trainer = _trainer_class()(
         model=model, args=args, train_dataset=train, eval_dataset=dev,
         reward_funcs=make_reward(stop_ids, template), processing_class=tokenizer,
         peft_config=lora, completions_every=cfg["completions_every"],
         dev_sampling=dev_sampling, checkpoint_keys=checkpoint_keys(m["name"], m["revision"]),
-        guard=guard)
+        guard=guard, curriculum=curriculum, curriculum_log=out / "curriculum.jsonl",
+        table_every=(cfg.get("curriculum") or {}).get("table_every", 5))
+    if curriculum is not None:
+        trainer.add_callback(_save_curriculum(curriculum))
 
     # The optimizer updates the adapter, so the adapter is what must be FP32: a
     # BF16 weight near 1.0 cannot take a step smaller than 2^-7.
@@ -413,7 +492,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         wandb.init(project=cfg["wandb_project"], name=name, config={"arggym": manifest})
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=a.resume)
 
     if trainer.accelerator.is_main_process:
         selection = select(trainer.state, args.metric_for_best_model)
