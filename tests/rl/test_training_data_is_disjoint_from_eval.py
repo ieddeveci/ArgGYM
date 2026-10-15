@@ -54,8 +54,9 @@ def test_an_overlapping_window_is_refused_before_building():
 def _check(cfg, eval_keys):
     train, dev = pool.load_split(cfg, "train"), pool.load_split(cfg, "dev")
     eval_seeds = range(0, 40)
+    tasks = arggym.task_names() if cfg["data"]["tasks"] == "all" else cfg["data"]["tasks"]
     for split in (train, dev):
-        assert {r["task"] for r in split} == set(arggym.task_names())
+        assert {r["task"] for r in split} == set(tasks)
         assert {r["metadata"]["level"] for r in split} == set(cfg["data"]["levels"])
         assert not {r["metadata"]["seed"] for r in split} & set(eval_seeds)
         q, t = pool.keys(split)
