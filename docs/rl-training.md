@@ -4,7 +4,9 @@
 server for rollouts. It is outside the `arggym` package and its dependencies are
 an opt-in group, so `pip install arggym` is unchanged. The practices behind the
 choices below are in [rl-best-practices.html](rl-best-practices.html) (the
-guide); this page is how to run the code and what it decides.
+guide); this page is how to run the code and what it decides. Why this is new
+code rather than the `experiments-phase` branch is in
+[rl-prior-branch.md](rl-prior-branch.md).
 
 ```
 uv sync --group rl
