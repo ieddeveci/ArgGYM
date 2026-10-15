@@ -35,7 +35,7 @@ data:
   levels: [1, 2, 3, 4]
   # Seed windows far from the eval specs' 0..39; rl/pool.py refuses an overlap.
   # 12 tasks x 4 levels x 4 orderings x 25 = 4,800 rows before dropping any an
-  # eval taskset holds: 150 steps of 16 prompts is half a pass.
+  # eval taskset holds: 120 steps of 8 prompts is a fifth of a pass.
   train: {seed_start: 1000000, take: 25, scan_limit: 100}
   # Two rows per (task, level), orderings rotated: 96 dev prompts.
   dev: {seed_start: 2000000, take: 1, scan_limit: 40, per_task_level: 2}
@@ -60,7 +60,7 @@ vllm:
 trainer_gpus: "1,2"
 
 # Checked against the batch fields below and the number of trainer GPUs.
-prompts_per_step: 16
+prompts_per_step: 8
 
 # Completions table to wandb every this many steps, and on every eval.
 completions_every: 10
@@ -69,7 +69,7 @@ grpo:
   learning_rate: 1.0e-5
   lr_scheduler_type: constant_with_warmup
   warmup_steps: 10
-  max_steps: 150
+  max_steps: 120
   optim: adamw_torch_fused
   weight_decay: 0.0
   max_grad_norm: 1.0
@@ -78,11 +78,13 @@ grpo:
   disable_dropout: true
   shuffle_dataset: true
 
-  # 4 completions x 2 GPUs x 32 accumulation = 256 = 16 prompts x 16.
+  # 4 completions x 2 GPUs x 16 accumulation = 128 = 8 prompts x 16.
+  # Generation is the bottleneck: at 256 completions of ~5k tokens a step took
+  # 37 min, 28 of them in vLLM with its KV cache full.
   # One vLLM generation per optimizer step (steps_per_generation defaults to the
   # accumulation), so every sample is on-policy up to the sampler/trainer gap.
   per_device_train_batch_size: 4
-  gradient_accumulation_steps: 32
+  gradient_accumulation_steps: 16
   num_generations: 16
   num_iterations: 1
 
@@ -110,18 +112,18 @@ grpo:
   max_completion_length: 16384
   vllm_server_timeout: 1800
 
-  # 96 dev rows x 4 samples = 384 = 12 batches of 16 x 2 GPUs. Dev evaluation
+  # 96 dev rows x 4 samples = 384 = 3 batches of 64 x 2 GPUs. Dev evaluation
   # runs no trainer forward pass (rl/train.py), so this sets only how many
-  # sequences vLLM decodes at once: 32 per call. Its KV cache holds about 450k
-  # tokens (61.6 GiB on the smoke run), which fits 32 completions averaging
-  # under 14k tokens without preemption.
+  # sequences vLLM decodes at once: 128 per call, which keeps vLLM's ~400k-token
+  # KV cache busy at the ~5k-token mean dev length. At 32 per call a dev eval
+  # took 27 min.
   num_generations_eval: 4
-  per_device_eval_batch_size: 16
+  per_device_eval_batch_size: 64
   eval_strategy: steps
-  eval_steps: 25
+  eval_steps: 20
   eval_on_start: true
   save_strategy: steps
-  save_steps: 25
+  save_steps: 20
   # The best checkpoint by eval_arggym_success_rate and the latest.
   save_total_limit: 2
 
