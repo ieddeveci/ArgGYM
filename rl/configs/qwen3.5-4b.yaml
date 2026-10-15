@@ -105,14 +105,15 @@ grpo:
   vllm_importance_sampling_mode: token_truncate
   vllm_importance_sampling_clip_max: 2.0
 
-  # Training rollouts at T=1 with no truncation and no penalty, so the trainer's
-  # full-vocabulary log-probs and vLLM's processed log-probs describe the same
-  # distribution. 40,960 covers 88% of this model's completions at levels 1-4
-  # in the stored eval; the rest are truncated, masked and left out of the
-  # baseline.
+  # Training rollouts take the card's top_p and top_k, without the presence
+  # penalty. At top_p 1 and top_k off, 42-52% of smoke rollouts ran into the
+  # 40,960 cap, against 2-8% for dev sampling with the card's settings. The
+  # trainer scores tokens over the full vocabulary, so it puts a little less
+  # mass on each sampled token than vLLM's processed log-probs; the truncated
+  # importance weights below absorb that gap.
   temperature: 1.0
-  top_p: 1.0
-  top_k: 0
+  top_p: 0.95
+  top_k: 20
   max_completion_length: 40960
   vllm_server_timeout: 3600
   # Rank 1 waits in a collective while rank 0 waits on vLLM. The default 30

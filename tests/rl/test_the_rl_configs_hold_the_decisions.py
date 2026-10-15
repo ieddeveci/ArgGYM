@@ -33,7 +33,7 @@ def test_the_qwen35_config_holds_the_decisions():
     assert (cfg["prompts_per_step"], g["num_generations"]) == (8, 8)
     assert (g["per_device_train_batch_size"], g["gradient_accumulation_steps"]) == (1, 32)
     assert g["max_completion_length"] == 40960 and g["gradient_checkpointing"]
-    assert (g["temperature"], g["top_p"], g["top_k"]) == (1.0, 1.0, 0)
+    assert (g["temperature"], g["top_p"], g["top_k"]) == (1.0, 0.95, 20)
     assert "generation_kwargs" not in g and "repetition_penalty" not in g
     assert (g["learning_rate"], g["lr_scheduler_type"]) == (1e-5, "constant_with_warmup")
     assert (g["loss_type"], g["beta"], g["epsilon"], g["epsilon_high"]) == ("dapo", 0.0, 0.2, 0.28)
