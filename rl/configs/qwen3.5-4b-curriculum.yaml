@@ -24,7 +24,8 @@ model:
 
 # Training prompts take its chat-template arguments (thinking on); dev
 # evaluation takes all of its sampling, presence_penalty 1.5 and the 65,536 cap
-# included. Training rollouts never get the penalty (rl/train.py).
+# included; training rollouts take the same presence penalty (generation_kwargs
+# below).
 eval_model: hf-qwen3.5-4b
 
 prompt:
@@ -108,15 +109,16 @@ grpo:
   vllm_importance_sampling_mode: token_truncate
   vllm_importance_sampling_clip_max: 2.0
 
-  # Training rollouts take the card's top_p and top_k, without the presence
-  # penalty. At top_p 1 and top_k off, 42-52% of smoke rollouts ran into the
-  # 40,960 cap, against 2-8% for dev sampling with the card's settings. The
-  # trainer scores tokens over the full vocabulary, so it puts a little less
-  # mass on each sampled token than vLLM's processed log-probs; the truncated
-  # importance weights below absorb that gap.
+  # Training rollouts sample with the card's settings, presence_penalty 1.5
+  # included, so training samples the policy the eval measures. Without the
+  # penalty, 42-58% of smoke rollouts looped into the 40,960 cap, against 12%
+  # past 40k in the base eval at levels 1-4. The trainer scores the
+  # unpenalised full-vocabulary distribution; the truncated importance weights
+  # above correct for the gap (rl/train.py, check_penalties).
   temperature: 1.0
   top_p: 0.95
   top_k: 20
+  generation_kwargs: {presence_penalty: 1.5}
   max_completion_length: 40960
   vllm_server_timeout: 3600
   # Rank 1 waits in a collective while rank 0 waits on vLLM. The default 30

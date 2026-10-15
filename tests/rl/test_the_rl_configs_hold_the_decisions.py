@@ -155,9 +155,10 @@ def test_the_curriculum_config_differs_from_qwen35_only_where_it_says():
     cur = rl_config.load(str(ROOT / "rl/configs/qwen3.5-4b-curriculum.yaml"))
     assert cur["data"]["levels"] == list(range(1, 9)) and cur["data"]["tasks"] == "all"
     assert cur["grpo"]["num_generations_eval"] == 2
+    assert cur["grpo"]["generation_kwargs"] == {"presence_penalty": 1.5}
     assert cur["curriculum"] == {"prior": "results/hf-qwen3.5-4b__xml_tags__cot/metrics.json",
                                  "half_life": 10, "floor": 0.01, "table_every": 5}
     for c in (base, cur):
         del c["name"], c["data"]["levels"], c["grpo"]["num_generations_eval"]
-    del cur["curriculum"]
+    del cur["curriculum"], cur["grpo"]["generation_kwargs"]
     assert base == cur

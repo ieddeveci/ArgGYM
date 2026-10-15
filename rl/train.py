@@ -64,10 +64,9 @@ class FallbackGuard(logging.Handler):
 def dev_sampling_swap(trainer: Any, gen: Any, sampling: Dict[str, Any]):
     """Dev evaluation's sampling on `gen`, and the training sampling back afterwards.
 
-    `presence_penalty` (Qwen3.5's card asks for 1.5) is a dev-only setting: in a
-    training rollout it would make vLLM's processed log-probs those of a
-    penalised distribution the trainer never computes. It goes into
-    `generation_kwargs` for the duration of the eval and nowhere else. The
+    `presence_penalty` (Qwen3.5's card asks for 1.5) goes into
+    `generation_kwargs` for the duration of the eval, for configs whose training
+    rollouts run without it (`check_penalties`). The
     importance-sampling correction is off during eval, which with aligned
     accumulation skips the trainer's old-log-prob forward pass.
     """
@@ -128,18 +127,24 @@ def _git_sha() -> Optional[str]:
         return None
 
 
-def check_unpenalised(grpo: Dict[str, Any]) -> None:
-    """Refuse a sampling penalty on training rollouts.
+def check_penalties(grpo: Dict[str, Any], eval_presence: float) -> None:
+    """Refuse a sampling penalty on training rollouts other than the eval's own.
 
-    A penalty makes vLLM's processed log-probs those of a distribution the
-    trainer never computes, and the importance ratio then corrects toward the
-    wrong target. Penalties are dev-only (`dev_sampling_swap`).
+    vLLM returns the penalised distribution's log-probs and the trainer computes
+    the unpenalised one; the truncated importance weights correct the gap toward
+    the policy the trainer optimises. A presence penalty is allowed only at the
+    eval config's value, so training samples the policy the eval measures:
+    without it, Qwen3.5-4B looped into the length cap on about half its rollouts.
+    Frequency and repetition penalties are refused.
     """
     extra = grpo.get("generation_kwargs") or {}
-    for key, neutral in (("presence_penalty", 0.0), ("frequency_penalty", 0.0),
-                         ("repetition_penalty", 1.0)):
+    presence = extra.get("presence_penalty", grpo.get("presence_penalty", 0.0))
+    if presence not in (0.0, eval_presence):
+        raise SystemExit(f"grpo sets presence_penalty {presence}; the eval config uses "
+                         f"{eval_presence}")
+    for key, neutral in (("frequency_penalty", 0.0), ("repetition_penalty", 1.0)):
         if extra.get(key, neutral) != neutral or grpo.get(key, neutral) != neutral:
-            raise SystemExit(f"grpo sets {key}; training rollouts must sample unpenalised")
+            raise SystemExit(f"grpo sets {key}; training rollouts take no {key}")
 
 
 def lora_targets(model: Any) -> Dict[str, int]:
@@ -385,7 +390,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     world = int(os.environ.get("WORLD_SIZE", "1"))
     m = cfg["model"]
     g = dict(cfg["grpo"])
-    check_unpenalised(g)
+    check_penalties(g, rl_config.dev_sampling(cfg)["presence_penalty"])
     text_config = AutoConfig.from_pretrained(m["name"], revision=m["revision"]).get_text_config()
     if "linear_attention" in (getattr(text_config, "layer_types", None) or []):
         try:
