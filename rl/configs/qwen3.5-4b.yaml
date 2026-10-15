@@ -1,0 +1,138 @@
+# Qwen3.5-4B, thinking on, GRPO with the DAPO loss, LoRA, levels 1-4.
+#
+#   uv run --group rl python -m rl.launch rl/configs/qwen3.5-4b.yaml
+#
+# Chosen over Qwen3-4B on base strict success at levels 1-4 of the lite taskset:
+# 0.445 against 0.068, most of Qwen3-4B's misses being the answer format, which
+# left its groups all wrong.
+#
+# Every value here is a decision; `key.sub=value` on the command line overrides
+# one (rl/config.py). `grpo:` is passed to TRL's GRPOConfig as written.
+
+name: qwen3.5-4b
+seed: 0
+output_root: outputs/rl
+wandb_project: arggym-rl
+
+model:
+  name: Qwen/Qwen3.5-4B
+  # Neither the eval config nor the serving profile pins a revision. This is the
+  # only snapshot in this machine's Hugging Face cache, on the host that
+  # produced results/hf-qwen3.5-4b__xml_tags__cot. BF16, the published precision.
+  revision: 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a
+
+# Training prompts take its chat-template arguments (thinking on); dev
+# evaluation takes all of its sampling, presence_penalty 1.5 and the 65,536 cap
+# included. Training rollouts never get the penalty (rl/train.py).
+eval_model: hf-qwen3.5-4b
+
+prompt:
+  template: xml_tags
+  elicitation: cot
+
+data:
+  tasks: all
+  levels: [1, 2, 3, 4]
+  # The same seed windows as the Qwen3-4B pools; rl/pool.py refuses an overlap
+  # with the eval specs. Pools hold text, not tokens, so they do not depend on
+  # the model. 12 tasks x 4 levels x 4 orderings x 25 = 4,800 rows: 100 steps of
+  # 8 prompts draw 800 of them, none twice.
+  train: {seed_start: 1000000, take: 25, scan_limit: 100}
+  # One row per (task, level), orderings rotated: 48 dev prompts.
+  dev: {seed_start: 2000000, take: 1, scan_limit: 40, per_task_level: 1}
+
+lora:
+  r: 32
+  alpha: 32
+  dropout: 0.0
+  # On Qwen3.5-4B this adapts every Linear of the text model: q/k/v/o in the 8
+  # full-attention layers, in_proj_qkv/z/a/b and out_proj in the 24 Gated
+  # DeltaNet layers, gate/up/down everywhere (64.9M parameters). The depthwise
+  # conv1d, A_log, dt_bias and the norms stay frozen. run.json lists the counts.
+  target_modules: all-linear
+
+vllm:
+  gpu: 0
+  port: 8000
+  # The 65,536-token dev cap plus the eval lane's 8,192-token prompt reserve;
+  # the longest prompt at levels 1-4 is far shorter. Full-attention KV is
+  # 32 KiB a token (8 of 32 layers), so the pool holds about 1.9M tokens.
+  max_model_len: 73728
+  gpu_memory_utilization: 0.9
+  ready_timeout_s: 1800
+  # As the eval lane serves it: the vision tower is not loaded.
+  extra_args: ["--language-model-only"]
+
+trainer_gpus: "1,2"
+
+# Checked against the batch fields below and the number of trainer GPUs.
+prompts_per_step: 8
+
+# Completions table to wandb every this many steps, and on every eval.
+completions_every: 5
+
+grpo:
+  learning_rate: 1.0e-5
+  lr_scheduler_type: constant_with_warmup
+  warmup_steps: 5
+  max_steps: 100
+  optim: adamw_torch_fused
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  bf16: true
+  gradient_checkpointing: true
+  disable_dropout: true
+  shuffle_dataset: true
+
+  # 1 completion x 2 GPUs x 32 accumulation = 64 = 8 prompts x 8. One sequence
+  # per micro-batch: a 46k-token sequence peaks at 29.7 GiB in the trainer
+  # (forward and backward, gradient checkpointing, TRL's fused LM head, which
+  # never materialises the 248k-vocabulary logits).
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 32
+  num_generations: 8
+  num_iterations: 1
+
+  loss_type: dapo
+  beta: 0.0
+  epsilon: 0.2
+  epsilon_high: 0.28
+  scale_rewards: none
+  mask_truncated_completions: true
+  importance_sampling_level: token
+  # Truncated IS per token, capped at 2 as in Olmo 3 (practices guide, section 2).
+  vllm_importance_sampling_correction: true
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_clip_max: 2.0
+
+  # Training rollouts at T=1 with no truncation and no penalty, so the trainer's
+  # full-vocabulary log-probs and vLLM's processed log-probs describe the same
+  # distribution. 40,960 covers 88% of this model's completions at levels 1-4
+  # in the stored eval; the rest are truncated, masked and left out of the
+  # baseline.
+  temperature: 1.0
+  top_p: 1.0
+  top_k: 0
+  max_completion_length: 40960
+  vllm_server_timeout: 3600
+  # Rank 1 waits in a collective while rank 0 waits on vLLM. The default 30
+  # minutes is shorter than one generation at this length (21 min measured for
+  # 64 rollouts, more for a dev batch at 65k), and the smoke run died on it.
+  ddp_timeout: 10800
+
+  # 48 dev rows x 4 samples = 192 = 4 batches of 24 x 2 GPUs. Dev evaluation
+  # runs no trainer forward pass, so this sets only how many sequences vLLM
+  # decodes at once: 48 per call, under 48 x 73,728 = 3.5M tokens in the worst
+  # case and about 1.4M at this model's mean length, against a 1.9M-token pool.
+  num_generations_eval: 4
+  per_device_eval_batch_size: 24
+  eval_strategy: steps
+  eval_steps: 20
+  eval_on_start: true
+  save_strategy: steps
+  save_steps: 20
+  # The best checkpoint by eval_arggym_success_rate and the latest.
+  save_total_limit: 2
+
+  logging_steps: 1
+  log_completions: true

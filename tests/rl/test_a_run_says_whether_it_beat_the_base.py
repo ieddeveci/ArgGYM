@@ -45,6 +45,9 @@ def test_the_server_answers_to_the_eval_configs_model_name():
         cmd = vllm_command(cfg)
         assert cmd[cmd.index("--served-model-name") + 1] == "Qwen/Qwen3-4B"
         assert cmd[cmd.index("--max-model-len") + 1] == "40960"
+    cmd = vllm_command(rl_config.load(str(ROOT / "rl/configs/qwen3.5-4b.yaml")))
+    assert cmd[cmd.index("--served-model-name") + 1] == "Qwen/Qwen3.5-4B"
+    assert "--language-model-only" in cmd
 
 
 def test_the_server_avoids_the_flashinfer_jit_sampler_and_finds_the_venv_tools():

@@ -17,7 +17,9 @@ checkpoint's score on the eval taskset, not its dev score.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -27,9 +29,62 @@ from typing import Any, Dict, Optional, Sequence
 
 from rl import config as rl_config
 from rl import pool
+from rl.export import SELECTION, checkpoint_keys
 from rl.reward import make_reward
 
-SELECTION = "selection.json"
+#: Reference PyTorch kernels a run may fall back to. `causal_conv1d` ships no
+#: wheel for torch 2.13 and builds only against a CUDA 13 toolkit this machine
+#: lacks; its fallback is one cuDNN depthwise conv, measured at 0.6 s of the
+#: ~21 s forward and backward of a 46k-token Qwen3.5-4B sequence. Any other
+#: fallback (Gated DeltaNet without `fla`: more than ten times slower) stops the
+#: run at its first logged step.
+ALLOWED_FALLBACKS = ("causal_conv1d",)
+
+
+class FallbackGuard(logging.Handler):
+    """Records transformers' "falling back to its reference PyTorch implementation" warnings."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.seen: list = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = record.getMessage()
+        if "falling back to its reference PyTorch" in msg and not any(
+                f"because `{name}` is not installed" in msg for name in ALLOWED_FALLBACKS):
+            self.seen.append(msg)
+
+    def check(self) -> None:
+        if self.seen:
+            raise RuntimeError(f"slow reference kernel in use: {self.seen[0]}")
+
+
+@contextlib.contextmanager
+def dev_sampling_swap(trainer: Any, gen: Any, sampling: Dict[str, Any]):
+    """Dev evaluation's sampling on `gen`, and the training sampling back afterwards.
+
+    `presence_penalty` (Qwen3.5's card asks for 1.5) is a dev-only setting: in a
+    training rollout it would make vLLM's processed log-probs those of a
+    penalised distribution the trainer never computes. It goes into
+    `generation_kwargs` for the duration of the eval and nowhere else. The
+    importance-sampling correction is off during eval, which with aligned
+    accumulation skips the trainer's old-log-prob forward pass.
+    """
+    sampling = dict(sampling)
+    penalty = sampling.pop("presence_penalty", None)
+    swap = [(gen, k, v) for k, v in sampling.items()]
+    if penalty:
+        swap.append((gen, "generation_kwargs",
+                     {**(gen.generation_kwargs or {}), "presence_penalty": penalty}))
+    swap.append((trainer, "vllm_importance_sampling_correction", False))
+    saved = [(obj, k, getattr(obj, k)) for obj, k, _ in swap]
+    for obj, k, v in swap:
+        setattr(obj, k, v)
+    try:
+        yield
+    finally:
+        for obj, k, v in saved:
+            setattr(obj, k, v)
 
 
 def output_dir(cfg: Dict[str, Any]) -> Path:
@@ -72,6 +127,30 @@ def _git_sha() -> Optional[str]:
         return None
 
 
+def check_unpenalised(grpo: Dict[str, Any]) -> None:
+    """Refuse a sampling penalty on training rollouts.
+
+    A penalty makes vLLM's processed log-probs those of a distribution the
+    trainer never computes, and the importance ratio then corrects toward the
+    wrong target. Penalties are dev-only (`dev_sampling_swap`).
+    """
+    extra = grpo.get("generation_kwargs") or {}
+    for key, neutral in (("presence_penalty", 0.0), ("frequency_penalty", 0.0),
+                         ("repetition_penalty", 1.0)):
+        if extra.get(key, neutral) != neutral or grpo.get(key, neutral) != neutral:
+            raise SystemExit(f"grpo sets {key}; training rollouts must sample unpenalised")
+
+
+def lora_targets(model: Any) -> Dict[str, int]:
+    """How many modules of each kind the adapter trains, by the module's last name."""
+    out: Dict[str, int] = {}
+    for name, _ in model.named_parameters():
+        if ".lora_A." in name:
+            kind = name.split(".lora_A.")[0].rsplit(".", 1)[-1]
+            out[kind] = out.get(kind, 0) + 1
+    return dict(sorted(out.items()))
+
+
 def merged_params(gen):
     """`(vllm_name, tensor)` for every base weight, the LoRA delta added out of place.
 
@@ -84,10 +163,19 @@ def merged_params(gen):
     what `rl.export` would serve. Here the base weight is read and never written,
     and the merged tensor is rounded once, exactly as a merge on export rounds
     it. Covers the DDP case only, where every rank holds whole parameters.
+
+    Names are the base checkpoint's (`rl.export.to_checkpoint`), which is what
+    vLLM's loader maps from: Qwen3.5 trains as a text-only model whose tensors
+    the checkpoint, a vision-language one, keeps under `model.language_model.`.
+    A tensor with no checkpoint name stops the sync instead of being dropped.
     """
     import torch
 
+    from rl.export import to_checkpoint
+
     model = gen.model
+    keys = gen.checkpoint_keys
+    tied = bool(model.config.get_text_config().tie_word_embeddings)
     modules = dict(model.named_modules())
     with torch.no_grad():
         for name, param in model.named_parameters():
@@ -99,9 +187,16 @@ def merged_params(gen):
                 if not owner.merged and not owner.disable_adapters:
                     delta = sum(owner.get_delta_weight(a).float() for a in owner.active_adapters)
                     tensor = (param.data.float() + delta).to(param.dtype)
-            vllm_name = name.removeprefix("base_model.model.").replace(".base_layer", "")
-            yield gen._fix_param_name_to_vllm(vllm_name,
-                                              extra_prefixes=["modules_to_save.default."]), tensor
+            plain = gen._fix_param_name_to_vllm(
+                name.removeprefix("base_model.model.").replace(".base_layer", ""),
+                extra_prefixes=["modules_to_save.default."])
+            ckpt = to_checkpoint(plain, keys)
+            if ckpt is None:
+                if plain == "lm_head.weight" and tied:
+                    continue
+                raise RuntimeError(f"{plain} has no tensor in the base checkpoint; vLLM "
+                                   f"would not load it")
+            yield ckpt, tensor
 
 
 def _trainer_class():
@@ -120,7 +215,8 @@ def _trainer_class():
           `completions_<step>.parquet` and the wandb key `completions`, so the
           second would overwrite the first.
         - Dev evaluation is generation and scoring only, under `dev_sampling`:
-          the eval config's temperature, top-p, top-k, min-p and token cap. TRL
+          the eval config's temperature, top-p, top-k, min-p, penalties and token
+          cap (`dev_sampling_swap`). TRL
           would also run two trainer forward passes over every eval batch, the
           importance-sampling one and the loss one; both measure nothing at a
           sampling temperature the trainer does not divide by, and at a 32k cap
@@ -131,18 +227,27 @@ def _trainer_class():
         """
 
         def __init__(self, *args, completions_every: int, dev_sampling: Dict[str, Any],
-                     **kwargs):
+                     checkpoint_keys: set, guard: FallbackGuard, **kwargs):
             super().__init__(*args, **kwargs)
             self.completions_every = completions_every
             self.dev_sampling = dev_sampling
+            self.guard = guard
             gen = self.vllm_generation
             if not is_peft_model(gen.model) or gen._dist.is_fsdp or gen._dist.is_zero3:
                 raise SystemExit("rl.train syncs LoRA weights under DDP only")
+            gen.checkpoint_keys = checkpoint_keys
             gen._iter_named_params = types.MethodType(merged_params, gen)
 
         def log(self, logs, start_time=None):
+            import torch
+
+            self.guard.check()
             step = self.state.global_step
             if self.model.training:
+                # Rank 0's peak since the previous log: whether a longer cap or a
+                # larger micro-batch would fit.
+                logs["memory/peak_allocated_gib"] = torch.cuda.max_memory_allocated() / 2**30
+                torch.cuda.reset_peak_memory_stats()
                 eval_step = self.args.eval_steps and step % self.args.eval_steps == 0
                 self.log_completions = self.args.log_completions and (
                     step % self.completions_every == 0 and not eval_step)
@@ -151,17 +256,8 @@ def _trainer_class():
             super().log(logs, start_time)
 
         def evaluate(self, *args, **kwargs):
-            gen = self.vllm_generation
-            swap = [(gen, k, v) for k, v in self.dev_sampling.items()]
-            swap.append((self, "vllm_importance_sampling_correction", False))
-            saved = [(obj, k, getattr(obj, k)) for obj, k, _ in swap]
-            for obj, k, v in swap:
-                setattr(obj, k, v)
-            try:
+            with dev_sampling_swap(self, self.vllm_generation, self.dev_sampling):
                 return super().evaluate(*args, **kwargs)
-            finally:
-                for obj, k, v in saved:
-                    setattr(obj, k, v)
 
         def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
             import torch
@@ -204,8 +300,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     import torch
     from datasets import Dataset
     from peft import LoraConfig
-    from transformers import AutoTokenizer
+    from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig
+
+    guard = FallbackGuard()
+    logging.getLogger("transformers").addHandler(guard)
 
     out = output_dir(cfg)
     name = rl_config.run_name(cfg)
@@ -216,6 +315,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     world = int(os.environ.get("WORLD_SIZE", "1"))
     m = cfg["model"]
     g = dict(cfg["grpo"])
+    check_unpenalised(g)
+    text_config = AutoConfig.from_pretrained(m["name"], revision=m["revision"]).get_text_config()
+    if "linear_attention" in (getattr(text_config, "layer_types", None) or []):
+        try:
+            import fla.ops.gated_delta_rule  # noqa: F401
+        except ImportError as e:
+            raise SystemExit(f"{m['name']} has Gated DeltaNet layers and fla does not "
+                             f"import ({e}); transformers would run them ten times slower")
 
     per_step = g["per_device_train_batch_size"] * world * g["gradient_accumulation_steps"]
     if per_step % g["num_generations"] or per_step // g["num_generations"] != cfg[
@@ -260,7 +367,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     args = GRPOConfig(
         output_dir=str(out), run_name=name, seed=cfg["seed"], report_to=["wandb"],
-        model_init_kwargs={"dtype": torch.bfloat16, "revision": m["revision"]},
         chat_template_kwargs=template_kwargs,
         use_vllm=True, vllm_mode="server",
         vllm_server_base_url=f"http://127.0.0.1:{cfg['vllm']['port']}",
@@ -271,11 +377,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                       lora_dropout=cfg["lora"]["dropout"], bias="none",
                       target_modules=cfg["lora"]["target_modules"], task_type="CAUSAL_LM")
 
+    # The text-only class, also for a vision-language checkpoint such as Qwen3.5's:
+    # the vision tower is never used, and all-linear LoRA would adapt it too. Its
+    # tensor names differ from the checkpoint's; `merged_params` maps them.
+    model = AutoModelForCausalLM.from_pretrained(m["name"], revision=m["revision"],
+                                                 dtype=torch.bfloat16)
     trainer = _trainer_class()(
-        model=m["name"], args=args, train_dataset=train, eval_dataset=dev,
+        model=model, args=args, train_dataset=train, eval_dataset=dev,
         reward_funcs=make_reward(stop_ids, template), processing_class=tokenizer,
         peft_config=lora, completions_every=cfg["completions_every"],
-        dev_sampling=dev_sampling)
+        dev_sampling=dev_sampling, checkpoint_keys=checkpoint_keys(m["name"], m["revision"]),
+        guard=guard)
 
     # The optimizer updates the adapter, so the adapter is what must be FP32: a
     # BF16 weight near 1.0 cannot take a step smaller than 2^-7.
@@ -292,6 +404,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "n_train": len(train), "n_dev": len(dev),
             "trainable_params": sum(p.numel() for p in trainer.model.parameters()
                                     if p.requires_grad),
+            "lora_targets": lora_targets(trainer.model),
         }
         (out / "run.json").write_text(json.dumps(manifest, indent=2, default=str) + "\n")
         # Started here rather than by TRL's callback, which reuses a live run, so

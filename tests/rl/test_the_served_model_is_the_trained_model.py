@@ -41,12 +41,88 @@ def with_adapter(model, train: bool):
     return pm
 
 
-def gen_for(pm):
+def tiny_qwen35():
+    """Qwen3.5's text model in miniature: one Gated DeltaNet layer, one attention layer."""
+    torch.manual_seed(0)
+    config = transformers.Qwen3_5TextConfig(
+        vocab_size=128, hidden_size=64, intermediate_size=128, num_hidden_layers=2,
+        layer_types=["linear_attention", "full_attention"], num_attention_heads=4,
+        num_key_value_heads=2, head_dim=16, linear_num_key_heads=2, linear_num_value_heads=2,
+        linear_key_head_dim=16, linear_value_head_dim=16, linear_conv_kernel_dim=4,
+        tie_word_embeddings=True)
+    return transformers.Qwen3_5ForCausalLM(config).to(torch.bfloat16)
+
+
+def vl_name(name):
+    """Where Qwen3.5's vision-language checkpoint keeps a text-model tensor."""
+    return "model.language_model." + name[len("model."):] if name.startswith("model.") else name
+
+
+def gen_for(pm, keys=None):
     """The attributes of TRL's VLLMGeneration that `merged_params` reads."""
     g = types.SimpleNamespace(model=pm)
     g._fix_param_name_to_vllm = lambda name, extra_prefixes=(): name.replace(
         "modules_to_save.default.", "")
+    plain = {n for n, _ in pm.get_base_model().named_parameters()}
+    g.checkpoint_keys = keys if keys is not None else {
+        n.replace(".base_layer", "") for n in plain if "lora_" not in n}
     return g
+
+
+def test_qwen35_syncs_every_trained_projection_under_the_checkpoints_names():
+    pm = with_adapter(tiny_qwen35(), train=True)
+    trained = sorted({n.split(".lora_A.")[0].rsplit(".", 1)[-1]
+                      for n, _ in pm.named_parameters() if ".lora_A." in n})
+    # The Gated DeltaNet projections are adapted; the conv and the decay are not.
+    assert trained == ["down_proj", "gate_proj", "in_proj_a", "in_proj_b", "in_proj_qkv",
+                       "in_proj_z", "k_proj", "o_proj", "out_proj", "q_proj", "up_proj",
+                       "v_proj"]
+    plain = {n for n, _ in tiny_qwen35().named_parameters()}
+    keys = {vl_name(n) for n in plain}
+    sent = dict(merged_params(gen_for(pm, keys)))
+    assert set(sent) == keys
+    lin = pm.base_model.model.model.layers[0].linear_attn.in_proj_qkv
+    want = (lin.base_layer.weight.float() + lin.get_delta_weight("default").float())
+    assert torch.equal(sent["model.language_model.layers.0.linear_attn.in_proj_qkv.weight"],
+                       want.to(torch.bfloat16))
+
+
+def test_a_tensor_the_checkpoint_lacks_stops_the_sync():
+    pm = with_adapter(tiny_qwen35(), train=True)
+    keys = {vl_name(n) for n, _ in tiny_qwen35().named_parameters()}
+    keys.discard("model.language_model.layers.0.linear_attn.A_log")
+    with pytest.raises(RuntimeError, match="A_log"):
+        dict(merged_params(gen_for(pm, keys)))
+
+
+def test_export_writes_the_checkpoints_layout_for_a_vision_language_base(tmp_path):
+    from safetensors.torch import save_file
+
+    from rl.export import to_checkpoint, write_merged
+
+    base = tiny_qwen35()
+    base_vl = tmp_path / "base"
+    base_vl.mkdir()
+    state = {vl_name(n): t.contiguous() for n, t in base.state_dict().items()
+             if n != "lm_head.weight"}
+    state["mtp.layers.0.norm.weight"] = torch.ones(4, dtype=torch.bfloat16)
+    # Qwen3.5 stores the Gated DeltaNet decay in FP32; a BF16 load casts it, and
+    # the export must still write the stored bytes.
+    a_log = "model.language_model.layers.0.linear_attn.A_log"
+    state[a_log] = state[a_log].float() + 1e-3
+    save_file(state, str(base_vl / "model.safetensors"), metadata={"format": "pt"})
+    (base_vl / "config.json").write_text("{}")
+    pm = with_adapter(base, train=True)
+    adapter_dir = tmp_path / "adapter"
+    pm.save_pretrained(adapter_dir)
+    merged = pm.merge_and_unload()
+    out = tmp_path / "merged"
+    write_merged(merged.state_dict(), base_vl, out, trained_weights(adapter_dir))
+    assert (out / "config.json").exists()
+    trained = {to_checkpoint(n, state) for n in trained_weights(adapter_dir)}
+    report = compare(out, base_vl, trained)
+    assert report["ok"] and report["n_tensors"] == len(state)
+    assert "mtp.layers.0.norm.weight" not in trained
 
 
 def test_sync_never_writes_the_base_weights_and_sends_base_plus_delta():

@@ -25,7 +25,8 @@ from rl import config as rl_config
 from rl import pool
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/qwen3-4b-nothink.yaml",
+CONFIGS = ("rl/configs/qwen3.5-4b.yaml", "rl/configs/qwen3-4b.yaml",
+           "rl/configs/qwen3-4b-nothink.yaml",
            "rl/configs/smoke.yaml")
 
 
@@ -68,10 +69,16 @@ def test_the_messages_are_the_eval_request_messages(path):
 def test_dev_evaluation_samples_as_the_eval_request_asks(path):
     cfg = rl_config.load(str(ROOT / path))
     body = eval_body(sample_rows()[0], cfg["eval_model"])
+    x = body["extra_body"]
     want = {"temperature": body["temperature"], "top_p": body["top_p"],
-            "top_k": body["extra_body"]["top_k"], "min_p": body["extra_body"]["min_p"],
+            "top_k": x["top_k"], "min_p": x["min_p"],
+            "repetition_penalty": x.get("repetition_penalty", 1.0),
+            "presence_penalty": body.get("presence_penalty", 0.0),
             "max_completion_length": cfg.get("dev_max_tokens") or body["max_tokens"]}
     assert rl_config.dev_sampling(cfg) == want
+    # Every key the eval request carries is one dev evaluation reproduces.
+    assert set(body) - {"model", "messages", "extra_body", "seed"} <= {
+        "temperature", "top_p", "presence_penalty", "max_tokens"}
 
 
 def test_a_training_row_carries_the_row_it_is_scored_against():
@@ -122,10 +129,14 @@ def test_the_token_ids_are_the_ids_the_eval_server_renders(path):
 
 @pytest.mark.skipif(not os.environ.get("ARGGYM_VLLM_URL"),
                     reason="needs a live vLLM server: set ARGGYM_VLLM_URL=http://host:port")
-@pytest.mark.parametrize("path", CONFIGS[:2])
+@pytest.mark.parametrize("path", CONFIGS[:3])
 def test_the_token_ids_are_the_ids_a_live_vllm_server_renders(path):
     url = os.environ["ARGGYM_VLLM_URL"].rstrip("/")
     cfg = rl_config.load(str(ROOT / path))
+    with urllib.request.urlopen(f"{url}/v1/models", timeout=30) as resp:
+        served_models = {m["id"] for m in json.loads(resp.read())["data"]}
+    if cfg["model"]["name"] not in served_models:
+        pytest.skip(f"the server serves {served_models}, not {cfg['model']['name']}")
     tok = _tokenizer(cfg)
     elicit = pool.elicitation(cfg["prompt"]["elicitation"])
     kwargs = rl_config.eval_model(cfg)["chat_template_kwargs"]

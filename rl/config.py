@@ -77,8 +77,8 @@ def run_name(cfg: Dict[str, Any]) -> str:
 
 #: What an eval model config may set. Any other key would change how the eval
 #: lane samples without dev evaluation following, so it is refused, not ignored.
-_SAMPLING = {"max_tokens", "temperature", "top_p", "seed"}
-_EXTRA_BODY = {"top_k", "min_p", "chat_template_kwargs"}
+_SAMPLING = {"max_tokens", "temperature", "top_p", "seed", "presence_penalty"}
+_EXTRA_BODY = {"top_k", "min_p", "repetition_penalty", "chat_template_kwargs"}
 
 
 def eval_model(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -99,17 +99,22 @@ def eval_model(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return {"name": m["name"], "model": m["model"],
             "temperature": sampling["temperature"], "top_p": sampling.get("top_p", 1.0),
             "top_k": extra.get("top_k", 0), "min_p": extra.get("min_p", 0.0),
+            "presence_penalty": sampling.get("presence_penalty", 0.0),
+            "repetition_penalty": extra.get("repetition_penalty", 1.0),
             "max_tokens": sampling["max_tokens"],
             "chat_template_kwargs": dict(extra.get("chat_template_kwargs") or {})}
 
 
 def dev_sampling(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """The `VLLMGeneration` attributes dev evaluation runs under.
+    """What dev evaluation samples under: `VLLMGeneration` attributes, plus
+    `presence_penalty`, which `rl.train.dev_sampling_swap` sends as a dev-only
+    generation kwarg.
 
     `dev_max_tokens` lowers the cap for the smoke config only; a real run takes
     the eval config's `max_tokens`.
     """
     em = eval_model(cfg)
     return {"temperature": em["temperature"], "top_p": em["top_p"], "top_k": em["top_k"],
-            "min_p": em["min_p"],
+            "min_p": em["min_p"], "repetition_penalty": em["repetition_penalty"],
+            "presence_penalty": em["presence_penalty"],
             "max_completion_length": cfg.get("dev_max_tokens") or em["max_tokens"]}
