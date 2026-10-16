@@ -57,7 +57,7 @@ rl = [
     # Qwen3.5's Gated DeltaNet layers; without it transformers runs a reference
     # PyTorch kernel more than ten times slower. Triton only, nothing to compile.
     "flash-linear-attention",
-    "wandb",
+    "trackio",
 ]
 
 [project.scripts]

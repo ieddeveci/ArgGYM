@@ -245,10 +245,10 @@ def _trainer_class():
         """TRL's trainer plus what it does not do.
 
         - Weight sync to vLLM merges the adapter out of place (`merged_params`).
-        - The completions table goes to wandb every `completions_every` steps and
+        - The completions table goes to trackio every `completions_every` steps and
           on every eval, rather than on every logging step. A training step that
           is also an eval step logs only the eval table: TRL writes both to
-          `completions_<step>.parquet` and the wandb key `completions`, so the
+          `completions_<step>.parquet` and the tracker key `completions`, so the
           second would overwrite the first.
         - Dev evaluation is generation and scoring only, under `dev_sampling`:
           the eval config's temperature, top-p, top-k, min-p, penalties and token
@@ -305,19 +305,18 @@ def _trainer_class():
             draw = self.curriculum.draws.get(step - 1)
             if not self.accelerator.is_main_process or draw is None:
                 return summary(draw)
-            import wandb
+            import trackio
 
             with open(self.curriculum_log, "a") as f:
                 f.write(json.dumps({"step": step, **draw}) + "\n")
-            if wandb.run is not None:
-                cols = ["step", "task", "level", "pass_rate", "signal"]
-                tables = {"curriculum/drawn": wandb.Table(
-                    columns=cols, data=[[step] + [c[k] for k in cols[1:]] for c in draw["cells"]])}
-                if step % self.table_every == 0 or step == 1:
-                    rows = self.curriculum.table()
-                    tables["curriculum/cells"] = wandb.Table(
-                        columns=list(rows[0]), data=[list(r.values()) for r in rows])
-                wandb.log(tables, commit=False)
+            cols = ["step", "task", "level", "pass_rate", "signal"]
+            tables = {"curriculum/drawn": trackio.Table(
+                columns=cols, data=[[step] + [c[k] for k in cols[1:]] for c in draw["cells"]])}
+            if step % self.table_every == 0 or step == 1:
+                rows = self.curriculum.table()
+                tables["curriculum/cells"] = trackio.Table(
+                    columns=list(rows[0]), data=[list(r.values()) for r in rows])
+            trackio.log(tables, step=step)
             return summary(draw)
 
         def _get_train_sampler(self, dataset=None):
@@ -371,6 +370,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                    help="a checkpoint directory of this run to continue from")
     a = p.parse_args(argv)
     cfg = rl_config.load(a.config, a.overrides)
+    # Trackio stores every run of every project in one local SQLite directory,
+    # read at import, so this comes before anything that imports it.
+    # `trackio show --project <project>` opens the dashboard on it.
+    os.environ.setdefault("TRACKIO_DIR", str(pool.ROOT / cfg["output_root"] / "trackio"))
 
     import torch
     from datasets import Dataset
@@ -383,10 +386,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     out = output_dir(cfg)
     name = rl_config.run_name(cfg)
-    os.environ.setdefault("WANDB_PROJECT", cfg["wandb_project"])
-    # wandb writes its run files under the working directory unless told otherwise.
     out.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("WANDB_DIR", str(out))
     world = int(os.environ.get("WORLD_SIZE", "1"))
     m = cfg["model"]
     g = dict(cfg["grpo"])
@@ -441,7 +441,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"eval_arggym_success_rate. Change per_device_eval_batch_size.")
 
     args = GRPOConfig(
-        output_dir=str(out), run_name=name, seed=cfg["seed"], report_to=["wandb"],
+        output_dir=str(out), run_name=name, seed=cfg["seed"], report_to=["trackio"],
+        project=cfg["project"],
         chat_template_kwargs=template_kwargs,
         use_vllm=True, vllm_mode="server",
         vllm_server_base_url=f"http://127.0.0.1:{cfg['vllm']['port']}",
@@ -491,11 +492,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "lora_targets": lora_targets(trainer.model),
         }
         (out / "run.json").write_text(json.dumps(manifest, indent=2, default=str) + "\n")
-        # Started here rather than by TRL's callback, which reuses a live run, so
-        # the run carries the whole config and not only the GRPOConfig half.
-        import wandb
+        # Started here so the run carries the whole config and not only the
+        # GRPOConfig half; Transformers' callback resumes it by name.
+        import trackio
 
-        wandb.init(project=cfg["wandb_project"], name=name, config={"arggym": manifest})
+        trackio.init(project=cfg["project"], name=name, config={"arggym": manifest},
+                     resume="allow")
 
     trainer.train(resume_from_checkpoint=a.resume)
 
@@ -503,9 +505,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         selection = select(trainer.state, args.metric_for_best_model)
         (out / SELECTION).write_text(json.dumps(selection, indent=2) + "\n")
         print(json.dumps(selection, indent=2))
-        import wandb
+        import trackio
 
-        wandb.finish()
+        trackio.finish()
     return 0
 
 

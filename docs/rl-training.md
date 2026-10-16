@@ -17,8 +17,10 @@ uv run --group rl python -m rl.launch rl/configs/qwen3.5-4b-curriculum.yaml grpo
 
 One command builds the training pool if needed, starts `vllm serve` on one GPU,
 runs the trainer on the others with `accelerate`, and merges the selected
-checkpoint at the end. It tears vLLM down on every exit path. Runs are tracked
-in the wandb project `arggym-rl`; outputs go under `outputs/rl/` (gitignored).
+checkpoint at the end. It tears vLLM down on every exit path. Outputs go under
+`outputs/rl/` (gitignored). Metrics are tracked with
+[trackio](https://github.com/gradio-app/trackio), locally, in
+`outputs/rl/trackio`; `trackio show --project arggym-rl` opens the dashboard.
 The configs assume 3 GPUs of 80 GB: GPU 0 serves rollouts, GPUs 1-2 train.
 
 ## Layout
@@ -81,8 +83,7 @@ distribution vLLM sampled from. Here that default cost too much: without the
 card's penalty, 42-58% of Qwen3.5-4B's rollouts looped into the 40,960-token cap
 and were masked out. The trainer scores the full-vocabulary unpenalised
 distribution, and the truncated importance weights correct for the gap. Watch
-`sampling/importance_sampling_ratio/*` and `sampling/sampling_logp_difference/*` in
-wandb.
+`sampling/importance_sampling_ratio/*` and `sampling/sampling_logp_difference/*`.
 
 **Curriculum by pass rate.** A group whose completions all succeed or all fail
 teaches nothing. On Qwen3.5-4B the level number predicts that badly: base

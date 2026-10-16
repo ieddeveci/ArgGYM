@@ -8,7 +8,7 @@
 name: smoke
 seed: 0
 output_root: outputs/rl
-wandb_project: arggym-rl
+project: arggym-rl
 
 model:
   name: Qwen/Qwen3-4B

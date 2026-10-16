@@ -13,7 +13,7 @@
 name: qwen3.5-4b-curriculum
 seed: 0
 output_root: outputs/rl
-wandb_project: arggym-rl
+project: arggym-rl
 
 model:
   name: Qwen/Qwen3.5-4B
@@ -72,7 +72,7 @@ trainer_gpus: "1,2"
 # Checked against the batch fields below and the number of trainer GPUs.
 prompts_per_step: 8
 
-# Completions table to wandb every this many steps, and on every eval.
+# Completions table to trackio every this many steps, and on every eval.
 completions_every: 5
 
 grpo:
@@ -155,5 +155,5 @@ curriculum:
   # Added to every cell's p(1 - p), which is at most 0.25, so saturated and
   # impossible cells are still revisited and re-estimated.
   floor: 0.01
-  # Every cell's estimate to wandb every this many steps.
+  # Every cell's estimate to trackio every this many steps.
   table_every: 5

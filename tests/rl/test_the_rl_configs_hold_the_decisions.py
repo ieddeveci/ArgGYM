@@ -69,7 +69,7 @@ def test_the_first_run_config_holds_the_decisions():
     assert g["mask_truncated_completions"] and g["vllm_importance_sampling_correction"]
     assert g["max_completion_length"] == 16384
     assert cfg["data"]["levels"] == list(range(1, 9))
-    assert cfg["wandb_project"] == "arggym-rl"
+    assert cfg["project"] == "arggym-rl"
     assert g["save_total_limit"] <= 2
 
 
