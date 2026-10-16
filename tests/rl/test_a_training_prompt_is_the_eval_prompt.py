@@ -26,7 +26,6 @@ from rl import pool
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = ("rl/configs/qwen3.5-4b.yaml", "rl/configs/qwen3-4b.yaml",
-           "rl/configs/qwen3-4b-nothink.yaml",
            "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b-curriculum.yaml")
 
 

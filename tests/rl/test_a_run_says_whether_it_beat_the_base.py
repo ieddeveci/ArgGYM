@@ -40,11 +40,9 @@ def test_no_base_evaluation_means_no_claim():
 
 
 def test_the_server_answers_to_the_eval_configs_model_name():
-    for path in ("rl/configs/qwen3-4b.yaml", "rl/configs/qwen3-4b-nothink.yaml"):
-        cfg = rl_config.load(str(ROOT / path))
-        cmd = vllm_command(cfg)
-        assert cmd[cmd.index("--served-model-name") + 1] == "Qwen/Qwen3-4B"
-        assert cmd[cmd.index("--max-model-len") + 1] == "40960"
+    cmd = vllm_command(rl_config.load(str(ROOT / "rl/configs/qwen3-4b.yaml")))
+    assert cmd[cmd.index("--served-model-name") + 1] == "Qwen/Qwen3-4B"
+    assert cmd[cmd.index("--max-model-len") + 1] == "40960"
     cmd = vllm_command(rl_config.load(str(ROOT / "rl/configs/qwen3.5-4b.yaml")))
     assert cmd[cmd.index("--served-model-name") + 1] == "Qwen/Qwen3.5-4B"
     assert "--language-model-only" in cmd

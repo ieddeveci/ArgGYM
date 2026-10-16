@@ -13,10 +13,9 @@ import yaml
 from rl import config as rl_config
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/qwen3-4b-nothink.yaml",
-           "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b.yaml",
+CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b.yaml",
            "rl/configs/qwen3.5-4b-curriculum.yaml")
-REAL = (CONFIGS[0], CONFIGS[1], CONFIGS[3], CONFIGS[4])
+REAL = (CONFIGS[0], CONFIGS[2], CONFIGS[3])
 #: The longest prompt in data/taskset.jsonl: 4,066 tokens with the Qwen3
 #: tokenizer, 5,336 with Qwen3.5's (their eval configs). rl.train measures the
 #: real number at start-up and refuses a context that does not fit.
@@ -81,16 +80,6 @@ def test_importance_sampling_is_truncated_per_token(path):
     assert g["vllm_importance_sampling_clip_max"] == 2.0
 
 
-def test_the_thinking_off_config_differs_only_where_it_says():
-    on = rl_config.load(str(ROOT / "rl/configs/qwen3-4b.yaml"))
-    off = rl_config.load(str(ROOT / "rl/configs/qwen3-4b-nothink.yaml"))
-    assert rl_config.eval_model(off)["chat_template_kwargs"] == {"enable_thinking": False}
-    assert off["grpo"]["max_completion_length"] == 8192
-    for c in (on, off):
-        del c["name"], c["eval_model"], c["grpo"]["max_completion_length"]
-    assert on == off
-
-
 @pytest.mark.parametrize("path", REAL)
 def test_a_real_run_evaluates_dev_at_the_eval_cap(path):
     cfg = rl_config.load(str(ROOT / path))
@@ -117,22 +106,21 @@ def test_the_batch_arithmetic_closes_on_two_trainer_gpus(path):
 
 
 def test_an_override_is_parsed_and_a_typo_is_refused():
-    cfg = rl_config.load(str(ROOT / CONFIGS[2]),
+    cfg = rl_config.load(str(ROOT / CONFIGS[1]),
                          ["grpo.learning_rate=2e-5", "data.levels=[1,2,3]", "seed=3"])
     assert cfg["grpo"]["learning_rate"] == 2e-5 and isinstance(cfg["grpo"]["learning_rate"],
                                                                 float)
     assert cfg["data"]["levels"] == [1, 2, 3] and cfg["seed"] == 3
     with pytest.raises(SystemExit, match="no such key"):
-        rl_config.load(str(ROOT / CONFIGS[2]), ["grpo.learnig_rate=1"])
+        rl_config.load(str(ROOT / CONFIGS[1]), ["grpo.learnig_rate=1"])
 
 
 def test_the_run_name_encodes_model_loss_lr_and_seed():
     names = {p: rl_config.run_name(rl_config.load(str(ROOT / p), ["seed=7"])) for p in CONFIGS}
     assert names == {CONFIGS[0]: "qwen3-4b-dapo-lr1e-05-s7",
-                     CONFIGS[1]: "qwen3-4b-nothink-dapo-lr1e-05-s7",
-                     CONFIGS[2]: "smoke-qwen3-4b-dapo-lr1e-05-s7",
-                     CONFIGS[3]: "qwen3.5-4b-dapo-lr1e-05-s7",
-                     CONFIGS[4]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7"}
+                     CONFIGS[1]: "smoke-qwen3-4b-dapo-lr1e-05-s7",
+                     CONFIGS[2]: "qwen3.5-4b-dapo-lr1e-05-s7",
+                     CONFIGS[3]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7"}
 
 
 def test_an_eval_model_the_run_cannot_follow_is_refused(tmp_path, monkeypatch):

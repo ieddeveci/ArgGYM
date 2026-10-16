@@ -65,7 +65,7 @@ def test_the_evals_presence_penalty_is_allowed():
 
 
 @pytest.mark.parametrize("path", ["rl/configs/qwen3.5-4b.yaml", "rl/configs/qwen3-4b.yaml",
-                                  "rl/configs/qwen3-4b-nothink.yaml", "rl/configs/smoke.yaml",
+                                  "rl/configs/smoke.yaml",
                                   "rl/configs/qwen3.5-4b-curriculum.yaml"])
 def test_every_config_passes_the_penalty_check(path):
     cfg = rl_config.load(str(ROOT / path))

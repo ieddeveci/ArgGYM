@@ -67,7 +67,7 @@ def run_name(cfg: Dict[str, Any]) -> str:
     """Model, loss, learning rate and seed, which is what tells two curves apart.
 
     Led by the config's name, with the model added when the name lacks it:
-    `qwen3-4b-nothink-dapo-...`, `smoke-qwen3-4b-dapo-...`.
+    `qwen3.5-4b-curriculum-dapo-...`, `smoke-qwen3-4b-dapo-...`.
     """
     model = cfg["model"]["name"].split("/")[-1].lower()
     g = cfg["grpo"]
