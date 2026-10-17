@@ -66,7 +66,10 @@ Each of these has a test.
 0.2 / 0.28, group-mean baseline without std scaling, 8 completions per prompt,
 one gradient step per batch. TRL's importance-sampling correction for the
 vLLM/trainer mismatch is on, per token, truncated at 2. These are the guide's
-starting defaults.
+starting defaults. The loss is averaged over the tokens of completions with a
+nonzero advantage only: a group scored all 0 or all 1 gives no gradient, and
+with its tokens in the denominator it would shrink every update by its share
+of the batch, about half in experiment 002.
 
 **LoRA.** Rank 32 on all linear layers, LR 1e-5, constant after a short warmup.
 On Qwen3.5-4B that is 64.9M parameters, the Gated DeltaNet projections included.

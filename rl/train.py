@@ -235,6 +235,17 @@ def _save_curriculum(curriculum: Curriculum):
     return SaveCurriculum()
 
 
+def signal_tokens(advantages: Any, completion_mask: Any) -> Any:
+    """Loss tokens of the completions with a nonzero advantage.
+
+    A group whose scored completions all got the same reward, all 0 or all 1,
+    has zero advantage everywhere and so no gradient, as does a completion
+    whose reward is `None`. Counting their tokens in DAPO's denominator would
+    scale every update down by the share of such tokens.
+    """
+    return (completion_mask * (advantages != 0).unsqueeze(1)).sum()
+
+
 def _trainer_class():
     import types
 
@@ -262,6 +273,10 @@ def _trainer_class():
           effective sample size, which TRL does not log.
         - With `curriculum`, training prompts come from `rl.curriculum`, which
           learns from every step's gathered rewards and is logged every step.
+        - The loss is normalized over the tokens of completions with a nonzero
+          advantage (`signal_tokens`), so groups that were all 0 or all 1 do
+          not dilute the update. They still go through forward and backward;
+          dropping them would leave ranks with uneven batches.
         """
 
         def __init__(self, *args, completions_every: int, dev_sampling: Dict[str, Any],
@@ -341,6 +356,12 @@ def _trainer_class():
             if self.curriculum is not None and self.model.training:
                 # Every rank, the same gathered batch, once per optimizer step.
                 self.curriculum.update(group_outcomes(self.reward_funcs[0].last_batch))
+            if self.model.training:
+                total = out["num_items_in_batch"]
+                out["num_items_in_batch"] = self.accelerator.gather(
+                    signal_tokens(out["advantages"], out["completion_mask"])).sum()
+                self._metrics["train"]["sampling/signal_token_fraction"].append(
+                    (out["num_items_in_batch"] / total.clamp(min=1)).item())
             ratio = out.get("importance_sampling_ratio")
             if ratio is None:
                 return out
@@ -391,6 +412,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     m = cfg["model"]
     g = dict(cfg["grpo"])
     check_penalties(g, rl_config.dev_sampling(cfg)["presence_penalty"])
+    if g.get("beta", 0.0) != 0.0:
+        raise SystemExit("grpo sets beta; the KL term would move completions that "
+                         "signal_tokens leaves out of the loss's denominator")
     text_config = AutoConfig.from_pretrained(m["name"], revision=m["revision"]).get_text_config()
     if "linear_attention" in (getattr(text_config, "layer_types", None) or []):
         try:
