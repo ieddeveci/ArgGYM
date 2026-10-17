@@ -62,12 +62,14 @@ def test_the_gsm8k_control_holds_the_decisions():
     # tests that pipeline; LR and batch follow TRL's Qwen3-0.6B LoRA reproduction.
     assert cfg["lora"] == first["lora"]
     for key in ("loss_type", "beta", "epsilon", "epsilon_high", "scale_rewards",
-                "mask_truncated_completions", "importance_sampling_level",
+                "importance_sampling_level",
                 "vllm_importance_sampling_correction", "num_generations", "num_iterations",
                 "ddp_find_unused_parameters",
                 "temperature", "top_p", "top_k", "lr_scheduler_type"):
         assert g[key] == f[key], key
     assert "generation_kwargs" not in g and "presence_penalty" not in g
+    # Truncation pays 0 and is trained on; masking it rewarded never finishing.
+    assert g["mask_truncated_completions"] is False
     assert (g["learning_rate"], cfg["prompts_per_step"]) == (3e-5, 16)
     assert g["max_completion_length"] == 8192
     assert (g["eval_steps"], g["save_steps"], g["max_steps"]) == (10, 10, 200)

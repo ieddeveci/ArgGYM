@@ -1,8 +1,8 @@
 """The GSM8K control pays 1 exactly when the last `\\boxed{}` is the gold number.
 
 Commas and dollar signs are formatting, not a different answer; a completion
-with no box pays 0; a truncated one is `None`, out of the group baseline, as in
-the ArgGYM reward.
+with no box pays 0; a truncated one pays 0 even when its last box is right, as
+the eval scores it.
 """
 from __future__ import annotations
 
@@ -46,8 +46,8 @@ def test_no_box_or_no_number_pays_zero():
                   [18.0] * 3) == [0.0] * 3
 
 
-def test_a_truncated_completion_is_unscorable_even_when_right():
-    assert reward([done("18")], [18.0], ids=[[OTHER, OTHER]]) == [None]
+def test_a_truncated_completion_pays_nothing_even_when_right():
+    assert reward([done("18")], [18.0], ids=[[OTHER, OTHER]]) == [0.0]
     # Ending on padding is finished, as in the ArgGYM reward.
     assert reward([done("18")], [18.0], ids=[[OTHER, PAD]]) == [1.0]
 

@@ -8,8 +8,12 @@ dropped.
 
 The reward is 1 when the last `\\boxed{...}` in the completion is the gold
 number after `####`, compared as numbers once commas and dollar signs are
-stripped, and 0 otherwise. A truncated completion returns `None`, as the
-ArgGYM reward does (`rl.reward`).
+stripped, and 0 otherwise. A truncated completion pays 0, as the eval scores
+it, and stays in the loss (`mask_truncated_completions: false`). Returning
+`None` instead, as the ArgGYM reward does, takes it out of the baseline and the
+loss, so the only behaviour the gradient punishes is committing to a wrong
+answer: at LR 1e-4 on Qwen3-0.6B, truncation rose from 2% to 38% in 30 steps
+and dev success fell from 0.805 to 0.735.
 """
 from __future__ import annotations
 
@@ -84,7 +88,7 @@ def make_reward(stop_ids: Sequence[int],
     gather = gather or _gather
 
     def gsm8k_correct(completions, completion_ids, gold, log_metric=None, log_extra=None,
-                      **columns: Any) -> List[Optional[float]]:
+                      **columns: Any) -> List[float]:
         records = []
         for completion, ids, g, i in zip(completions, completion_ids, gold, columns["id"],
                                          strict=True):
@@ -99,7 +103,7 @@ def make_reward(stop_ids: Sequence[int],
         if log_metric is not None:
             for name, value in batch_metrics(gather(records)).items():
                 log_metric(name, value)
-        return [None if r["truncated"] else float(r["success"]) for r in records]
+        return [0.0 if r["truncated"] else float(r["success"]) for r in records]
 
     return gsm8k_correct
 

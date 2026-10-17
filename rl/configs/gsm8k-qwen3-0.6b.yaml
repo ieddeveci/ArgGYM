@@ -95,7 +95,8 @@ grpo:
   epsilon: 0.2
   epsilon_high: 0.28
   scale_rewards: none
-  mask_truncated_completions: true
+  # A truncated completion pays 0 and is trained on (rl/gsm8k.py).
+  mask_truncated_completions: false
   importance_sampling_level: token
   vllm_importance_sampling_correction: true
   vllm_importance_sampling_mode: token_truncate
