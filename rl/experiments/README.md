@@ -7,7 +7,7 @@ One file per experiment, numbered in the order they ran. Each holds the card
 | # | Experiment | Status | Outcome |
 |---|---|---|---|
 | 001 | [Qwen3-4B, levels 1-4](001-qwen3-4b-levels-1-4.md) | Stopped at step 21 | No gain; the model rarely succeeds, so most groups carried no signal |
-| 002 | [Qwen3.5-4B, pass-rate curriculum, levels 1-8](002-qwen3.5-4b-curriculum.md) | Running | No gain at step 20; step 40 pending |
+| 002 | [Qwen3.5-4B, pass-rate curriculum, levels 1-8](002-qwen3.5-4b-curriculum.md) | Running | No gain at steps 20 and 40 |
 
 ## Conventions
 
