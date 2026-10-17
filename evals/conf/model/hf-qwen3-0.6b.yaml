@@ -1,0 +1,24 @@
+# Qwen/Qwen3-0.6B on vLLM. The model of the RL positive control
+# (rl/configs/gsm8k-qwen3-0.6b.yaml), whose dev evaluation samples as this file
+# says; it is not part of the benchmark roster.
+#
+# Sampling: the card's thinking-mode recommendation, "Temperature=0.6, TopP=0.95,
+# TopK=20, and MinP=0"
+# (https://huggingface.co/Qwen/Qwen3-0.6B).
+#
+# Cap: 32,768, the model's 40,960-token context minus the 8,192-token prompt
+# reserve, as for the other Qwen3 configs.
+name: hf-qwen3-0.6b
+model: Qwen/Qwen3-0.6B
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 32768
+  temperature: 0.6
+  top_p: 0.95
+  seed: 0
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  chat_template_kwargs:
+    enable_thinking: true

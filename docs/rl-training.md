@@ -31,10 +31,11 @@ The configs assume 3 GPUs of 80 GB: GPU 0 serves rollouts, GPUs 1-2 train.
 | `rl/pool.py` | Generates the training pool and the dev split from fresh seed windows, disjoint from the eval tasksets by seed window and by question and theory hash. |
 | `rl/reward.py` | The reward: strict success (0/1) from `evals.score.score_one`, the function that scores every eval run. |
 | `rl/curriculum.py` | The pass-rate curriculum sampler (below). |
+| `rl/gsm8k.py` | The GSM8K positive control's data, prompt, reward and metrics (below). |
 | `rl/train.py` | The trainer: TRL's `GRPOTrainer` plus dev evaluation, selection and a few fixes listed in `ArgGymGRPOTrainer`. |
 | `rl/export.py` | Merges the adapter into a copy of the base checkpoint and checks that every trained tensor differs from base. |
 | `rl/launch.py` | The one command above. |
-| `rl/configs/` | `smoke.yaml`, `qwen3-4b*.yaml`, `qwen3.5-4b.yaml`, `qwen3.5-4b-curriculum.yaml`. Every hyperparameter is in the file, with the reason next to it. |
+| `rl/configs/` | `smoke.yaml`, `qwen3-4b*.yaml`, `qwen3.5-4b.yaml`, `qwen3.5-4b-curriculum.yaml`, `gsm8k-qwen3-0.6b.yaml`. Every hyperparameter is in the file, with the reason next to it. |
 
 Tests are in `tests/rl/` and run on CPU; the ones that need a GPU or a live vLLM
 server skip by default.
@@ -114,6 +115,34 @@ No run has yet shown an improvement on the eval taskset. A trained model counts
 as better only after `rl.export` and an `evals.run` on the lite taskset,
 compared with the stored base result; dev success picks the checkpoint but is
 too small a sample to report.
+
+## GSM8K positive control
+
+No ArgGYM run has raised reward yet, which leaves two explanations: the
+pipeline is broken, or ArgGYM is hard for these models. GRPO is known to raise
+GSM8K accuracy within tens of steps, so a run that does not points at the
+pipeline.
+
+```
+uv run --group rl python -m rl.launch rl/configs/gsm8k-qwen3-0.6b.yaml
+uv run --group rl python -m rl.launch rl/configs/gsm8k-qwen3-0.6b.yaml grpo.learning_rate=1e-4
+```
+
+`task: gsm8k` in the config swaps four things: the rows (HF `openai/gsm8k`,
+`main`; training from `train`, dev from 200 seeded `test` problems), the prompt
+(the question and "put your final answer within `\boxed{}`", thinking on), the
+reward (1 when the last `\boxed{}` is the gold number, compared as numbers;
+`None` when truncated) and the selection metric (`eval_gsm8k_success_rate`).
+The trainer, vLLM server, weight sync, IS correction, DAPO loss, LoRA and dev
+evaluation are the ArgGYM runs' own; a config without `task` is an ArgGYM run,
+unchanged. No pool is built. Qwen3-0.6B's dev evaluation samples as
+`evals/conf/model/hf-qwen3-0.6b.yaml` says, the card's settings at a 32,768 cap.
+
+What to read: `gsm8k_success_rate` per step and `eval_gsm8k_success_rate` every
+10 steps, against the step-0 dev score in `selection.json`. The 8,192-token
+completion cap is a guess, twice TRL's example; read `gsm8k_truncated_rate` at
+step 0 before trusting the run, and lower or raise it from the CLI
+(`grpo.max_completion_length=4096`).
 
 ## Known limits
 

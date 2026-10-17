@@ -14,12 +14,13 @@ from rl import config as rl_config
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b.yaml",
-           "rl/configs/qwen3.5-4b-curriculum.yaml")
-REAL = (CONFIGS[0], CONFIGS[2], CONFIGS[3])
+           "rl/configs/qwen3.5-4b-curriculum.yaml", "rl/configs/gsm8k-qwen3-0.6b.yaml")
+REAL = (CONFIGS[0], CONFIGS[2], CONFIGS[3], CONFIGS[4])
 #: The longest prompt in data/taskset.jsonl: 4,066 tokens with the Qwen3
 #: tokenizer, 5,336 with Qwen3.5's (their eval configs). rl.train measures the
-#: real number at start-up and refuses a context that does not fit.
-LONGEST_PROMPT = {"Qwen/Qwen3-4B": 4066, "Qwen/Qwen3.5-4B": 5336}
+#: real number at start-up and refuses a context that does not fit. Qwen3-0.6B
+#: trains on GSM8K only, whose longest prompt (train and test) is 235 tokens.
+LONGEST_PROMPT = {"Qwen/Qwen3-4B": 4066, "Qwen/Qwen3.5-4B": 5336, "Qwen/Qwen3-0.6B": 235}
 
 
 def test_the_qwen35_config_holds_the_decisions():
@@ -45,6 +46,41 @@ def test_the_qwen35_config_holds_the_decisions():
     assert (dev["presence_penalty"], dev["max_completion_length"]) == (1.5, 65536)
     # A collective must outlast the longest generation rank 0 waits on.
     assert g["ddp_timeout"] >= 3 * 3600
+
+
+def test_the_gsm8k_control_holds_the_decisions():
+    cfg = rl_config.load(str(ROOT / "rl/configs/gsm8k-qwen3-0.6b.yaml"))
+    first = rl_config.load(str(ROOT / "rl/configs/qwen3-4b.yaml"))
+    g, f = cfg["grpo"], first["grpo"]
+    assert cfg["task"] == "gsm8k" and cfg["selection_metric"] == "eval_gsm8k_success_rate"
+    assert cfg["model"] == {"name": "Qwen/Qwen3-0.6B",
+                            "revision": "c1899de289a04d12100db370d81485cdf75e47ca"}
+    assert rl_config.eval_model(cfg)["chat_template_kwargs"] == {"enable_thinking": True}
+    assert (cfg["data"]["dataset"], cfg["data"]["config"]) == ("openai/gsm8k", "main")
+    assert cfg["data"]["dev_size"] == 200 and "curriculum" not in cfg
+    # The loss, IS, LoRA and rollout sampling of the first run, so the control
+    # tests that pipeline; LR and batch follow TRL's Qwen3-0.6B LoRA reproduction.
+    assert cfg["lora"] == first["lora"]
+    for key in ("loss_type", "beta", "epsilon", "epsilon_high", "scale_rewards",
+                "mask_truncated_completions", "importance_sampling_level",
+                "vllm_importance_sampling_correction", "num_generations", "num_iterations",
+                "ddp_find_unused_parameters",
+                "temperature", "top_p", "top_k", "lr_scheduler_type"):
+        assert g[key] == f[key], key
+    assert "generation_kwargs" not in g and "presence_penalty" not in g
+    assert (g["learning_rate"], cfg["prompts_per_step"]) == (3e-5, 16)
+    assert g["max_completion_length"] == 8192
+    assert (g["eval_steps"], g["save_steps"], g["max_steps"]) == (10, 10, 200)
+    assert (cfg["vllm"]["gpu"], cfg["trainer_gpus"]) == (0, "1,2")
+    # An override reaches the learning rate.
+    assert rl_config.load(str(ROOT / "rl/configs/gsm8k-qwen3-0.6b.yaml"),
+                          ["grpo.learning_rate=1e-4"])["grpo"]["learning_rate"] == 1e-4
+
+
+def test_an_arggym_config_names_no_task_and_selects_on_arggym_success():
+    for path in CONFIGS[:4]:
+        cfg = rl_config.load(str(ROOT / path))
+        assert "task" not in cfg and "selection_metric" not in cfg
 
 
 @pytest.mark.parametrize("path", CONFIGS)
@@ -96,7 +132,10 @@ def test_the_batch_arithmetic_closes_on_two_trainer_gpus(path):
     assert world == 2 and str(cfg["vllm"]["gpu"]) not in str(cfg["trainer_gpus"]).split(",")
     completions = g["per_device_train_batch_size"] * world * g["gradient_accumulation_steps"]
     assert completions == cfg["prompts_per_step"] * g["num_generations"]
-    dev_rows = 12 * len(cfg["data"]["levels"]) * cfg["data"]["dev"]["per_task_level"]
+    if cfg.get("task") == "gsm8k":
+        dev_rows = cfg["data"]["dev_size"]
+    else:
+        dev_rows = 12 * len(cfg["data"]["levels"]) * cfg["data"]["dev"]["per_task_level"]
     assert dev_rows * g["num_generations_eval"] % (g["per_device_eval_batch_size"] * world) == 0
     # A checkpoint at every eval and an eval at every checkpoint.
     assert g["save_steps"] == g["eval_steps"]
@@ -120,7 +159,8 @@ def test_the_run_name_encodes_model_loss_lr_and_seed():
     assert names == {CONFIGS[0]: "qwen3-4b-dapo-lr1e-05-s7",
                      CONFIGS[1]: "smoke-qwen3-4b-dapo-lr1e-05-s7",
                      CONFIGS[2]: "qwen3.5-4b-dapo-lr1e-05-s7",
-                     CONFIGS[3]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7"}
+                     CONFIGS[3]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7",
+                     CONFIGS[4]: "gsm8k-qwen3-0.6b-dapo-lr3e-05-s7"}
 
 
 def test_an_eval_model_the_run_cannot_follow_is_refused(tmp_path, monkeypatch):

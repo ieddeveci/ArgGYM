@@ -7,10 +7,11 @@ so a field TRL renames fails at start-up rather than being dropped. What this
 file adds to TRL's trainer is small and listed in `ArgGymGRPOTrainer`.
 
 Checkpoints are selected on the dev split's strict success,
-`eval_arggym_success_rate`, never on reward. With `load_best_model_at_end` the
-best checkpoint survives `save_total_limit`; `selection.json` names it when the
-run ends, beside the base model's step-0 score and whether the checkpoint beats
-it, and `rl.export` merges it. Dev success is a selection signal over a few
+`eval_arggym_success_rate`, never on reward; `selection_metric` names another
+for `task: gsm8k`, the positive control in `rl.gsm8k`. With
+`load_best_model_at_end` the best checkpoint survives `save_total_limit`;
+`selection.json` names it when the run ends, beside the base model's step-0
+score and whether the checkpoint beats it, and `rl.export` merges it. Dev success is a selection signal over a few
 hundred samples, picked as the maximum of many evaluations; quote the selected
 checkpoint's score on the eval taskset, not its dev score.
 """
@@ -28,7 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 from rl import config as rl_config
-from rl import pool
+from rl import gsm8k, pool
 from rl.curriculum import Curriculum, base_pass_counts, group_outcomes, summary
 from rl.export import SELECTION, checkpoint_keys
 from rl.reward import make_reward
@@ -459,12 +460,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if getattr(tokenizer, attr, None) is not None:
             raise SystemExit(f"the tokenizer sets {attr}; rl.reward reads raw content")
     stop_ids = {tokenizer.eos_token_id, tokenizer.pad_token_id}
-    elicit = pool.elicitation(cfg["prompt"]["elicitation"])
-    template = cfg["prompt"]["template"]
     template_kwargs = rl_config.eval_model(cfg)["chat_template_kwargs"]
     dev_sampling = rl_config.dev_sampling(cfg)
-    train_rows = pool.trl_rows(pool.load_split(cfg, "train"), template, elicit)
-    dev_rows = pool.trl_rows(pool.load_split(cfg, "dev"), template, elicit)
+    task = cfg.get("task", "arggym")
+    if task == "gsm8k":
+        train_split, dev_split = gsm8k.load_splits(cfg["data"])
+        train_rows, dev_rows = gsm8k.trl_rows(train_split), gsm8k.trl_rows(dev_split)
+        reward = gsm8k.make_reward(stop_ids)
+        data_summary = {"data": cfg["data"]}
+    elif task == "arggym":
+        elicit = pool.elicitation(cfg["prompt"]["elicitation"])
+        template = cfg["prompt"]["template"]
+        train_rows = pool.trl_rows(pool.load_split(cfg, "train"), template, elicit)
+        dev_rows = pool.trl_rows(pool.load_split(cfg, "dev"), template, elicit)
+        reward = make_reward(stop_ids, template)
+        data_summary = json.loads((pool.pool_dir(cfg) / "summary.json").read_text())
+    else:
+        raise SystemExit(f"task {task!r}: rl.train knows arggym and gsm8k")
     texts = [tokenizer.apply_chat_template(r["prompt"], add_generation_prompt=True,
                                            tokenize=False, **template_kwargs)
              for r in train_rows + dev_rows]
@@ -480,7 +492,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         raise SystemExit(
             f"dev split: {len(dev)} rows x {n_eval} samples is not a multiple of the global eval "
             f"batch {eval_batch}; the last batch would be padded with repeated rows and bias "
-            f"eval_arggym_success_rate. Change per_device_eval_batch_size.")
+            f"the dev success rate. Change per_device_eval_batch_size.")
 
     args = GRPOConfig(
         output_dir=str(out), run_name=name, seed=cfg["seed"], report_to=["trackio"],
@@ -488,7 +500,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         chat_template_kwargs=template_kwargs,
         use_vllm=True, vllm_mode="server",
         vllm_server_base_url=f"http://127.0.0.1:{cfg['vllm']['port']}",
-        metric_for_best_model="eval_arggym_success_rate", greater_is_better=True,
+        metric_for_best_model=cfg.get("selection_metric", "eval_arggym_success_rate"),
+        greater_is_better=True,
         load_best_model_at_end=True, remove_unused_columns=False,
         # On resume Transformers would replay the consumed batches to skip them,
         # which would advance the curriculum; its state is restored instead.
@@ -508,7 +521,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         curriculum.load(Path(a.resume))
     trainer = _trainer_class()(
         model=model, args=args, train_dataset=train, eval_dataset=dev,
-        reward_funcs=make_reward(stop_ids, template), processing_class=tokenizer,
+        reward_funcs=reward, processing_class=tokenizer,
         peft_config=lora, completions_every=cfg["completions_every"],
         dev_sampling=dev_sampling, checkpoint_keys=checkpoint_keys(m["name"], m["revision"]),
         guard=guard, curriculum=curriculum, curriculum_log=out / "curriculum.jsonl",
@@ -527,7 +540,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         manifest = {
             "run_name": name, "config": cfg, "argv": sys.argv, "git_sha": _git_sha(),
             "versions": _versions(), "world_size": world,
-            "pool": json.loads((pool.pool_dir(cfg) / "summary.json").read_text()),
+            "pool": data_summary,
             "n_train": len(train), "n_dev": len(dev),
             "trainable_params": sum(p.numel() for p in trainer.model.parameters()
                                     if p.requires_grad),

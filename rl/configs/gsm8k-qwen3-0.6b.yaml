@@ -1,0 +1,130 @@
+# Positive control: GRPO on GSM8K with Qwen3-0.6B, thinking on.
+#
+#   uv run --group rl python -m rl.launch rl/configs/gsm8k-qwen3-0.6b.yaml
+#   uv run --group rl python -m rl.launch rl/configs/gsm8k-qwen3-0.6b.yaml grpo.learning_rate=1e-4
+#
+# GRPO is known to raise GSM8K accuracy within tens of steps. If this run does
+# not, the pipeline is broken; if it does and ArgGYM does not, ArgGYM is hard.
+# The trainer, vLLM server, weight sync, IS correction, DAPO loss, LoRA and dev
+# evaluation are the ArgGYM runs'; only the data, prompt, reward and selection
+# metric differ (rl/gsm8k.py). Loss, IS, LoRA and rollout sampling are
+# qwen3-4b.yaml's; learning rate, batch and length follow TRL's Qwen3-0.6B LoRA
+# reproduction (docs: lora_without_regret).
+
+name: gsm8k-qwen3-0.6b
+task: gsm8k
+seed: 0
+output_root: outputs/rl
+project: arggym-rl
+
+model:
+  name: Qwen/Qwen3-0.6B
+  # Hub main on 2026-10-17. BF16, the published precision.
+  revision: c1899de289a04d12100db370d81485cdf75e47ca
+
+# Training prompts take its chat-template arguments (thinking on); dev
+# evaluation takes the card's sampling and its 32,768-token cap.
+eval_model: hf-qwen3-0.6b
+
+# Dev success on 200 held-out test problems, never reward.
+selection_metric: eval_gsm8k_success_rate
+
+data:
+  dataset: openai/gsm8k
+  config: main
+  revision: e53f048856ff4f594e959d75785d2c2d37b678ee
+  # 7,473 training problems: 200 steps of 16 prompts draw 3,200, none twice.
+  # Dev is 200 of the 1,319 test problems, drawn with this seed; a question
+  # the train split also holds would be dropped first (there are none).
+  dev_size: 200
+  dev_seed: 0
+
+lora:
+  r: 32
+  alpha: 32
+  dropout: 0.0
+  target_modules: all-linear
+
+vllm:
+  gpu: 0
+  port: 8000
+  # The model's whole context: the 32,768 dev cap plus at most 8,192 of prompt
+  # (the longest GSM8K prompt is 235 tokens). KV is 112 KiB a token, so the
+  # pool holds about 600k tokens.
+  max_model_len: 40960
+  gpu_memory_utilization: 0.9
+  ready_timeout_s: 1800
+  extra_args: []
+
+trainer_gpus: "1,2"
+
+# Checked against the batch fields below and the number of trainer GPUs.
+prompts_per_step: 16
+
+# Completions table to trackio every this many steps, and on every eval.
+completions_every: 10
+
+grpo:
+  # 3x the ArgGYM runs' 1e-5. LoRA's best LR is about 10x full fine-tuning's
+  # (1e-6 to 2e-6 in the published GRPO recipes), more for runs this short;
+  # TRL's own Qwen3-0.6B LoRA example uses 5e-5. Override from the CLI.
+  learning_rate: 3.0e-5
+  lr_scheduler_type: constant_with_warmup
+  warmup_steps: 5
+  max_steps: 200
+  optim: adamw_torch_fused
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  bf16: true
+  gradient_checkpointing: true
+  disable_dropout: true
+  shuffle_dataset: true
+
+  # 8 completions x 2 GPUs x 8 accumulation = 128 = 16 prompts x 8.
+  # One vLLM generation per optimizer step.
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 8
+  num_generations: 8
+  num_iterations: 1
+
+  loss_type: dapo
+  beta: 0.0
+  # A PeftModel is not a PreTrainedModel, so Trainer would search for unused
+  # parameters on every backward; every LoRA parameter is used.
+  ddp_find_unused_parameters: false
+  epsilon: 0.2
+  epsilon_high: 0.28
+  scale_rewards: none
+  mask_truncated_completions: true
+  importance_sampling_level: token
+  vllm_importance_sampling_correction: true
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_clip_max: 2.0
+
+  # Training rollouts at T=1 with no truncation and no penalty, as in
+  # qwen3-4b.yaml, so the vLLM/trainer IS gap stays small.
+  temperature: 1.0
+  top_p: 1.0
+  top_k: 0
+  # Qwen3-0.6B's thinking length on GSM8K is not measured here (no GPU was free
+  # to measure it); TRL's example caps at 4,096. Double that, so thinking
+  # rarely truncates at T=1: check completions/clipped_ratio and
+  # gsm8k_truncated_rate at step 0, and lower the cap if both are near 0.
+  max_completion_length: 8192
+  vllm_server_timeout: 1800
+
+  # 200 dev rows x 4 samples = 800 = 8 batches of 50 x 2 GPUs: 100 sequences
+  # per vLLM call, which leaves room in the ~600k-token pool for several that
+  # run to the 32,768 cap.
+  num_generations_eval: 4
+  per_device_eval_batch_size: 50
+  eval_strategy: steps
+  eval_steps: 10
+  eval_on_start: true
+  save_strategy: steps
+  save_steps: 10
+  # The best checkpoint by eval_gsm8k_success_rate and the latest.
+  save_total_limit: 2
+
+  logging_steps: 1
+  log_completions: true

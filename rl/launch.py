@@ -3,9 +3,9 @@
     uv run --group rl python -m rl.launch rl/configs/smoke.yaml
     uv run --group rl python -m rl.launch rl/configs/qwen3-4b.yaml grpo.learning_rate=2e-5
 
-In order: build the pool if `data` names one not built yet; start `vllm serve`
-on `vllm.gpu` and wait for it; run `accelerate launch -m rl.train` on
-`trainer_gpus`; merge the selected checkpoint and check it (`rl.export`). The
+In order: build the pool if `data` names one not built yet (ArgGYM only);
+start `vllm serve` on `vllm.gpu` and wait for it; run `accelerate launch -m
+rl.train` on `trainer_gpus`; merge the selected checkpoint and check it (`rl.export`). The
 server is torn down on every exit path, Ctrl-C and SIGTERM included, by killing
 its whole process group: vLLM forks an engine process that would otherwise
 outlive the parent and hold the GPU.
@@ -126,7 +126,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # SIGTERM (tmux kill-session, a scheduler) becomes an exception, so `finally` runs.
     signal.signal(signal.SIGTERM, _interrupt)
 
-    _run([py, "-m", "rl.pool", a.config, *a.overrides], env)
+    if cfg.get("task", "arggym") == "arggym":  # GSM8K reads its rows from the HF cache
+        _run([py, "-m", "rl.pool", a.config, *a.overrides], env)
 
     server = trainer = None
     try:
