@@ -87,6 +87,9 @@ grpo:
 
   loss_type: dapo
   beta: 0.0
+  # A PeftModel is not a PreTrainedModel, so Trainer would search for unused
+  # parameters on every backward; every LoRA parameter is used.
+  ddp_find_unused_parameters: false
   epsilon: 0.2
   epsilon_high: 0.28
   scale_rewards: none

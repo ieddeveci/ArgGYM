@@ -174,6 +174,13 @@ def merged_params(gen):
     vLLM's loader maps from: Qwen3.5 trains as a text-only model whose tensors
     the checkpoint, a vision-language one, keeps under `model.language_model.`.
     A tensor with no checkpoint name stops the sync instead of being dropped.
+
+    The rounding to BF16 drops any delta smaller than half the BF16 spacing of
+    the weight it lands on: at LR 1e-5, 40 steps in, 7.9% of the adapted
+    weights had changed and the served model carried 23% of the update.
+    `gen.sync_stats` keeps, for the last sync, how many adapted elements moved
+    and the share of the delta that survived the rounding (its projection on
+    the intended delta), which the trainer logs as `sync/*`.
     """
     import torch
 
@@ -183,6 +190,7 @@ def merged_params(gen):
     keys = gen.checkpoint_keys
     tied = bool(model.config.get_text_config().tie_word_embeddings)
     modules = dict(model.named_modules())
+    moved = total = served = intended = 0.0
     with torch.no_grad():
         for name, param in model.named_parameters():
             if model.prefix in name or "original_module" in name:
@@ -193,6 +201,11 @@ def merged_params(gen):
                 if not owner.merged and not owner.disable_adapters:
                     delta = sum(owner.get_delta_weight(a).float() for a in owner.active_adapters)
                     tensor = (param.data.float() + delta).to(param.dtype)
+                    kept = tensor.float() - param.data.float()
+                    moved += (kept != 0).sum().item()
+                    total += kept.numel()
+                    served += (kept * delta).sum().item()
+                    intended += (delta * delta).sum().item()
             plain = gen._fix_param_name_to_vllm(
                 name.removeprefix("base_model.model.").replace(".base_layer", ""),
                 extra_prefixes=["modules_to_save.default."])
@@ -203,6 +216,10 @@ def merged_params(gen):
                 raise RuntimeError(f"{plain} has no tensor in the base checkpoint; vLLM "
                                    f"would not load it")
             yield ckpt, tensor
+    if total:
+        gen.sync_stats = {"sync/moved_fraction": moved / total}
+        if intended:
+            gen.sync_stats["sync/served_share"] = served / intended
 
 
 def build_curriculum(cfg: Dict[str, Any], train_rows: Sequence[Dict[str, Any]]) -> Curriculum:
@@ -309,6 +326,7 @@ def _trainer_class():
                 eval_step = self.args.eval_steps and step % self.args.eval_steps == 0
                 self.log_completions = self.args.log_completions and (
                     step % self.completions_every == 0 and not eval_step)
+                logs.update(getattr(self.vllm_generation, "sync_stats", {}))
                 if self.curriculum is not None:
                     logs.update(self._log_curriculum(step))
             else:

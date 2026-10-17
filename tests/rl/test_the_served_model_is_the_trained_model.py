@@ -182,3 +182,18 @@ def test_export_fails_an_adapter_that_changes_nothing(tmp_path):
     report = _export(tmp_path, train=False)
     assert not report["ok"]
     assert len(report["trained_identical_to_base"]) == report["n_trained"]
+
+
+@pytest.mark.parametrize("scale, served", [(0.05, (0.95, 1.05)), (1e-5, (0.0, 0.5))])
+def test_the_sync_reports_how_much_of_the_update_survived_bf16(scale, served):
+    pm = with_adapter(tiny_qwen35(), train=True)
+    with torch.no_grad():
+        for name, p in pm.named_parameters():
+            if "lora_B" in name:
+                p.normal_(0, scale)
+    keys = {vl_name(n) for n, _ in tiny_qwen35().named_parameters()}
+    gen = gen_for(pm, keys)
+    dict(merged_params(gen))
+    low, high = served
+    assert low <= gen.sync_stats["sync/served_share"] <= high
+    assert (gen.sync_stats["sync/moved_fraction"] > 0.9) == (scale == 0.05)
