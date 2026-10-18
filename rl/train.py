@@ -179,6 +179,8 @@ def merged_params(gen):
     The rounding to BF16 drops any delta smaller than half the BF16 spacing of
     the weight it lands on: at LR 1e-5, 40 steps in, 7.9% of the adapted
     weights had changed and the served model carried 23% of the update.
+    With `vllm.dtype: float32` the server holds FP32 weights and the adapted
+    tensors are sent in FP32, so nothing is rounded away.
     `gen.sync_stats` keeps, for the last sync, how many adapted elements moved
     and the share of the delta that survived the rounding (its projection on
     the intended delta), which the trainer logs as `sync/*`.
@@ -201,7 +203,8 @@ def merged_params(gen):
                 owner = modules[name[: -len(".base_layer.weight")]]
                 if not owner.merged and not owner.disable_adapters:
                     delta = sum(owner.get_delta_weight(a).float() for a in owner.active_adapters)
-                    tensor = (param.data.float() + delta).to(param.dtype)
+                    tensor = (param.data.float() + delta).to(getattr(gen, "sync_dtype", None)
+                                                              or param.dtype)
                     kept = tensor.float() - param.data.float()
                     moved += (kept != 0).sum().item()
                     total += kept.numel()
@@ -298,7 +301,7 @@ def _trainer_class():
         """
 
         def __init__(self, *args, completions_every: int, dev_sampling: Dict[str, Any],
-                     checkpoint_keys: set, guard: FallbackGuard,
+                     checkpoint_keys: set, guard: FallbackGuard, sync_dtype: Any = None,
                      curriculum: Optional[Curriculum] = None, curriculum_log: Any = None,
                      table_every: int = 5, **kwargs):
             self.curriculum = curriculum
@@ -312,6 +315,7 @@ def _trainer_class():
             if not is_peft_model(gen.model) or gen._dist.is_fsdp or gen._dist.is_zero3:
                 raise SystemExit("rl.train syncs LoRA weights under DDP only")
             gen.checkpoint_keys = checkpoint_keys
+            gen.sync_dtype = sync_dtype
             gen._iter_named_params = types.MethodType(merged_params, gen)
 
         def log(self, logs, start_time=None):
@@ -524,6 +528,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reward_funcs=reward, processing_class=tokenizer,
         peft_config=lora, completions_every=cfg["completions_every"],
         dev_sampling=dev_sampling, checkpoint_keys=checkpoint_keys(m["name"], m["revision"]),
+        sync_dtype=getattr(torch, cfg["vllm"].get("dtype", "bfloat16")),
         guard=guard, curriculum=curriculum, curriculum_log=out / "curriculum.jsonl",
         table_every=(cfg.get("curriculum") or {}).get("table_every", 5))
     if curriculum is not None:

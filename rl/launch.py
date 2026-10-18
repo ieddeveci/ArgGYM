@@ -44,7 +44,7 @@ def vllm_command(cfg: Dict[str, Any]) -> List[str]:
     v, m = cfg["vllm"], cfg["model"]
     return [sys.executable, "-m", "vllm.entrypoints.cli.main", "serve", m["name"],
             "--served-model-name", rl_config.eval_model(cfg)["model"],
-            "--revision", m["revision"], "--dtype", "bfloat16",
+            "--revision", m["revision"], "--dtype", v.get("dtype", "bfloat16"),
             "--host", "127.0.0.1", "--port", str(v["port"]),
             "--max-model-len", str(v["max_model_len"]),
             "--gpu-memory-utilization", str(v["gpu_memory_utilization"]),

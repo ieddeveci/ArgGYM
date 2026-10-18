@@ -52,6 +52,11 @@ vllm:
   # (the longest GSM8K prompt is 235 tokens). KV is 112 KiB a token, so the
   # pool holds about 600k tokens.
   max_model_len: 40960
+  # FP32 weights on the server, and the merged adapter sent in FP32: a LoRA
+  # delta below half the BF16 spacing of its weight rounds away in a BF16 merge
+  # (at LR 1e-4, 46% of the update reached the server at step 10). With nothing
+  # rounded away, the LR is set for stability alone.
+  dtype: float32
   gpu_memory_utilization: 0.9
   ready_timeout_s: 1800
   extra_args: []
@@ -65,10 +70,10 @@ prompts_per_step: 16
 completions_every: 10
 
 grpo:
-  # 3x the ArgGYM runs' 1e-5. LoRA's best LR is about 10x full fine-tuning's
-  # (1e-6 to 2e-6 in the published GRPO recipes), more for runs this short;
-  # TRL's own Qwen3-0.6B LoRA example uses 5e-5. Override from the CLI.
-  learning_rate: 3.0e-5
+  # 10x the full fine-tuning LR of the published GRPO recipes (1e-6 to
+  # 2e-6), the LoRA rule. At 1e-4 the policy drifted: dev fell from 0.83 to
+  # 0.75 between steps 60 and 80. Override from the CLI.
+  learning_rate: 2.0e-5
   lr_scheduler_type: constant_with_warmup
   warmup_steps: 5
   max_steps: 200

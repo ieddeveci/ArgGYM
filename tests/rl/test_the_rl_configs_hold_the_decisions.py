@@ -70,7 +70,9 @@ def test_the_gsm8k_control_holds_the_decisions():
     assert "generation_kwargs" not in g and "presence_penalty" not in g
     # Truncation pays 0 and is trained on; masking it rewarded never finishing.
     assert g["mask_truncated_completions"] is False
-    assert (g["learning_rate"], cfg["prompts_per_step"]) == (3e-5, 16)
+    assert (g["learning_rate"], cfg["prompts_per_step"]) == (2e-5, 16)
+    # The server holds FP32 weights so no part of the update rounds away.
+    assert cfg["vllm"]["dtype"] == "float32"
     assert g["max_completion_length"] == 8192
     assert (g["eval_steps"], g["save_steps"], g["max_steps"]) == (10, 10, 200)
     assert (cfg["vllm"]["gpu"], cfg["trainer_gpus"]) == (0, "1,2")
@@ -162,7 +164,7 @@ def test_the_run_name_encodes_model_loss_lr_and_seed():
                      CONFIGS[1]: "smoke-qwen3-4b-dapo-lr1e-05-s7",
                      CONFIGS[2]: "qwen3.5-4b-dapo-lr1e-05-s7",
                      CONFIGS[3]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7",
-                     CONFIGS[4]: "gsm8k-qwen3-0.6b-dapo-lr3e-05-s7"}
+                     CONFIGS[4]: "gsm8k-qwen3-0.6b-dapo-lr2e-05-s7"}
 
 
 def test_an_eval_model_the_run_cannot_follow_is_refused(tmp_path, monkeypatch):

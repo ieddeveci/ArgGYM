@@ -197,3 +197,16 @@ def test_the_sync_reports_how_much_of_the_update_survived_bf16(scale, served):
     low, high = served
     assert low <= gen.sync_stats["sync/served_share"] <= high
     assert (gen.sync_stats["sync/moved_fraction"] > 0.9) == (scale == 0.05)
+
+
+def test_an_fp32_sync_serves_the_whole_update_however_small():
+    pm = with_adapter(tiny_qwen35(), train=True)
+    with torch.no_grad():
+        for name, p in pm.named_parameters():
+            if "lora_B" in name:
+                p.normal_(0, 1e-5)
+    gen = gen_for(pm, {vl_name(n) for n, _ in tiny_qwen35().named_parameters()})
+    gen.sync_dtype = torch.float32
+    sent = dict(merged_params(gen))
+    assert sent["model.language_model.layers.0.linear_attn.in_proj_qkv.weight"].dtype == torch.float32
+    assert gen.sync_stats["sync/served_share"] == pytest.approx(1.0, abs=1e-3)
