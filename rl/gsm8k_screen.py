@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from rl import config as rl_config
 from rl import gsm8k
+from rl.launch import vllm_env
 
 
 def main() -> None:
@@ -29,6 +31,9 @@ def main() -> None:
     a = ap.parse_args()
     cfg = rl_config.load(a.config)
     i, n = (int(x) for x in a.shard.split("/"))
+    # The server's sampler and PATH (`rl.launch.vllm_env`); its GPU is CUDA_VISIBLE_DEVICES's.
+    gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
+    os.environ.update(vllm_env(cfg, dict(os.environ)), CUDA_VISIBLE_DEVICES=gpu)
     from datasets import load_dataset
     from vllm import LLM, SamplingParams
 
