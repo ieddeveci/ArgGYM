@@ -4,6 +4,7 @@ Reads `openai/gsm8k` from the Hugging Face cache; skips when it is not there.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -45,3 +46,24 @@ def test_every_row_has_a_numeric_gold(splits):
         for r in gsm8k.trl_rows(rows):
             assert isinstance(r["gold"], float)
             assert r["prompt"][-1]["content"].endswith(gsm8k.INSTRUCTION)
+
+
+def _shards(tmp_path, counts):
+    for i in range(2):
+        rows = [{"id": k, "passes": p, "samples": 8} for k, p in list(counts.items())[i::2]]
+        (tmp_path / f"shard-{i}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def test_the_screen_keeps_questions_whose_passes_lie_in_the_range(tmp_path):
+    ids = [f"train-{i}" for i in range(7473)] + [f"test-{i}" for i in range(1319)]
+    counts = {k: i % 9 for i, k in enumerate(ids)}
+    _shards(tmp_path, counts)
+    kept = gsm8k.screened({"path": str(tmp_path), "samples": 8, "passes": [2, 6]})
+    assert kept == {k for k, p in counts.items() if 2 <= p <= 6}
+
+
+def test_a_missing_shard_is_refused(tmp_path):
+    _shards(tmp_path, {f"train-{i}": 3 for i in range(7473)} | {f"test-{i}": 3 for i in range(1319)})
+    (tmp_path / "shard-1.jsonl").unlink()
+    with pytest.raises(ValueError, match="shard is missing"):
+        gsm8k.screened({"path": str(tmp_path), "samples": 8, "passes": [2, 6]})

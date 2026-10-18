@@ -17,9 +17,11 @@ and dev success fell from 0.805 to 0.735.
 """
 from __future__ import annotations
 
+import json
 import random
 import re
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from rl.reward import _gather, text_of
@@ -64,16 +66,41 @@ def correct(text: str, gold_value: float) -> bool:
 
 
 def load_splits(data: Dict[str, Any]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Training rows from `train`, `dev_size` rows of `test` drawn with `dev_seed`."""
+    """Training rows from `train`, `dev_size` rows of `test` drawn with `dev_seed`.
+
+    With `screen`, both keep only the questions whose base-model passes
+    (`rl.gsm8k_screen`) lie in `screen.passes`, inclusive.
+    """
     from datasets import load_dataset
 
     ds = load_dataset(data["dataset"], data["config"], revision=data["revision"])
+    keep = screened(data["screen"]) if data.get("screen") else None
     train = [{"id": f"train-{i}", **r} for i, r in enumerate(ds["train"])]
     seen = {r["question"].strip() for r in train}
     test = [{"id": f"test-{i}", **r} for i, r in enumerate(ds["test"])
             if r["question"].strip() not in seen]
+    if keep is not None:
+        train = [r for r in train if r["id"] in keep]
+        test = [r for r in test if r["id"] in keep]
     dev = random.Random(data["dev_seed"]).sample(test, data["dev_size"])
     return train, dev
+
+
+def screened(screen: Dict[str, Any]) -> set[str]:
+    """The ids whose passes lie in `screen.passes`; every question must have been screened."""
+    lo, hi = screen["passes"]
+    counts = {}
+    for shard in sorted(Path(screen["path"]).glob("shard-*.jsonl")):
+        for line in shard.read_text().splitlines():
+            r = json.loads(line)
+            if r["samples"] != screen["samples"]:
+                raise ValueError(f"{shard}: {r['id']} has {r['samples']} samples, "
+                                 f"not {screen['samples']}")
+            counts[r["id"]] = r["passes"]
+    if len(counts) != 7473 + 1319:
+        raise ValueError(f"{screen['path']} screens {len(counts)} questions of 8,792; "
+                         f"a shard is missing")
+    return {i for i, p in counts.items() if lo <= p <= hi}
 
 
 def trl_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
