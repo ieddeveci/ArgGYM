@@ -42,9 +42,11 @@ def vllm_command(cfg: Dict[str, Any]) -> List[str]:
     the name it already sends.
 
     With `vllm.sync: adapter` the server also takes LoRA adapters at runtime
-    (`vllm_env` allows the load endpoint). Two slots: the version being
-    replaced and its replacement, or one probe adapter at start-up; a
-    generation request only ever names the current one.
+    (`vllm_env` allows the load endpoint). Unloading an adapter only drops its
+    name; the engine keeps it until its LRU cache, `--max-loras` adapters large,
+    evicts it on a later load. Two is what that needs: a new version is loaded
+    while the one it replaces is still named, and a request only ever names
+    the current one.
     """
     v, m = cfg["vllm"], cfg["model"]
     lora = []

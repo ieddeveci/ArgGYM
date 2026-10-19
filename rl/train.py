@@ -251,22 +251,27 @@ def adapter_tensors(model: Any, keys: set) -> Dict[str, Any]:
     return out
 
 
-def publish_adapter(gen: Any, name: str, tensors: Dict[str, Any]) -> None:
-    """Write the adapter under `gen.adapter_root / name` and load it into vLLM as `name`."""
+def write_adapter(model: Any, final: Path, tensors: Dict[str, Any]) -> None:
+    """A PEFT adapter directory at `final`, written whole before it appears under that name."""
     import shutil
 
     from safetensors.torch import save_file
 
-    final = gen.adapter_root / name
-    tmp = final.with_name(name + ".tmp")
+    tmp = final.with_name(final.name + ".tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
-    gen.model.peft_config["default"].save_pretrained(str(tmp))
+    model.peft_config["default"].save_pretrained(str(tmp))
     save_file({k: v.detach().contiguous().cpu() for k, v in tensors.items()},
               str(tmp / "adapter_model.safetensors"), metadata={"format": "pt"})
     shutil.rmtree(final, ignore_errors=True)
     tmp.rename(final)
-    _lora_call(gen, "load_lora_adapter", {"lora_name": name, "lora_path": str(final)})
+
+
+def publish_adapter(gen: Any, name: str, tensors: Dict[str, Any]) -> None:
+    """Write the adapter under `gen.adapter_root / name` and load it into vLLM as `name`."""
+    write_adapter(gen.model, gen.adapter_root / name, tensors)
+    _lora_call(gen, "load_lora_adapter",
+               {"lora_name": name, "lora_path": str(gen.adapter_root / name)})
 
 
 def retire_adapter(gen: Any, name: str) -> None:
@@ -277,8 +282,11 @@ def retire_adapter(gen: Any, name: str) -> None:
 
 
 def _lora_call(gen: Any, endpoint: str, body: Dict[str, Any]) -> None:
+    """A LoRA endpoint call, bounded like TRL's other calls: a stalled server stops rank 0
+    with its own error rather than leaving the other ranks to time out in a collective."""
     client = gen.vllm_client
-    r = client.session.post(f"{client.base_url}/v1/{endpoint}", json=body)
+    r = client.session.post(f"{client.base_url}/v1/{endpoint}", json=body,
+                            timeout=gen.server_timeout)
     if r.status_code != 200:
         raise RuntimeError(f"vLLM /v1/{endpoint} {body}: {r.status_code} {r.text}")
 
@@ -288,16 +296,17 @@ PROBE_TEXT = ("Question: A baker sells 24 muffins in the morning and half as man
               "afternoon. Each muffin costs $3. How much does the baker earn?\nAnswer: In the "
               "afternoon the baker sells 24 / 2 = 12 muffins, so 24 + 12 = 36 muffins in all, "
               "and 36 * 3 = 108 dollars. The answer is \\boxed{108}.")
-#: A probe moves every adapted weight of one kind by one of these shares of its
-#: norm, the first that shifts the trainer's log-probs by `PROBE_SHIFT` RMS. Qwen3.5's
-#: decay-gate projections (`in_proj_a`, `in_proj_b`) and its normalised keys
-#: need more than the rest: at 0.3 they shift Qwen3.5-4B's log-probs by 0.05.
-PROBE_SIZES = (0.3, 0.6, 1.2, 2.4)
+#: A probe moves every adapted weight of one kind by `size` times its norm,
+#: starting at `PROBE_START` and growing until the trainer's log-probs shift by
+#: `PROBE_SHIFT` RMS (`probe_size`). Most kinds get there at once; Qwen3.5-4B's
+#: decay-gate projections need about 5 to 10 (on CPU, `in_proj_b` shifts 0.08 at
+#: 0.3, 0.64 at 4.8, and saturates near 0.9), so the cap leaves room.
+PROBE_START = 0.3
+PROBE_MAX = 30.0
 PROBE_SHIFT = 0.5
-#: Below this RMS shift the probe cannot tell a served module from a dropped one.
-PROBE_FLOOR = 0.2
-#: The probe passes when vLLM's log-prob shift is within this share of the trainer's.
-#: On CPU, a BF16 against an FP32 forward of the same probe differ by at most 0.13.
+#: The probe passes when vLLM's log-prob shift is within this share of the
+#: trainer's: at a 0.5 RMS shift, 0.25 nats RMS of disagreement between engines.
+#: On CPU, a BF16 and an FP32 forward of the same probe disagree by at most 0.13 of it.
 PROBE_TOLERANCE = 0.5
 
 
@@ -315,12 +324,9 @@ def check_served(kind: str, served: Sequence[float], trained: Sequence[float]) -
     trainer. Taking the difference within each engine cancels the gap between
     their kernels, which the trainer-vs-vLLM metrics already log. A module vLLM
     does not map serves the base weight, so its shift is 0 and the error 1.
+    `probe_size` has already made the trainer's shift `PROBE_SHIFT` or more.
     """
-    rms = _rms(trained)
-    if rms < PROBE_FLOOR:
-        raise RuntimeError(f"the {kind} probe moves the trainer's log-probs by {rms:.3g} RMS, "
-                           f"too little to tell a served adapter from a dropped one")
-    err = _rms([s - t for s, t in zip(served, trained, strict=True)]) / rms
+    err = _rms([s - t for s, t in zip(served, trained, strict=True)]) / _rms(trained)
     if err > PROBE_TOLERANCE:
         raise RuntimeError(
             f"vLLM does not serve the adapter's {kind} as trained: its log-prob shift is off "
@@ -379,13 +385,35 @@ def _served_logprobs(gen: Any, name: str, ids: Sequence[int]) -> list:
     return [row[0] for row in out["actual_logprobs"][0]]
 
 
+def probe_size(kind: str, measure: Any) -> tuple:
+    """The first probe size whose trainer log-prob shift reaches `PROBE_SHIFT` RMS, and the shift.
+
+    `measure(size)` is the trainer's per-token shift at that size. The shift is
+    close to linear in the size until it saturates, so each step scales the size
+    by what is still missing, with 1.5x headroom and at most 4x. Raises, before
+    anything reaches vLLM, if `PROBE_MAX` moves the log-probs too little to tell
+    a served module from a dropped one.
+    """
+    size = PROBE_START
+    while True:
+        shift = measure(size)
+        rms = _rms(shift)
+        if rms >= PROBE_SHIFT:
+            return size, shift
+        if size >= PROBE_MAX:
+            raise RuntimeError(
+                f"the {kind} probe moves the trainer's log-probs by {rms:.3g} RMS at size "
+                f"{size:g}, too little to tell a served adapter from a dropped one")
+        size = min(PROBE_MAX, size * min(4.0, 1.5 * PROBE_SHIFT / max(rms, 1e-9)))
+
+
 def probe_served(gen: Any) -> Dict[str, float]:
     """For each kind of module the adapter trains, check that vLLM serves it as trained.
 
-    A probe adapter with a large delta on that kind alone (`PROBE_SIZES`) is
+    A probe adapter with a large delta on that kind alone (`probe_size`) is
     loaded into vLLM and applied in the trainer, and the two log-prob shifts it
-    causes on a fixed text are compared (`check_served`). The trained adapter cannot be the
-    probe: after one step at a warm-up LR its delta moves log-probs by less than
+    causes on a fixed text are compared (`check_served`). The trained adapter
+    cannot be the probe: after one step at a warm-up LR its delta moves log-probs by less than
     the kernels of the two engines differ, so a dropped adapter and a served
     one would look the same. Runs once, at the first sync, before any rollout.
     """
@@ -401,24 +429,23 @@ def probe_served(gen: Any) -> Dict[str, float]:
         served_base = _served_logprobs(gen, gen.base_name, ids)
         errors = {}
         for kind in sorted(lora_targets(model)):
-            for size in PROBE_SIZES:
+            def measure(size, kind=kind):
                 with probe_adapter(model, kind, size):
-                    trained = [t - b for t, b in zip(_trainer_logprobs(model, ids), trained_base,
-                                                     strict=True)]
-                    if _rms(trained) >= PROBE_SHIFT or size == PROBE_SIZES[-1]:
-                        publish_adapter(gen, f"probe-{kind}",
-                                        adapter_tensors(model, gen.checkpoint_keys))
-                        break
+                    return [t - b for t, b in zip(_trainer_logprobs(model, ids), trained_base,
+                                                  strict=True)]
+
+            size, trained = probe_size(kind, measure)
+            with probe_adapter(model, kind, size):
+                publish_adapter(gen, f"probe-{kind}", adapter_tensors(model, gen.checkpoint_keys))
             served = _served_logprobs(gen, f"probe-{kind}", ids)
             retire_adapter(gen, f"probe-{kind}")
-            errors[kind] = check_served(
-                kind, [s - b for s, b in zip(served, served_base, strict=True)], trained)
+            errors[kind] = {"size": size, "shift_rms": _rms(trained), "error": check_served(
+                kind, [s - b for s, b in zip(served, served_base, strict=True)], trained)}
     finally:
         model.train(training)
         gen.vllm_client.model = gen.base_name
     (gen.adapter_root / "probe.json").write_text(json.dumps(errors, indent=2) + "\n")
-    print(f"vLLM serves every adapted module kind; relative log-prob shift error {errors}",
-          flush=True)
+    print(f"vLLM serves every adapted module kind as trained: {errors}", flush=True)
     return errors
 
 
@@ -428,16 +455,20 @@ def sync_adapter(gen: Any) -> None:
     Rank 0 writes the adapter, loads it into vLLM under a new name and points
     the client at it, so every later request, training and dev alike, carries
     that name in its `model` field (`VLLMClient.generate`). The previous
-    version is unloaded and its files deleted. vLLM keys its prefix cache by
-    adapter, so no cache reset is needed. Other ranks have nothing to send; they
-    wait for rank 0 in the generation's gather.
+    version is unloaded and its files deleted; at the first sync, so are the
+    files a previous attempt in this output directory left. vLLM keys its
+    prefix cache by adapter, so no cache reset is needed. Other ranks have
+    nothing to send; they wait for rank 0 in the generation's gather.
     """
+    import shutil
+
     if not gen.accelerator.is_main_process:
         return
     client = gen.vllm_client
     if gen.adapter_version == 0:
         gen.base_name = client.model
-        gen.adapter_root.mkdir(parents=True, exist_ok=True)
+        shutil.rmtree(gen.adapter_root, ignore_errors=True)
+        gen.adapter_root.mkdir(parents=True)
         probe_served(gen)
     gen.adapter_version += 1
     name = f"policy-v{gen.adapter_version}"

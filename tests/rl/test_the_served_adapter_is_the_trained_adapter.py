@@ -1,8 +1,10 @@
 """Under `vllm.sync: adapter`, vLLM serves the trainer's adapter, named on every request.
 
 vLLM accepts an adapter whose tensor names it does not map and serves the base
-model for those modules, so the names are checked here against vLLM's own
-renaming for both trained models, and at run time a probe per module kind
+model for those modules, so the saved adapter is put through vLLM's own loader
+for both trained models and every module it yields must be one vLLM holds a
+weight for. That the served module also applies LoRA (a supported layer, the
+packed assembly) needs a built model; at run time a probe per module kind
 (`rl.train.probe_served`) stops the run when vLLM's log-prob shift is not the
 trainer's. The server and the trainer are stood in for on CPU: a fake vLLM
 loads each published adapter with PEFT onto a fresh copy of the base model.
@@ -22,12 +24,15 @@ import pytest
 from rl import config as rl_config
 from rl.launch import vllm_command, vllm_env
 from rl.train import (
+    PROBE_SHIFT,
     PROBE_TOLERANCE,
     adapter_tensors,
     check_served,
     probe_adapter,
     probe_served,
+    probe_size,
     sync_adapter,
+    write_adapter,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,9 +99,8 @@ def _snapshot(name):
 
 
 def _vllm_view(snapshot):
-    """The served class's rename of checkpoint names, and its module names, as vLLM builds them."""
+    """Checkpoint names, vLLM's module names for them, and the served class's renaming."""
     pytest.importorskip("vllm")
-    from vllm.lora.utils import parse_fine_tuned_lora_name
     from vllm.model_executor.models.registry import _VLLM_MODELS
 
     from rl.export import _tensors
@@ -113,42 +117,58 @@ def _vllm_view(snapshot):
         if mapped is not None and mapped.endswith(".weight"):
             modules.add(mapped.removesuffix(".weight"))
 
-    def lora_module(name):
-        return parse_fine_tuned_lora_name(name, mapper)[0]
-
-    return keys, modules, lora_module
+    return keys, modules, mapper
 
 
-def _trained_on_meta(name):
+def _trained_on_meta(name, r=32):
     """The adapter `rl.train` trains: the text-only class, all-linear LoRA, no weights loaded."""
     config = transformers.AutoConfig.from_pretrained(name, revision=MODELS[name])
     with torch.device("meta"):
         model = transformers.AutoModelForCausalLM.from_config(config.get_text_config()
                                                               if hasattr(config, "text_config")
                                                               else config)
-        return peft.get_peft_model(model, peft.LoraConfig(r=32, lora_alpha=32,
+        return peft.get_peft_model(model, peft.LoraConfig(r=r, lora_alpha=r,
                                                           target_modules="all-linear"))
 
 
 @pytest.mark.parametrize("name", list(MODELS))
-def test_every_adapted_module_lands_on_a_module_vllm_serves(name):
+def test_vllms_loader_takes_every_adapted_module_onto_a_module_it_serves(name, tmp_path,
+                                                                         monkeypatch):
+    import vllm.lora.lora_model as lora_model
+    from vllm.config.lora import LoRAConfig
+    from vllm.lora.peft_helper import PEFTHelper
+
     snapshot = _snapshot(name)
-    keys, modules, lora_module = _vllm_view(snapshot)
-    pm = _trained_on_meta(name)
-    sent = adapter_tensors(pm, keys)
-    landed = {lora_module(k) for k in sent}
+    keys, modules, mapper = _vllm_view(snapshot)
+    # Rank 1 has the names of rank 32 at a fraction of the bytes.
+    pm = _trained_on_meta(name, r=1)
+    adapter = tmp_path / "policy-v1"
+    write_adapter(pm, adapter, {k: torch.zeros(v.shape)
+                                for k, v in adapter_tensors(pm, keys).items()})
+    # What `/v1/load_lora_adapter` runs (vllm/lora/worker_manager.py, vLLM 0.30),
+    # on CPU: the adapter config against the server's LoRA limits, then the
+    # tensors, names mapped by the served class and checked against the module
+    # kinds vLLM holds weights for.
+    helper = PEFTHelper.from_local_dir(str(adapter), 4096)
+    helper.validate_legal(LoRAConfig(max_lora_rank=32, max_loras=2))
+    monkeypatch.setattr(lora_model, "PIN_MEMORY", False)
+    loaded = lora_model.LoRAModel.from_local_checkpoint(
+        str(adapter), {m.rsplit(".", 1)[-1] for m in modules}, helper, device="cpu",
+        weights_mapper=mapper)
+    landed = set(loaded.loras)
     assert landed <= modules, sorted(landed - modules)[:3]
-    # Every adapted module once, A and B each.
-    assert len(sent) == 2 * len(landed) == 2 * sum(".lora_A." in n for n, _ in
-                                                   pm.named_parameters())
+    # Every adapted module, once.
+    assert len(landed) == sum(".lora_A." in n for n, _ in pm.named_parameters())
 
 
 def test_qwen35s_raw_peft_names_would_serve_the_base_model():
     """Why `adapter_tensors` renames: the text-only class's names map onto nothing in vLLM."""
     snapshot = _snapshot("Qwen/Qwen3.5-4B")
-    _, modules, lora_module = _vllm_view(snapshot)
+    from vllm.lora.utils import parse_fine_tuned_lora_name
+
+    _, modules, mapper = _vllm_view(snapshot)
     raw = peft.get_peft_model_state_dict(_trained_on_meta("Qwen/Qwen3.5-4B"))
-    assert not {lora_module(k) for k in raw} & modules
+    assert not {parse_fine_tuned_lora_name(k, mapper)[0] for k in raw} & modules
 
 
 # --- the guard ------------------------------------------------------------------------------
@@ -164,9 +184,25 @@ def test_the_guard_trips_when_vllm_serves_the_base_model():
     assert check_served("q_proj", noisy, trained) < PROBE_TOLERANCE
 
 
-def test_the_guard_refuses_a_probe_too_small_to_tell():
+def test_the_probe_grows_until_a_saturating_kind_shifts_enough():
+    """Qwen3.5-4B's `in_proj_b` on CPU: 0.08 RMS at size 0.3, 0.64 at 4.8, flat near 0.9."""
+    import math
+
+    def in_proj_b(size):
+        return [0.9 * math.tanh(size / 4.5)] * 8
+
+    size, shift = probe_size("in_proj_b", in_proj_b)
+    assert shift[0] >= PROBE_SHIFT and size > 2.4
+
+
+def test_a_probe_that_cannot_shift_enough_stops_before_vllm_is_asked(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="too little"):
-        check_served("k_proj", [0.0] * 4, [0.01, -0.01, 0.0, 0.02])
+        probe_size("in_proj_b", lambda size: [min(size, 0.3)] * 8)
+    monkeypatch.setattr("rl.train.PROBE_SHIFT", 1e6)
+    gen = _with_base(fake_gen(trained_adapter(), tmp_path))
+    with pytest.raises(RuntimeError, match="too little"):
+        probe_served(gen)
+    assert gen.vllm_client.calls == []
 
 
 def tiny_model():
@@ -218,7 +254,8 @@ class FakeVLLM:
         self.model, self.drop, self.loaded, self.calls = "Qwen/Base", drop, {}, []
         self.session = types.SimpleNamespace(post=self._post)
 
-    def _post(self, url, json):
+    def _post(self, url, json, timeout):
+        assert timeout == 240  # the trainer's vllm_server_timeout
         endpoint = url.rsplit("/", 1)[-1]
         self.calls.append((endpoint, json["lora_name"]))
         if endpoint == "load_lora_adapter":
@@ -240,6 +277,7 @@ def fake_gen(pm, tmp_path, drop=False):
     return types.SimpleNamespace(
         model=pm, accelerator=types.SimpleNamespace(is_main_process=True),
         vllm_client=FakeVLLM(drop), adapter_root=tmp_path / "vllm-lora", adapter_version=0,
+        server_timeout=240,
         checkpoint_keys={n.replace(".base_layer", "") for n, _ in
                          pm.get_base_model().named_parameters() if "lora_" not in n},
         processing_class=lambda text, add_special_tokens: {
@@ -249,13 +287,17 @@ def fake_gen(pm, tmp_path, drop=False):
 def test_every_request_after_a_sync_names_the_newest_adapter(tmp_path):
     pm = trained_adapter()
     gen = fake_gen(pm, tmp_path)
+    for stale in ("policy-v7", "probe-q_proj"):  # an earlier attempt in this output dir
+        (gen.adapter_root / stale).mkdir(parents=True)
     sync_adapter(gen)
     client = gen.vllm_client
     assert client.model == "policy-v1" and set(client.loaded) == {"policy-v1"}
-    errors = json.loads((gen.adapter_root / "probe.json").read_text())
-    assert set(errors) == {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj",
-                           "down_proj"}
-    assert max(errors.values()) < 1e-3  # same kernels on both sides
+    assert sorted(p.name for p in gen.adapter_root.iterdir()) == ["policy-v1", "probe.json"]
+    probe = json.loads((gen.adapter_root / "probe.json").read_text())
+    assert set(probe) == {"q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj",
+                          "down_proj"}
+    assert all(p["shift_rms"] >= PROBE_SHIFT for p in probe.values())
+    assert max(p["error"] for p in probe.values()) < 1e-3  # same kernels on both sides
     with torch.no_grad():
         for n, p in pm.named_parameters():
             if "lora_B" in n:
