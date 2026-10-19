@@ -226,6 +226,227 @@ def merged_params(gen):
             gen.sync_stats["sync/served_share"] = served / intended
 
 
+def adapter_tensors(model: Any, keys: set) -> Dict[str, Any]:
+    """The adapter's tensors, named by the base checkpoint's modules.
+
+    vLLM maps an adapter's names with the served model's checkpoint-to-vLLM
+    renaming and looks each module up by its full name. A name it cannot find is
+    not an error: the module serves the base weight and the load still succeeds.
+    Training loads Qwen3.5 as a text-only model (`model.layers...`), whose
+    checkpoint is a vision-language one (`model.language_model.layers...`), so
+    the names are mapped onto the checkpoint's as `merged_params` maps them.
+    A module with no checkpoint weight stops the sync.
+    """
+    from peft import get_peft_model_state_dict
+
+    from rl.export import to_checkpoint
+
+    out = {}
+    for name, tensor in get_peft_model_state_dict(model).items():
+        module, sep, rest = name.removeprefix("base_model.model.").partition(".lora_")
+        ckpt = to_checkpoint(f"{module}.weight", keys)
+        if not sep or ckpt is None:
+            raise RuntimeError(f"{name}: no LoRA module with a weight in the base checkpoint")
+        out[f"base_model.model.{ckpt.removesuffix('.weight')}{sep}{rest}"] = tensor
+    return out
+
+
+def publish_adapter(gen: Any, name: str, tensors: Dict[str, Any]) -> None:
+    """Write the adapter under `gen.adapter_root / name` and load it into vLLM as `name`."""
+    import shutil
+
+    from safetensors.torch import save_file
+
+    final = gen.adapter_root / name
+    tmp = final.with_name(name + ".tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    gen.model.peft_config["default"].save_pretrained(str(tmp))
+    save_file({k: v.detach().contiguous().cpu() for k, v in tensors.items()},
+              str(tmp / "adapter_model.safetensors"), metadata={"format": "pt"})
+    shutil.rmtree(final, ignore_errors=True)
+    tmp.rename(final)
+    _lora_call(gen, "load_lora_adapter", {"lora_name": name, "lora_path": str(final)})
+
+
+def retire_adapter(gen: Any, name: str) -> None:
+    import shutil
+
+    _lora_call(gen, "unload_lora_adapter", {"lora_name": name})
+    shutil.rmtree(gen.adapter_root / name, ignore_errors=True)
+
+
+def _lora_call(gen: Any, endpoint: str, body: Dict[str, Any]) -> None:
+    client = gen.vllm_client
+    r = client.session.post(f"{client.base_url}/v1/{endpoint}", json=body)
+    if r.status_code != 200:
+        raise RuntimeError(f"vLLM /v1/{endpoint} {body}: {r.status_code} {r.text}")
+
+
+#: Text the probe scores: any fixed tokens do; these are in the training domain.
+PROBE_TEXT = ("Question: A baker sells 24 muffins in the morning and half as many in the "
+              "afternoon. Each muffin costs $3. How much does the baker earn?\nAnswer: In the "
+              "afternoon the baker sells 24 / 2 = 12 muffins, so 24 + 12 = 36 muffins in all, "
+              "and 36 * 3 = 108 dollars. The answer is \\boxed{108}.")
+#: A probe moves every adapted weight of one kind by one of these shares of its
+#: norm, the first that shifts the trainer's log-probs by `PROBE_SHIFT` RMS. Qwen3.5's
+#: decay-gate projections (`in_proj_a`, `in_proj_b`) and its normalised keys
+#: need more than the rest: at 0.3 they shift Qwen3.5-4B's log-probs by 0.05.
+PROBE_SIZES = (0.3, 0.6, 1.2, 2.4)
+PROBE_SHIFT = 0.5
+#: Below this RMS shift the probe cannot tell a served module from a dropped one.
+PROBE_FLOOR = 0.2
+#: The probe passes when vLLM's log-prob shift is within this share of the trainer's.
+#: On CPU, a BF16 against an FP32 forward of the same probe differ by at most 0.13.
+PROBE_TOLERANCE = 0.5
+
+
+def _rms(xs: Sequence[float]) -> float:
+    import math
+
+    return math.sqrt(sum(x * x for x in xs) / max(len(xs), 1))
+
+
+def check_served(kind: str, served: Sequence[float], trained: Sequence[float]) -> float:
+    """The relative error of vLLM's log-prob shift against the trainer's; raises if too large.
+
+    `served` and `trained` are, token by token, the log-prob under a probe
+    adapter minus the log-prob under the base model, from vLLM and from the
+    trainer. Taking the difference within each engine cancels the gap between
+    their kernels, which the trainer-vs-vLLM metrics already log. A module vLLM
+    does not map serves the base weight, so its shift is 0 and the error 1.
+    """
+    rms = _rms(trained)
+    if rms < PROBE_FLOOR:
+        raise RuntimeError(f"the {kind} probe moves the trainer's log-probs by {rms:.3g} RMS, "
+                           f"too little to tell a served adapter from a dropped one")
+    err = _rms([s - t for s, t in zip(served, trained, strict=True)]) / rms
+    if err > PROBE_TOLERANCE:
+        raise RuntimeError(
+            f"vLLM does not serve the adapter's {kind} as trained: its log-prob shift is off "
+            f"the trainer's by {err:.2f} of the shift (0 = identical, 1 = base model served)")
+    return err
+
+
+@contextlib.contextmanager
+def probe_adapter(model: Any, kind: str, size: float, seed: int = 0):
+    """Every `lora_B` zero but on `kind`'s modules, whose delta is `size` times the weight's norm.
+
+    The trained factors are put back on exit; `lora_A` is used as it stands, so
+    a resumed run probes with its own A. Rank 0 alone runs this, outside any
+    forward or backward, and restores the exact values, so DDP ranks stay equal.
+    """
+    import torch
+
+    saved = {}
+    gen = torch.Generator().manual_seed(seed)
+    with torch.no_grad():
+        for name, module in model.named_modules():
+            if not (hasattr(module, "lora_B") and "default" in module.lora_B):
+                continue
+            b = module.lora_B["default"].weight
+            saved[name] = b.detach().clone()
+            b.zero_()
+            if name.rsplit(".", 1)[-1] != kind:
+                continue
+            noise = torch.randn(b.shape, generator=gen).to(b)
+            a = module.lora_A["default"].weight
+            delta = module.scaling["default"] * (noise @ a)
+            w = module.base_layer.weight.float()
+            b.copy_(noise * (size * w.norm() / delta.float().norm()))
+        try:
+            yield
+        finally:
+            for name, module in model.named_modules():
+                if name in saved:
+                    module.lora_B["default"].weight.copy_(saved[name])
+
+
+def _trainer_logprobs(model: Any, ids: Sequence[int]) -> list:
+    import torch
+
+    x = torch.tensor([list(ids)], device=next(model.parameters()).device)
+    with torch.no_grad():
+        logits = model(input_ids=x, use_cache=False).logits[0, :-1].float()
+        lp = torch.log_softmax(logits, -1).gather(-1, x[0, 1:, None])[:, 0]
+    return lp.tolist()
+
+
+def _served_logprobs(gen: Any, name: str, ids: Sequence[int]) -> list:
+    client = gen.vllm_client
+    client.model = name
+    out = client.get_sequence_logprobs([list(ids)], [1], top_logprobs=0)
+    return [row[0] for row in out["actual_logprobs"][0]]
+
+
+def probe_served(gen: Any) -> Dict[str, float]:
+    """For each kind of module the adapter trains, check that vLLM serves it as trained.
+
+    A probe adapter with a large delta on that kind alone (`PROBE_SIZES`) is
+    loaded into vLLM and applied in the trainer, and the two log-prob shifts it
+    causes on a fixed text are compared (`check_served`). The trained adapter cannot be the
+    probe: after one step at a warm-up LR its delta moves log-probs by less than
+    the kernels of the two engines differ, so a dropped adapter and a served
+    one would look the same. Runs once, at the first sync, before any rollout.
+    """
+    import json
+
+    model = gen.model
+    ids = gen.processing_class(PROBE_TEXT, add_special_tokens=False)["input_ids"]
+    training = model.training
+    model.eval()
+    try:
+        with model.disable_adapter():
+            trained_base = _trainer_logprobs(model, ids)
+        served_base = _served_logprobs(gen, gen.base_name, ids)
+        errors = {}
+        for kind in sorted(lora_targets(model)):
+            for size in PROBE_SIZES:
+                with probe_adapter(model, kind, size):
+                    trained = [t - b for t, b in zip(_trainer_logprobs(model, ids), trained_base,
+                                                     strict=True)]
+                    if _rms(trained) >= PROBE_SHIFT or size == PROBE_SIZES[-1]:
+                        publish_adapter(gen, f"probe-{kind}",
+                                        adapter_tensors(model, gen.checkpoint_keys))
+                        break
+            served = _served_logprobs(gen, f"probe-{kind}", ids)
+            retire_adapter(gen, f"probe-{kind}")
+            errors[kind] = check_served(
+                kind, [s - b for s, b in zip(served, served_base, strict=True)], trained)
+    finally:
+        model.train(training)
+        gen.vllm_client.model = gen.base_name
+    (gen.adapter_root / "probe.json").write_text(json.dumps(errors, indent=2) + "\n")
+    print(f"vLLM serves every adapted module kind; relative log-prob shift error {errors}",
+          flush=True)
+    return errors
+
+
+def sync_adapter(gen: Any) -> None:
+    """TRL's `sync_weights` for `vllm.sync: adapter`: a new adapter version, named on every request.
+
+    Rank 0 writes the adapter, loads it into vLLM under a new name and points
+    the client at it, so every later request, training and dev alike, carries
+    that name in its `model` field (`VLLMClient.generate`). The previous
+    version is unloaded and its files deleted. vLLM keys its prefix cache by
+    adapter, so no cache reset is needed. Other ranks have nothing to send; they
+    wait for rank 0 in the generation's gather.
+    """
+    if not gen.accelerator.is_main_process:
+        return
+    client = gen.vllm_client
+    if gen.adapter_version == 0:
+        gen.base_name = client.model
+        gen.adapter_root.mkdir(parents=True, exist_ok=True)
+        probe_served(gen)
+    gen.adapter_version += 1
+    name = f"policy-v{gen.adapter_version}"
+    publish_adapter(gen, name, adapter_tensors(gen.model, gen.checkpoint_keys))
+    previous, client.model = client.model, name
+    if previous != gen.base_name:
+        retire_adapter(gen, previous)
+
+
 def build_curriculum(cfg: Dict[str, Any], train_rows: Sequence[Dict[str, Any]]) -> Curriculum:
     """The sampler `curriculum:` describes, over the training rows' (task, level) cells."""
     c, g = cfg["curriculum"], cfg["grpo"]
@@ -276,7 +497,10 @@ def _trainer_class():
     class ArgGymGRPOTrainer(GRPOTrainer):
         """TRL's trainer plus what it does not do.
 
-        - Weight sync to vLLM merges the adapter out of place (`merged_params`).
+        - Weight sync to vLLM merges the adapter out of place (`merged_params`),
+          or with `vllm.sync: adapter` loads the adapter itself into vLLM under
+          a new name each step, after checking that vLLM serves every adapted
+          module as trained (`sync_adapter`, `probe_served`).
         - The completions table goes to trackio every `completions_every` steps and
           on every eval, rather than on every logging step. A training step that
           is also an eval step logs only the eval table: TRL writes both to
@@ -301,7 +525,8 @@ def _trainer_class():
         """
 
         def __init__(self, *args, completions_every: int, dev_sampling: Dict[str, Any],
-                     checkpoint_keys: set, guard: FallbackGuard, sync_dtype: Any = None,
+                     checkpoint_keys: set, guard: FallbackGuard, sync: str = "merged",
+                     sync_dtype: Any = None,
                      curriculum: Optional[Curriculum] = None, curriculum_log: Any = None,
                      table_every: int = 5, **kwargs):
             self.curriculum = curriculum
@@ -315,8 +540,13 @@ def _trainer_class():
             if not is_peft_model(gen.model) or gen._dist.is_fsdp or gen._dist.is_zero3:
                 raise SystemExit("rl.train syncs LoRA weights under DDP only")
             gen.checkpoint_keys = checkpoint_keys
-            gen.sync_dtype = sync_dtype
-            gen._iter_named_params = types.MethodType(merged_params, gen)
+            if sync == "adapter":
+                gen.adapter_root = Path(self.args.output_dir) / "vllm-lora"
+                gen.adapter_version = 0
+                gen.sync_weights = types.MethodType(sync_adapter, gen)
+            else:
+                gen.sync_dtype = sync_dtype
+                gen._iter_named_params = types.MethodType(merged_params, gen)
 
         def log(self, logs, start_time=None):
             import torch
@@ -517,7 +747,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     # The text-only class, also for a vision-language checkpoint such as Qwen3.5's:
     # the vision tower is never used, and all-linear LoRA would adapt it too. Its
-    # tensor names differ from the checkpoint's; `merged_params` maps them.
+    # tensor names differ from the checkpoint's; `merged_params` and
+    # `adapter_tensors` map them.
     model = AutoModelForCausalLM.from_pretrained(m["name"], revision=m["revision"],
                                                  dtype=torch.bfloat16)
     curriculum = build_curriculum(cfg, train_rows) if cfg.get("curriculum") else None
@@ -528,6 +759,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reward_funcs=reward, processing_class=tokenizer,
         peft_config=lora, completions_every=cfg["completions_every"],
         dev_sampling=dev_sampling, checkpoint_keys=checkpoint_keys(m["name"], m["revision"]),
+        sync=rl_config.vllm_sync(cfg),
         sync_dtype=getattr(torch, cfg["vllm"].get("dtype", "bfloat16")),
         guard=guard, curriculum=curriculum, curriculum_log=out / "curriculum.jsonl",
         table_every=(cfg.get("curriculum") or {}).get("table_every", 5))

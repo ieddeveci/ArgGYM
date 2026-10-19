@@ -40,8 +40,17 @@ def vllm_command(cfg: Dict[str, Any]) -> List[str]:
     trainer calls after every sync. The served name is the eval config's `model`,
     so the eval harness can query this server, or one serving the export, under
     the name it already sends.
+
+    With `vllm.sync: adapter` the server also takes LoRA adapters at runtime
+    (`vllm_env` allows the load endpoint). Two slots: the version being
+    replaced and its replacement, or one probe adapter at start-up; a
+    generation request only ever names the current one.
     """
     v, m = cfg["vllm"], cfg["model"]
+    lora = []
+    if rl_config.vllm_sync(cfg) == "adapter":
+        lora = ["--enable-lora", "--max-lora-rank", str(rl_config.max_lora_rank(cfg["lora"]["r"])),
+                "--max-loras", "2"]
     return [sys.executable, "-m", "vllm.entrypoints.cli.main", "serve", m["name"],
             "--served-model-name", rl_config.eval_model(cfg)["model"],
             "--revision", m["revision"], "--dtype", v.get("dtype", "bfloat16"),
@@ -50,7 +59,7 @@ def vllm_command(cfg: Dict[str, Any]) -> List[str]:
             "--gpu-memory-utilization", str(v["gpu_memory_utilization"]),
             "--weight-transfer-config", '{"backend": "nccl"}',
             "--logprobs-mode", "processed_logprobs", "--max-logprobs", "-1",
-            *v.get("extra_args", [])]
+            *lora, *v.get("extra_args", [])]
 
 
 def vllm_env(cfg: Dict[str, Any], env: Dict[str, str]) -> Dict[str, str]:
@@ -61,12 +70,16 @@ def vllm_env(cfg: Dict[str, Any], env: Dict[str, str]) -> Dict[str, str]:
     flags (`Unknown option '--compress-mode=size'`), so dev evaluation, the first
     request with top-k on, would crash the server; vLLM's own sampler is used
     instead. The venv's `bin` goes first on PATH because that is where `ninja`
-    is when anything else does compile.
+    is when anything else does compile. Adapter sync needs vLLM's
+    `/v1/load_lora_adapter`, which exists only with runtime LoRA updating on.
     """
     bin_dir = os.path.dirname(sys.executable)
-    return {**env, "CUDA_VISIBLE_DEVICES": str(cfg["vllm"]["gpu"]),
-            "VLLM_SERVER_DEV_MODE": "1", "VLLM_USE_FLASHINFER_SAMPLER": "0",
-            "PATH": os.pathsep.join([bin_dir, env.get("PATH", "")])}
+    out = {**env, "CUDA_VISIBLE_DEVICES": str(cfg["vllm"]["gpu"]),
+           "VLLM_SERVER_DEV_MODE": "1", "VLLM_USE_FLASHINFER_SAMPLER": "0",
+           "PATH": os.pathsep.join([bin_dir, env.get("PATH", "")])}
+    if rl_config.vllm_sync(cfg) == "adapter":
+        out["VLLM_ALLOW_RUNTIME_LORA_UPDATING"] = "1"
+    return out
 
 
 def wait_ready(port: int, proc: subprocess.Popen, timeout_s: float) -> None:

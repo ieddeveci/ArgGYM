@@ -105,6 +105,36 @@ def eval_model(cfg: Dict[str, Any]) -> Dict[str, Any]:
             "chat_template_kwargs": dict(extra.get("chat_template_kwargs") or {})}
 
 
+#: vLLM's accepted `--max-lora-rank` values (`MaxLoRARanks`, vllm/config/lora.py, vLLM 0.30).
+LORA_RANKS = (1, 8, 16, 32, 64, 128, 256, 320, 512)
+
+
+def vllm_sync(cfg: Dict[str, Any]) -> str:
+    """How trained weights reach vLLM: `merged` (default) or `adapter`.
+
+    `merged` pushes base plus delta into every adapted weight over NCCL.
+    `adapter` saves the LoRA factors and has vLLM apply them at runtime, so the
+    delta is never rounded into a base weight. vLLM's LoRA kernels take FP16 or
+    BF16 only, so an adapter server cannot hold FP32 weights.
+    """
+    v = cfg["vllm"]
+    sync = v.get("sync", "merged")
+    if sync not in ("merged", "adapter"):
+        raise SystemExit(f"vllm.sync {sync!r}: merged or adapter")
+    if sync == "adapter" and v.get("dtype", "bfloat16") not in ("bfloat16", "float16"):
+        raise SystemExit(f"vllm.sync adapter serves LoRA in BF16 or FP16; vllm.dtype is "
+                         f"{v['dtype']}")
+    return sync
+
+
+def max_lora_rank(r: int) -> int:
+    """The smallest rank vLLM accepts that holds an adapter of rank `r`."""
+    for rank in LORA_RANKS:
+        if rank >= r:
+            return rank
+    raise SystemExit(f"lora.r {r} is above vLLM's largest LoRA rank {LORA_RANKS[-1]}")
+
+
 def dev_sampling(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """What dev evaluation samples under: `VLLMGeneration` attributes, plus
     `presence_penalty`, which `rl.train.dev_sampling_swap` sends as a dev-only

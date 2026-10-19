@@ -15,8 +15,8 @@ from rl import config as rl_config
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = ("rl/configs/qwen3-4b.yaml", "rl/configs/smoke.yaml", "rl/configs/qwen3.5-4b.yaml",
            "rl/configs/qwen3.5-4b-curriculum.yaml", "rl/configs/gsm8k-qwen3-0.6b.yaml",
-           "rl/configs/gsm8k-hard-qwen3-0.6b.yaml")
-REAL = (CONFIGS[0], CONFIGS[2], CONFIGS[3], CONFIGS[4], CONFIGS[5])
+           "rl/configs/gsm8k-hard-qwen3-0.6b.yaml", "rl/configs/gsm8k-hard-qwen3-0.6b-adapter.yaml")
+REAL = (CONFIGS[0], CONFIGS[2], CONFIGS[3], CONFIGS[4], CONFIGS[5], CONFIGS[6])
 #: The longest prompt in data/taskset.jsonl: 4,066 tokens with the Qwen3
 #: tokenizer, 5,336 with Qwen3.5's (their eval configs). rl.train measures the
 #: real number at start-up and refuses a context that does not fit. Qwen3-0.6B
@@ -166,7 +166,8 @@ def test_the_run_name_encodes_model_loss_lr_and_seed():
                      CONFIGS[2]: "qwen3.5-4b-dapo-lr1e-05-s7",
                      CONFIGS[3]: "qwen3.5-4b-curriculum-dapo-lr1e-05-s7",
                      CONFIGS[4]: "gsm8k-qwen3-0.6b-dapo-lr2e-05-s7",
-                     CONFIGS[5]: "gsm8k-hard-qwen3-0.6b-dapo-lr2e-05-s7"}
+                     CONFIGS[5]: "gsm8k-hard-qwen3-0.6b-dapo-lr2e-05-s7",
+                     CONFIGS[6]: "gsm8k-hard-qwen3-0.6b-adapter-dapo-lr2e-05-s7"}
 
 
 def test_an_eval_model_the_run_cannot_follow_is_refused(tmp_path, monkeypatch):
