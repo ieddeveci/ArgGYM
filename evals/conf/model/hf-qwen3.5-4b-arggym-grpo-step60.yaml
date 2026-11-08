@@ -1,0 +1,27 @@
+# bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step60 on vLLM, thinking on.
+#
+# Sampling: the card's "Thinking mode for general tasks":
+# temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5,
+# repetition_penalty=1.0.
+#
+# Thinking on: enable_thinking true. Thinking is a switch, not a
+# level: the chat template reads enable_thinking and no reasoning_effort
+# (https://huggingface.co/Qwen/Qwen3.5-4B/blob/main/chat_template.jinja).
+#
+# Cap: 65,536 tokens.
+name: hf-qwen3.5-4b-arggym-grpo-step60
+model: bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step60
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 65536
+  temperature: 1.0
+  top_p: 0.95
+  presence_penalty: 1.5
+  seed: 0
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  repetition_penalty: 1.0
+  chat_template_kwargs:
+    enable_thinking: true
