@@ -42,8 +42,8 @@ from evals.types import (
 try:
     from dotenv import find_dotenv, load_dotenv
 except ImportError:
-    # The HPC image installs nothing beyond its pinned requirements; there the
-    # credentials come in through the sbatch environment instead.
+    # A serving image may install nothing beyond its pinned requirements; there
+    # the credentials come in through the environment instead.
     load_dotenv = None
 
 if load_dotenv is not None:

@@ -1,5 +1,4 @@
-# mistralai/Mistral-Small-3.2-24B-Instruct-2506 on vLLM, served by
-# hpc/vllm/models/hf-mistral-small-3.2-24b-instruct-2506.yaml.
+# mistralai/Mistral-Small-3.2-24B-Instruct-2506 on vLLM.
 #
 # Sampling: the card's "We recommend using a relatively low temperature, such as
 # temperature=0.15"; generation_config.json agrees and sets no top_p
@@ -15,7 +14,7 @@
 # no larger cap can hold across the roster. The card recommends no output length
 # (its vLLM examples set MAX_TOK = 131072, the whole context). The cap fits
 # within the serving profile's max_model_len minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py checks both).
+# reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,163
 # tokens.
 name: hf-mistral-small-3.2-24b-instruct-2506

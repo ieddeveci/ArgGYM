@@ -1,5 +1,4 @@
-# mistralai/Ministral-3-3B-Reasoning-2512 on vLLM, served by
-# hpc/vllm/models/hf-ministral-3-3b-reasoning-2512.yaml.
+# mistralai/Ministral-3-3B-Reasoning-2512 on vLLM.
 #
 # Sampling: the card's "Use a temperature of 0.7 for most environments", with the
 # top_p 0.95 its examples use
@@ -16,7 +15,7 @@
 # no larger cap can hold across the roster. The card recommends no output length
 # (its vLLM examples set MAX_TOK = 262144, the whole context). The cap fits
 # within the serving profile's max_model_len minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py checks both).
+# reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,163
 # tokens.
 name: hf-ministral-3-3b-reasoning-2512

@@ -107,7 +107,6 @@ configs, the vLLM serving setup and the sampling rules needed to regenerate the 
 | [`docs/notation.md`](docs/notation.md) | the DSL, the semantics conventions, the answer formats |
 | [`docs/architecture.md`](docs/architecture.md) | the code, module by module |
 | [`docs/defeasible-reasoning-primer.md`](docs/defeasible-reasoning-primer.md) | ASPIC+ and grounded semantics from scratch, with a worked example |
-| [`hpc/README.md`](hpc/README.md) | serving the open-weight models with vLLM on the TRUBA cluster |
 | [`results/README.md`](results/README.md) | the layout of the shared runs |
 
 ## License

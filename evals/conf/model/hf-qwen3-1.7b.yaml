@@ -1,4 +1,4 @@
-# Qwen/Qwen3-1.7B on vLLM, served by hpc/vllm/models/hf-qwen3-1.7b.yaml.
+# Qwen/Qwen3-1.7B on vLLM.
 #
 # Sampling: the card's thinking-mode recommendation, "Temperature=0.6, TopP=0.95,
 # TopK=20, and MinP=0"
@@ -16,7 +16,7 @@
 # context or provider limit is smaller, so token budgets match wherever the
 # limits allow. 65,536 is the Gemini API's output limit, thinking included, so
 # no larger cap can hold across the roster. This profile's context is smaller,
-# so the cap is what it leaves (hpc/vllm/verify_bundle.py checks both). The card
+# so the cap is what it leaves. The card
 # recommends: "We recommend using an output length of 32,768 tokens for most
 # queries. For benchmarking on highly complex problems, such as those found in
 # math and programming competitions, we suggest setting the max output length to
