@@ -97,6 +97,15 @@ uv run python -m evals.report outputs/runs/* -o outputs/reports/paper
 `docs/evaluation.md` ("Reproducing the results") gives the environment, the taskset hash, the model
 configs, the vLLM serving setup and the sampling rules needed to regenerate the runs themselves.
 
+## The RL checkpoint
+
+The paper's RL results come from Qwen3.5-4B trained with GRPO on ArgGYM's training split for 140
+steps. The training code, its configs and the commands that reproduce the run are in
+[arggym-verl](https://github.com/bdsaglam/arggym-verl), built on verl. The checkpoint is a LoRA
+adapter, [bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step140-LoRA](https://huggingface.co/bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step140-LoRA),
+evaluated here as `hf-qwen3.5-4b-rl-arggym-step140`; that config's header gives the vLLM command
+that serves it.
+
 ## Documentation
 
 | | |

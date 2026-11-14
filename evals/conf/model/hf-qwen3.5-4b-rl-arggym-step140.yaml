@@ -1,0 +1,32 @@
+# The paper's RL checkpoint: Qwen/Qwen3.5-4B after 140 GRPO steps on ArgGYM, thinking on.
+# Trained with https://github.com/bdsaglam/arggym-verl (configs
+# arggym-qwen3.5-4b-v3-lr3e-5-matched for steps 1-100, then -matched-cont).
+#
+# The checkpoint is a LoRA adapter (rank 64, alpha 32) on the base at revision 851bf6e.
+# vLLM serves it under the adapter's repo name, which is what this config sends:
+#
+#   vllm serve Qwen/Qwen3.5-4B --revision 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a \
+#     --dtype bfloat16 --max-model-len 262144 --reasoning-parser qwen3 --language-model-only \
+#     --enable-lora --max-lora-rank 64 \
+#     --lora-modules bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step140-LoRA=bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step140-LoRA
+#
+# Sampling and cap: as hf-qwen3.5-4b, the card's "Thinking mode for general tasks"
+# (temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5,
+# repetition_penalty=1.0) and 65,536 output tokens. The training rollouts sampled the same way.
+name: hf-qwen3.5-4b-rl-arggym-step140
+model: bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step140-LoRA
+base_model: Qwen/Qwen3.5-4B
+base_url: ${oc.env:VLLM_BASE_URL,http://127.0.0.1:8000/v1}
+api_key_env: VLLM_API_KEY
+sampling:
+  max_tokens: 65536
+  temperature: 1.0
+  top_p: 0.95
+  presence_penalty: 1.5
+  seed: 0
+extra_body:
+  top_k: 20
+  min_p: 0.0
+  repetition_penalty: 1.0
+  chat_template_kwargs:
+    enable_thinking: true
