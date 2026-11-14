@@ -16,7 +16,6 @@ from evals.client import Endpoint
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = sorted((ROOT / "evals" / "conf" / "model").glob("*.yaml"))
-HPC_MODELS = ROOT / "hpc" / "vllm" / "models"
 
 #: What `evals/run.py:build_solver` reads off `cfg.model`, plus the `name` that
 #: `run_id` is built from and the `base_model` an RL fine-tune names, which
@@ -60,8 +59,8 @@ def test_the_timeout_outlasts_the_largest_cap_at_a_slow_decode():
 ROSTER_CAP = 65536
 
 #: Each hosted model's documented output limit, by the `model` its configs send.
-#: The hf-* configs' limit is their serving profile's context, which
-#: `hpc/vllm/verify_bundle.py` checks.
+#: The hf-* configs' limit is their serving profile's context
+#: (docs/evaluation.md, "Serving").
 PROVIDER_OUTPUT_LIMIT = {
     # 65,536 output, thinking included, for every Gemini model on the roster
     # (https://ai.google.dev/gemini-api/docs/models/<model>, cited in each config).

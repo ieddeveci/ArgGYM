@@ -1,5 +1,4 @@
-# Qwen/Qwen3-Next-80B-A3B-Thinking on vLLM, served by
-# hpc/vllm/models/hf-qwen3-next-80b-a3b-thinking.yaml.
+# Qwen/Qwen3-Next-80B-A3B-Thinking on vLLM.
 #
 # Sampling: the card's "Temperature=0.6, TopP=0.95, TopK=20, and MinP=0"
 # (https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking).
@@ -16,7 +15,7 @@
 # programming competitions, we suggest setting the max output length to 81,920
 # tokens." (https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking). The cap
 # fits within the serving profile's max_model_len minus the 8,192-token prompt
-# reserve (hpc/vllm/verify_bundle.py checks both).
+# reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,068
 # tokens.
 name: hf-qwen3-next-80b-a3b-thinking

@@ -1,5 +1,4 @@
-# Qwen/Qwen3.5-122B-A10B on vLLM, thinking on, served by
-# hpc/vllm/models/hf-qwen3.5-122b-a10b.yaml. Its thinking-off sibling is hf-qwen3.5-122b-a10b-nothink.
+# Qwen/Qwen3.5-122B-A10B on vLLM, thinking on. Its thinking-off sibling is hf-qwen3.5-122b-a10b-nothink.
 #
 # Sampling: the card's "Thinking mode for general tasks":
 # temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5,
@@ -18,7 +17,7 @@
 # tokens."
 # (https://huggingface.co/Qwen/Qwen3.5-122B-A10B/blob/main/README.md#L1323). The
 # cap fits within the serving profile's max_model_len minus the 8,192-token
-# prompt reserve (hpc/vllm/verify_bundle.py checks both).
+# prompt reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 5,336
 # tokens.
 name: hf-qwen3.5-122b-a10b

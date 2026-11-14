@@ -95,7 +95,6 @@ inspector. `arggym --help` lists every command.
 | `data/` | the two taskset specs and the two frozen tasksets built from them |
 | `evals/` | the evaluation harness: `run.py` generates, `score.py` scores offline, `report.py` and `figures.py` read the scores. Not part of the wheel; `docs/evaluation.md` covers it. |
 | `evals/conf/` | the Hydra configs: one file per model under `model/`, the answer templates and the elicitations |
-| `hpc/` | the vLLM serving profiles and the TRUBA cluster scripts that serve the `hf-*` configs (`hpc/README.md`) |
 | `scripts/` | `evaluate.py`, a reference evaluator that uses the standard library and the public API only, and `results.sh`, which packs and unpacks `results/` |
 | `results/` | finished eval runs, with generations in Git LFS (`results/README.md`) |
 | `tests/` | the test suite; `tests/e2e/` holds the slow full-grid cells, run with `make test-all` |

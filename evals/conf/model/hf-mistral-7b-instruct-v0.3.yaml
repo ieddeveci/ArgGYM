@@ -1,5 +1,4 @@
-# mistralai/Mistral-7B-Instruct-v0.3 on vLLM, served by
-# hpc/vllm/models/hf-mistral-7b-instruct-v0.3.yaml.
+# mistralai/Mistral-7B-Instruct-v0.3 on vLLM.
 #
 # Sampling: the card gives none and generation_config.json sets no sampling
 # keys (https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3), so the
@@ -10,7 +9,7 @@
 # context or provider limit is smaller, so token budgets match wherever the
 # limits allow. 65,536 is the Gemini API's output limit, thinking included, so
 # no larger cap can hold across the roster. This profile's context is smaller,
-# so the cap is what it leaves (hpc/vllm/verify_bundle.py checks both). The card
+# so the cap is what it leaves. The card
 # recommends no output length.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,773
 # tokens.

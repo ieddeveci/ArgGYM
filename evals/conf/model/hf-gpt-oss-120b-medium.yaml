@@ -1,4 +1,4 @@
-# openai/gpt-oss-120b on vLLM, served by hpc/vllm/models/hf-gpt-oss-120b.yaml.
+# openai/gpt-oss-120b on vLLM.
 #
 # Sampling: "We recommend sampling with temperature=1.0 and top_p=1.0"
 # (https://github.com/openai/gpt-oss; the HF card gives none,
@@ -16,7 +16,7 @@
 # length. OpenAI's model page gives a limit, not a recommendation: "131,072 max
 # output tokens" (https://developers.openai.com/api/docs/models/gpt-oss-120b).
 # The cap fits within the serving profile's max_model_len minus the 8,192-token
-# prompt reserve (hpc/vllm/verify_bundle.py checks both).
+# prompt reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 3,917
 # tokens.
 name: hf-gpt-oss-120b-medium

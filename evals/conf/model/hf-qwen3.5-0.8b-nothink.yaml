@@ -1,5 +1,4 @@
-# Qwen/Qwen3.5-0.8B on vLLM, thinking off, served by
-# hpc/vllm/models/hf-qwen3.5-0.8b.yaml. Its thinking-on sibling is hf-qwen3.5-0.8b.
+# Qwen/Qwen3.5-0.8B on vLLM, thinking off. Its thinking-on sibling is hf-qwen3.5-0.8b.
 #
 # Sampling: the card's "Non-thinking mode for text tasks":
 # temperature=1.0, top_p=1.0, top_k=20, min_p=0.0, presence_penalty=2.0,
@@ -19,7 +18,7 @@
 # programming competitions, we suggest setting the max output length to 81,920
 # tokens." (https://huggingface.co/Qwen/Qwen3.5-0.8B/blob/main/README.md#L942).
 # The cap fits within the serving profile's max_model_len minus the 8,192-token
-# prompt reserve (hpc/vllm/verify_bundle.py checks both).
+# prompt reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 5,338
 # tokens.
 name: hf-qwen3.5-0.8b-nothink

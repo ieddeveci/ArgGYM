@@ -1,4 +1,4 @@
-# Qwen/Qwen3.6-35B-A3B on vLLM, served by hpc/vllm/models/hf-qwen3.6-35b-a3b.yaml.
+# Qwen/Qwen3.6-35B-A3B on vLLM.
 #
 # Sampling: the card's "Thinking mode for general tasks": temperature=1.0,
 # top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0
@@ -17,8 +17,7 @@
 # benchmarking on highly complex problems, such as those found in math and
 # programming competitions, we suggest setting the max output length to 81,920
 # tokens." (https://huggingface.co/Qwen/Qwen3.6-35B-A3B). The cap fits within
-# the serving profile's max_model_len minus the 8,192-token prompt reserve
-# (hpc/vllm/verify_bundle.py checks both).
+# the serving profile's max_model_len minus the 8,192-token prompt reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,390
 # tokens.
 name: hf-qwen3.6-35b-a3b

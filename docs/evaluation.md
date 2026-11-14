@@ -60,20 +60,19 @@ mean this harness knowing every provider, which is the thing we are avoiding.
 
 Configs ship for Claude and GPT-5 on OpenRouter, GPT-5 on OpenAI, Gemini and
 Gemma on AI Studio, DeepSeek-V4.1-Flash, Qwen3.8-Flash-Next and GLM-5.3 on
-Evren (a hosted vLLM), and every model the HPC lane serves on vLLM (`hf-*`),
+Evren (a hosted vLLM), and every open-weight model served on vLLM (`hf-*`),
 plus a stub for running the pipeline without spending a token. Adding another
-is copying one. An `hf-*` config also runs against a vLLM you started yourself:
-set `VLLM_BASE_URL`, and serve with the `max_model_len` of the profile of the
-same name under `hpc/vllm/models/`, or the config's `max_tokens` will not fit.
+is copying one. An `hf-*` config runs against a vLLM you start yourself:
+set `VLLM_BASE_URL`, and serve with the `max_model_len` its serving profile
+gives ("Serving" below), or the config's `max_tokens` will not fit.
 
 Every config caps its output, thinking included, at 65,536 tokens at most,
 less where its context or provider limit is smaller, so token budgets match
 wherever the limits allow. 65,536 is the Gemini API's output limit, so no larger
 cap can hold across the roster. The limit is, for `hf-*`, the profile's
 `max_model_len` minus an 8,192-token prompt reserve, and for a hosted model, the
-provider's output limit. `hpc/vllm/verify_bundle.py` checks each `hf-*` cap is
-exactly min(65,536, room), and `tests/evals` checks each hosted cap is exactly
-min(65,536, provider limit). Evren publishes no output limit; the only bound
+provider's output limit. Each `hf-*` cap is exactly min(65,536, room), and
+`tests/evals` checks each hosted cap is exactly min(65,536, provider limit). Evren publishes no output limit; the only bound
 it states is the served context its error for an oversized `max_tokens` names,
 which covers prompt and output together. The smallest, 262,144 tokens, leaves
 room for 65,536 of output above any taskset prompt, so every Evren cap is
@@ -82,9 +81,8 @@ room for 65,536 of output above any taskset prompt, so every Evren cap is
 The two layers hold different facts and never the same one. The eval config
 says what each request carries, the checkpoint id included; the serving
 profile says how to serve it (GPU counts, dtype, context length, parser, extra
-vLLM flags). They pair by file stem, and `hpc/vllm/verify_bundle.py` checks
-that they fit.
-Running the `hf-*` configs on the TRUBA cluster is in [hpc/](../hpc/README.md).
+vLLM flags). They pair by name: `hf-qwen3.5-4b` and `hf-qwen3.5-4b-nothink`
+are both served by the `hf-qwen3.5-4b` profile ("Serving" below).
 
 A config is named `<provider>-<model>[-<level>|-nothink]`. The provider is the
 endpoint (`hf` for the vLLM lane, `openrouter`, `openai`, `aistudio`, `evren`),
@@ -106,7 +104,7 @@ base_model: Qwen/Qwen3-8B              # recorded in run.json, never sent
 ```
 
 A config with `base_model` must take the `-rl-<tag>` form and one without must
-not; `tests/evals` and `hpc/vllm/verify_bundle.py` both check this.
+not; `tests/evals` checks this.
 
 A model that takes a reasoning-effort level has one config per level it accepts
 and no level-less one. The level changes what the model is asked as much as the
@@ -485,9 +483,8 @@ uv sync --python 3.13          # installs exactly what uv.lock pins
 ```
 
 The shipped tasksets were frozen under Python 3.13.9, which their manifests
-record. Local models are served by vLLM 0.29.0. `hpc/vllm/arggym-vllm.def`
-builds the serving image from `vllm/vllm-openai:v0.29.0-cu129` and pins vLLM
-and Transformers in `hpc/vllm/requirements-vllm.txt`.
+record. Local models are served by vLLM 0.29.0 in the `vllm/vllm-openai:v0.29.0-cu129`
+image, with Transformers 5.17.0.
 
 **Taskset.** Every run in `results/` used `data/taskset-lite.jsonl`, built from
 `data/taskset-lite.yaml`: 1,440 rows, `taskset_hash`
@@ -503,30 +500,69 @@ lite file byte for byte; it takes about 13 minutes on 16 cores. `run.py` and
 endpoint, sampling and `extra_body`. Every run used the `xml_tags` template and
 the `cot` elicitation, the defaults.
 
-**Serving.** An `hf-*` config is served by vLLM with the profile of the same
-name under `hpc/vllm/models/`, which fixes the dtype, context length, reasoning
-parser and extra flags. Every checkpoint is the vendor's official one in the
-precision the vendor published: BF16 for all of them except gpt-oss, which ships
-MXFP4 expert weights and is served as shipped. `hpc/vllm/run_vllm_arggym.py`
-starts vLLM with the profile, waits for it, runs `evals.run` and `evals.score`,
-and records the Hugging Face revision it served in `run.json`. To see the exact
-serving command without starting anything:
+**Serving.** Every checkpoint is the vendor's official one in the precision the
+vendor published: BF16 for all of them except gpt-oss, which ships MXFP4 expert
+weights and is served as shipped. Each `hf-*` config is served with this command,
+filled in from the profile of its name below:
 
 ```
-uv run python hpc/vllm/run_vllm_arggym.py hf-qwen3.5-9b --dry-run
+vllm serve <model> --revision <revision> --served-model-name <model> \
+  --dtype <dtype> --tensor-parallel-size <TP> --max-model-len <max_model_len> \
+  --gpu-memory-utilization 0.9 --generation-config vllm \
+  [--reasoning-parser <parser>] [extra flags]
 ```
 
-To serve on your own machine, run that `vllm serve` command in the image above,
-set `VLLM_BASE_URL` to the server's `/v1` URL, and run `evals.run` with the same
-config. On TRUBA, `hpc/README.md` covers the batch scripts.
+`<model>` is the config's `model`, at its latest revision unless the run
+records another. Ten of the twenty `hf-*` runs in `results/` record the exact
+command and revision they served under `hf_runtime` in `run.json` (gpt-oss,
+Qwen3.8 and the RL checkpoint); the others were served with the same command
+from the table. Set `VLLM_BASE_URL` to the server's `/v1` URL and
+run `evals.run` with the same config.
+
+| Profile | dtype | `max_model_len` | Reasoning parser | Extra flags | TP (H100 / H200) |
+|---|---|---|---|---|---|
+| `hf-deepseek-r1-distill-llama-70b` | bfloat16 | 131,072 | deepseek_r1 | `--enforce-eager` | 4 / 2 |
+| `hf-deepseek-r1-distill-qwen-32b` | bfloat16 | 131,072 | deepseek_r1 | `--enforce-eager` | 2 / 1 |
+| `hf-deepseek-r1-distill-qwen-7b` | bfloat16 | 40,960 | deepseek_r1 | — | 1 / 1 |
+| `hf-gemma-4-26b-a4b-it` | bfloat16 | 262,144 | gemma4 | `--language-model-only` | 1 / 1 |
+| `hf-gemma-4-31b-it` | bfloat16 | 262,144 | gemma4 | `--language-model-only` | 2 / 1 |
+| `hf-gemma-4-e2b-it` | bfloat16 | 131,072 | gemma4 | `--language-model-only` | 1 / 1 |
+| `hf-gemma-4-e4b-it` | bfloat16 | 131,072 | gemma4 | `--language-model-only` | 1 / 1 |
+| `hf-gpt-oss-120b` | bfloat16 | 131,072 | openai_gptoss | `--no-enable-prefix-caching --max-num-batched-tokens 8192` | 2 / 1 |
+| `hf-gpt-oss-20b` | bfloat16 | 131,072 | openai_gptoss | `--no-enable-prefix-caching --max-num-batched-tokens 8192` | 1 / 1 |
+| `hf-llama-3.2-3b-instruct` | bfloat16 | 131,072 | — | — | 1 / 1 |
+| `hf-llama-3.3-70b-instruct` | bfloat16 | 131,072 | — | — | 4 / 2 |
+| `hf-llama-4-scout-17b-16e-instruct` | bfloat16 | 131,072 | — | `--language-model-only` | 4 / 4 |
+| `hf-ministral-3-14b-reasoning-2512` | bfloat16 | 131,072 | mistral | `--tokenizer-mode mistral --config-format hf --load-format hf --language-model-only` | 1 / 1 |
+| `hf-ministral-3-3b-reasoning-2512` | bfloat16 | 262,144 | mistral | `--tokenizer-mode mistral --config-format mistral --load-format mistral` | 1 / 1 |
+| `hf-mistral-7b-instruct-v0.3` | bfloat16 | 32,768 | — | — | 1 / 1 |
+| `hf-mistral-small-3.2-24b-instruct-2506` | bfloat16 | 131,072 | — | `--tokenizer-mode mistral --config-format hf --load-format hf --language-model-only` | 2 / 1 |
+| `hf-qwen2.5-3b-instruct` | bfloat16 | 32,768 | — | — | 1 / 1 |
+| `hf-qwen2.5-72b-instruct` | bfloat16 | 32,768 | — | — | 4 / 2 |
+| `hf-qwen2.5-7b-instruct` | bfloat16 | 32,768 | — | — | 1 / 1 |
+| `hf-qwen3-1.7b` | bfloat16 | 40,960 | qwen3 | — | 1 / 1 |
+| `hf-qwen3-14b` | bfloat16 | 40,960 | qwen3 | — | 1 / 1 |
+| `hf-qwen3-32b` | bfloat16 | 40,960 | qwen3 | — | 2 / 1 |
+| `hf-qwen3-4b` | bfloat16 | 40,960 | qwen3 | — | 1 / 1 |
+| `hf-qwen3-8b` | bfloat16 | 40,960 | qwen3 | — | 1 / 1 |
+| `hf-qwen3-next-80b-a3b-thinking` | bfloat16 | 262,144 | deepseek_r1 | — | 4 / 2 |
+| `hf-qwen3.5-0.8b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 1 / 1 |
+| `hf-qwen3.5-122b-a10b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 4 / 4 |
+| `hf-qwen3.5-27b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 2 / 1 |
+| `hf-qwen3.5-2b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 1 / 1 |
+| `hf-qwen3.5-35b-a3b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 2 / 1 |
+| `hf-qwen3.5-4b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 1 / 1 |
+| `hf-qwen3.5-9b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 1 / 1 |
+| `hf-qwen3.6-27b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 2 / 2 |
+| `hf-qwen3.6-35b-a3b` | bfloat16 | 262,144 | qwen3 | `--language-model-only` | 2 / 1 |
+| `hf-qwen3.8-27b` | bfloat16 | 131,072 | qwen3 | `--language-model-only` | 1 / 1 |
 
 **Sampling and limits.** Each config uses the sampling its model card or
 provider recommends, and its comments link the source. Where the provider says
 to leave sampling at its defaults, as for GPT-5, Claude with thinking on, and
 Gemini 3.x, the config sends none. Every `hf-*` config also sends `seed: 0`. The output
 cap, thinking included, is 65,536 tokens, or less where the model's context or
-the provider's output limit is smaller ("Pointing it at a provider" above);
-`hpc/vllm/verify_bundle.py` and `tests/evals` check every cap. A request times
+the provider's output limit is smaller ("Pointing it at a provider" above). A request times
 out after 3 hours (`endpoint.timeout_s: 10800` in `evals/conf/config.yaml`).
 
 **Regenerating the tables.** Unpack the runs, rescore them, and report:

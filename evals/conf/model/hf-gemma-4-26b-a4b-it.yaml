@@ -1,5 +1,4 @@
-# google/gemma-4-26B-A4B-it on vLLM, thinking on, served by
-# hpc/vllm/models/hf-gemma-4-26b-a4b-it.yaml. Its thinking-off sibling is hf-gemma-4-26b-a4b-it-nothink.
+# google/gemma-4-26B-A4B-it on vLLM, thinking on. Its thinking-off sibling is hf-gemma-4-26b-a4b-it-nothink.
 #
 # Sampling: the card's "standardized sampling configuration across all use
 # cases: temperature=1.0 top_p=0.95 top_k=64"
@@ -20,7 +19,7 @@
 # (its examples use max_new_tokens=1024 and 512), and neither does Google's
 # Gemma 4 model card (https://ai.google.dev/gemma/docs/core/model_card_4). The
 # cap fits within the serving profile's max_model_len minus the 8,192-token
-# prompt reserve (hpc/vllm/verify_bundle.py checks both).
+# prompt reserve.
 # Longest prompt in data/taskset.jsonl with this tokenizer: 4,877
 # tokens.
 name: hf-gemma-4-26b-a4b-it
