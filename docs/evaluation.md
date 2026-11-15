@@ -106,6 +106,19 @@ base_model: Qwen/Qwen3-8B              # recorded in run.json, never sent
 A config with `base_model` must take the `-rl-<tag>` form and one without must
 not; `tests/evals` checks this.
 
+When the fine-tune is a LoRA adapter, `model` is the adapter's repo and vLLM
+serves the base with the adapter registered under that name:
+`--enable-lora --max-lora-rank <r> --lora-modules <repo>=<repo>`. Add
+`--max-loras <n>` to serve several adapters from one server. The two `-rl-arggym-step*`
+configs give the full command in their headers.
+
+A second sampling run of the same config overrides the seed and the run id, so
+it gets its own directory:
+
+```
+uv run python -m evals.run model=<config> model.sampling.seed=1 run_id=<config>-s1__xml_tags__cot
+```
+
 A model that takes a reasoning-effort level has one config per level it accepts
 and no level-less one. The level changes what the model is asked as much as the
 prompt does, so it is part of the name, and therefore of the run directory. A
