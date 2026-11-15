@@ -106,6 +106,11 @@ adapter, [bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step140-LoRA](https://huggingface.co/b
 evaluated here as `hf-qwen3.5-4b-rl-arggym-step140`; that config's header gives the vLLM command
 that serves it.
 
+The same run's last checkpoint, step 200,
+[bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step200-LoRA](https://huggingface.co/bdsaglam/Qwen3.5-4B-ArgGYM-GRPO-step200-LoRA),
+is evaluated as `hf-qwen3.5-4b-rl-arggym-step200` on the lite taskset with two seeds
+(`results/hf-qwen3.5-4b-rl-arggym-step200__xml_tags__cot` and `...-step200-s1__xml_tags__cot`).
+
 ## Documentation
 
 | | |
